@@ -1,6 +1,6 @@
 services:
   arpvpn:
-    image: "ghcr.io/arphost-com/arpvpn:stable"
+    image: "${ARPVPN_IMAGE:-arpvpn:stable}"
     container_name: "arpvpn"
     cap_add:
       - NET_ADMIN

@@ -35,9 +35,13 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
 
 ### Docker
 
-1. Download the [`docker-compose.yaml` file](https://raw.githubusercontent.com/arphost-com/ARPVPN/main/docker/docker-compose.yaml).
-2. Run ARPVPN:
+1. Copy the `docker/docker-compose.yaml` file from this repository.
+2. Set your GitLab Container Registry image path:
+   ```bash
+   export ARPVPN_IMAGE="registry.example.com/group/project/arpvpn:stable"
+   ```
+3. Run ARPVPN:
    ```bash
    sudo docker-compose up -d
    ```
-NOTE: You can check all available tags [here](https://github.com/arphost-com/ARPVPN/pkgs/container/arpvpn/versions).
+NOTE: Check available tags in your GitLab project's Container Registry.
