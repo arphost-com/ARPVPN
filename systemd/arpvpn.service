@@ -1,0 +1,12 @@
+[Unit]
+Description=ARPVPN: WireGuard management made simple
+After=network.target
+
+[Service]
+Type=simple
+Restart=always
+User=arpvpn
+ExecStart=/usr/bin/uwsgi --yaml /var/www/arpvpn/data/uwsgi.yaml
+
+[Install]
+WantedBy=multi-user.target

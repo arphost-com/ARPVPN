@@ -1,0 +1,503 @@
+{% extends 'web/web-main.html' %}
+
+{% block additional_prioritary_scripts %}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.5.1/dist/chart.min.js" crossorigin="anonymous"></script>
+    <script src="../../static/js/libs/color-scheme.min.js"></script>
+    <script src="../../static/js/libs/chartUtils.js"></script>
+{% endblock %}
+
+{% block additional_styles %}
+    <link href="https://cdn.datatables.net/1.10.20/css/dataTables.bootstrap4.min.css" rel="stylesheet" crossorigin="anonymous" />
+{% endblock %}
+
+{% block content %}
+    <main>
+        <div class="container-fluid">
+            <div class="page-header my-4">
+                <div>
+                    <h1 class="mb-1">{{ title }}</h1>
+                    <p class="text-muted mb-0">Live WireGuard telemetry and peer health visibility.</p>
+                </div>
+                <div class="page-header-actions">
+                    <a href="/api/v1/stats/overview" class="btn btn-outline-primary btn-sm">Stats JSON</a>
+                    <a href="/api/v1/stats/peers.csv" class="btn btn-outline-primary btn-sm">Peers CSV</a>
+                    <span class="badge badge-light page-update-pill">Updated {{ last_update }}</span>
+                </div>
+            </div>
+            <div id="global_alerts"></div>
+            {% if peer_runtime["alerts"] %}
+                <div class="card mb-4 panel-glass">
+                    <div class="card-header">
+                        <i class="fas fa-exclamation-triangle mr-1"></i>
+                        Alerts and recommendations
+                    </div>
+                    <div class="card-body">
+                        {% for alert in peer_runtime["alerts"][:8] %}
+                            <div class="alert alert-{{ alert["level"] }} py-2 mb-2">
+                                <strong>{{ alert["title"] }}:</strong> {{ alert["message"] }}
+                                {% if alert["peer_uuid"] %}
+                                    <a class="ml-2" href="/wireguard/peers/{{ alert["peer_uuid"] }}">Open peer</a>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+            <div class="row mb-4">
+                <div class="col-sm-6 col-xl-2 mb-3">
+                    <div class="stat-tile">
+                        <div class="stat-label">Interfaces</div>
+                        <div class="stat-value">{{ interface_totals["up"] }}/{{ interface_totals["total"] }}</div>
+                        <div class="stat-subtle">up / total</div>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-xl-2 mb-3">
+                    <div class="stat-tile">
+                        <div class="stat-label">Peers</div>
+                        <div class="stat-value">{{ peer_runtime["totals"]["peers"] }}</div>
+                        <div class="stat-subtle">{{ peer_runtime["totals"]["client_peers"] }} client</div>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-xl-2 mb-3">
+                    <div class="stat-tile">
+                        <div class="stat-label">Site-to-site</div>
+                        <div class="stat-value">{{ peer_runtime["totals"]["site_to_site_peers"] }}</div>
+                        <div class="stat-subtle">branch peers</div>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-xl-2 mb-3">
+                    <div class="stat-tile">
+                        <div class="stat-label">Active peers</div>
+                        <div class="stat-value text-success">{{ peer_runtime["totals"]["active_peers"] }}</div>
+                        <div class="stat-subtle">&lt;= 3 minutes</div>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-xl-2 mb-3">
+                    <div class="stat-tile">
+                        <div class="stat-label">Stale peers</div>
+                        <div class="stat-value text-warning">{{ peer_runtime["totals"]["stale_peers"] }}</div>
+                        <div class="stat-subtle">3-30 minutes</div>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-xl-2 mb-3">
+                    <div class="stat-tile">
+                        <div class="stat-label">Session traffic</div>
+                        <div class="stat-value">{{ peer_runtime["totals"]["session_total_human"] }}</div>
+                        <div class="stat-subtle">rx {{ peer_runtime["totals"]["session_rx_human"] }} / tx {{ peer_runtime["totals"]["session_tx_human"] }}</div>
+                    </div>
+                </div>
+            </div>
+            <!-- Traffic charts -->
+            <div class="row">
+                <div class="col-xl-7">
+                    <div class="card mb-4 panel-glass">
+                        <div class="card-header">
+                            <i class="fas fa-chart-line mr-1"></i>
+                            Interface throughput
+                        </div>
+                        <div class="card-body">
+                            <canvas id="interfacesChart" width="100%"></canvas>
+                            <script>
+                                const interfacesCanvas = document.getElementById("interfacesChart");
+                                const interfaceLabels = {{ interfaces_chart["labels"] | safe }};
+                                const rawInterfaceDatasets = {{ interfaces_chart["datasets"] | safe }};
+                                let interfacesChartInstance = null;
+
+                                function buildInterfaceDatasets() {
+                                    const palette = chartUtils.getTrafficPalette();
+                                    const styleSet = [
+                                        {line: palette.primary, fill: palette.primarySoft},
+                                        {line: palette.secondary, fill: palette.secondarySoft},
+                                        {line: palette.alert, fill: "rgba(255, 109, 74, 0.18)"}
+                                    ];
+                                    return rawInterfaceDatasets.map((dataset, index) => {
+                                        const style = styleSet[index % styleSet.length];
+                                        return {
+                                            label: dataset.label,
+                                            data: dataset.data,
+                                            borderColor: style.line,
+                                            backgroundColor: style.fill,
+                                            borderWidth: 2,
+                                            fill: true,
+                                            tension: 0.35
+                                        };
+                                    });
+                                }
+
+                                function renderInterfacesChart() {
+                                    const themeDefaults = chartUtils.applyThemeDefaults();
+                                    const interfacesData = {
+                                        labels: interfaceLabels,
+                                        datasets: buildInterfaceDatasets()
+                                    };
+                                    const interfacesOptions = {
+                                        scales: {
+                                            y: {
+                                                ticks: {
+                                                    precision: 2,
+                                                    callback: function(value) {
+                                                        return chartUtils.ticksFilesizeCallback(value, this.max);
+                                                    }
+                                                },
+                                                grid: { color: themeDefaults.grid || "rgba(120,120,120,0.2)" }
+                                            },
+                                            x: {
+                                                grid: { color: themeDefaults.grid || "rgba(120,120,120,0.2)" }
+                                            }
+                                        },
+                                        plugins: {
+                                            title: {
+                                                display: true,
+                                                text: "Traffic data from current session plus stored history (if enabled)"
+                                            },
+                                            tooltip: {
+                                                callbacks: {
+                                                    label: function(context) {
+                                                        return context.dataset.label + ": " + chartUtils.tooltipFilesizeCallback(context);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    };
+                                    if (interfacesChartInstance) {
+                                        interfacesChartInstance.destroy();
+                                    }
+                                    interfacesChartInstance = new Chart(interfacesCanvas, {
+                                        type: "line",
+                                        data: interfacesData,
+                                        options: interfacesOptions
+                                    });
+                                }
+
+                                renderInterfacesChart();
+                                window.addEventListener("arpvpn:theme-change", renderInterfacesChart);
+                            </script>
+                        </div>
+                        <div class="card-footer">
+                          <small class="text-muted">Information provided by <code>wg</code> at {{ last_update }}.</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xl-5">
+                    <div class="card mb-4 panel-glass">
+                        <div class="card-header">
+                            <i class="fas fa-draw-polygon mr-1"></i>
+                            Peer state distribution
+                        </div>
+                        <div class="card-body">
+                            <canvas id="peerStateChart" width="100%"></canvas>
+                            <script>
+                                const peerStateCanvas = document.getElementById("peerStateChart");
+                                const peerStateLabels = ["Active", "Stale", "Offline", "Never seen"];
+                                const peerStateCounts = [
+                                    {{ peer_runtime["totals"]["active_peers"] }},
+                                    {{ peer_runtime["totals"]["stale_peers"] }},
+                                    {{ peer_runtime["totals"]["offline_peers"] }},
+                                    {{ peer_runtime["totals"]["never_seen_peers"] }}
+                                ];
+                                let peerStateChartInstance = null;
+
+                                function cssVar(name, fallback) {
+                                    const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+                                    return value || fallback;
+                                }
+
+                                function renderPeerStateChart() {
+                                    const stateData = {
+                                        labels: peerStateLabels,
+                                        datasets: [{
+                                            data: peerStateCounts,
+                                            backgroundColor: [
+                                                cssVar("--theme-success", "#1ecb81"),
+                                                cssVar("--theme-warning", "#f2ad4c"),
+                                                cssVar("--theme-danger", "#eb5a67"),
+                                                cssVar("--theme-text-muted", "#7f8da6")
+                                            ],
+                                            borderWidth: 0
+                                        }]
+                                    };
+                                    if (peerStateChartInstance) {
+                                        peerStateChartInstance.destroy();
+                                    }
+                                    peerStateChartInstance = new Chart(peerStateCanvas, {
+                                        type: "doughnut",
+                                        data: stateData,
+                                        options: {
+                                            cutout: "62%",
+                                            plugins: {
+                                                legend: { position: "bottom" },
+                                                tooltip: {
+                                                    callbacks: {
+                                                        label: function(context) {
+                                                            return context.label + ": " + context.formattedValue;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    });
+                                }
+
+                                renderPeerStateChart();
+                                window.addEventListener("arpvpn:theme-change", renderPeerStateChart);
+                            </script>
+                        </div>
+                        <div class="card-footer">
+                          <small class="text-muted">State calculated from last handshake timestamps.</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Peer health -->
+            <div class="card mb-4 panel-glass">
+                <div class="card-header">
+                    <i class="fas fa-heartbeat mr-1"></i>
+                    Peer health and session traffic
+                </div>
+                <div class="card-body">
+                    {% if top_peers %}
+                        <div class="table-responsive">
+                            <table class="table table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>Peer</th>
+                                        <th>Interface</th>
+                                        <th>Mode</th>
+                                        <th>Status</th>
+                                        <th>Last handshake</th>
+                                        <th>RX</th>
+                                        <th>TX</th>
+                                        <th>Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in top_peers %}
+                                        <tr>
+                                            <td><a href="/wireguard/peers/{{ item.peer.uuid }}">{{ item.peer.name }}</a></td>
+                                            <td><a href="/wireguard/interfaces/{{ item.peer.interface.uuid }}">{{ item.interface_name }}</a></td>
+                                            <td>{{ item.mode_label }}</td>
+                                            <td><span class="badge badge-{{ item.handshake_badge }}">{{ item.handshake_state }}</span></td>
+                                            {% if item.handshake_ago %}
+                                                <td>{{ item.handshake_ago }}</td>
+                                            {% else %}
+                                                <td>{{ EMPTY_FIELD | safe }}</td>
+                                            {% endif %}
+                                            <td>{{ item.session_rx_human }}</td>
+                                            <td>{{ item.session_tx_human }}</td>
+                                            <td>{{ item.session_total_human }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        No peers configured yet.
+                    {% endif %}
+                </div>
+                <div class="card-footer">
+                  <small class="text-muted">Active = handshake within 3 minutes. Stale = 3 to 30 minutes.</small>
+                </div>
+            </div>
+            <!-- wg ifaces -->
+            <div class="card mb-4 panel-glass">
+                <div class="card-header">
+                    <i class="fas fa-ethernet mr-1"></i>
+                    Interfaces
+                    <a href="/wireguard/interfaces/add" class="float-right" title="Add"><i class="fas fa-plus mr-1"></i></a>
+                </div>
+                <div class="card-body">
+                    <div id="wgIfaces">
+                        <div class="table-responsive">
+                            <table class="table table-bordered dataTable">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Description</th>
+                                        <th>IPv4</th>
+                                        <th>Listen port</th>
+                                        <th>Peers</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for iface in interfaces.values() %}
+                                        <tr>
+                                            <td>
+                                                <span>{{ iface.name }}</span>
+                                            </td>
+                                            {% if iface.description %}
+                                                <td>{{ iface.description }}</td>
+                                            {% else %}
+                                                <td>{{ EMPTY_FIELD | safe }}</td>
+                                            {% endif %}
+                                            <td>{{ iface.ipv4_address }}</td>
+                                            <td>{{ iface.listen_port}}</td>
+                                            <td>{{ iface.peers | length}}</td>
+                                            <td>{{ iface.status}}</td>
+                                            <td>
+                                                <a href="/wireguard/interfaces/{{ iface.uuid }}/download" title="Download"
+                                                   class="mr-2"><i class="fa fa-download"></i>
+                                                </a>
+                                                <a href="/wireguard/interfaces/{{ iface.uuid }}" title="Edit" class="mr-2">
+                                                    <i class="fas fa-pen"></i>
+                                                </a>
+                                                <span data-toggle="modal" data-target="#removeModal-{{ iface.uuid }}"
+                                                      type="button" class="btn-link removal-link">
+                                                    <i title="Remove" class="fas fa-trash"></i>
+                                                </span>
+                                                <!-- Modal -->
+                                                <div class="modal fade" id="removeModal-{{ iface.uuid }}" tabindex="-1" role="dialog"
+                                                     aria-labelledby="removeIfaceTitle" aria-hidden="true">
+                                                  <div class="modal-dialog" role="document">
+                                                    <div class="modal-content">
+                                                      <div class="modal-header">
+                                                        <h5 class="modal-title" id="removeModalTitle">Delete interface</h5>
+                                                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                                          <span aria-hidden="true">&times;</span>
+                                                        </button>
+                                                      </div>
+                                                      <div class="modal-body">
+                                                          Do you really want to remove <strong>{{ iface.name }}</strong>?
+                                                          This cannot be undone.
+                                                      </div>
+                                                      <div class="modal-footer">
+                                                          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                                                          <button type="button" id="removeIfaceBtn-{{ iface.uuid }}"
+                                                                class="btn btn-danger removeIfaceBtn">Remove</button>
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                  <small class="text-muted">Information provided at {{ last_update }}.</small>
+                </div>
+            </div>
+            <!-- Peers -->
+            <div class="card mb-4 panel-glass">
+                <div class="card-header">
+                    <i class="fas fa-user-friends mr-1"></i>
+                    Peers
+                    <a href="/wireguard/peers/add" class="float-right" title="Add"><i class="fas fa-plus mr-1"></i></a>
+                </div>
+                <div class="card-body">
+                    <div id="wgIfacePeers">
+                        <div class="table-responsive">
+                            <table class="table table-bordered dataTable">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Interface</th>
+                                        <th>Description</th>
+                                        <th>IPv4</th>
+                                        <th>Mode</th>
+                                        <th>Remote subnets</th>
+                                        <th>Primary DNS</th>
+                                        <th>Secondary DNS</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for iface in interfaces.values() %}
+                                    {% for peer in iface.peers.values() %}
+                                        <tr>
+                                            <td>
+                                                <span>{{ peer.name }}</span>
+                                            </td>
+                                            <td><a href="/wireguard/interfaces/{{ iface.uuid }}">{{ iface.name }}</a></td>
+                                            {% if peer.description %}
+                                                <td>{{ peer.description }}</td>
+                                            {% else %}
+                                                <td>{{ EMPTY_FIELD | safe }}</td>
+                                            {% endif %}
+                                            {% if peer.ipv4_address %}
+                                                <td>{{ peer.ipv4_address }}</td>
+                                            {% else %}
+                                                <td>{{ EMPTY_FIELD | safe }}</td>
+                                            {% endif %}
+                                            {% if peer.mode == "site_to_site" %}
+                                                <td>Site-to-site</td>
+                                            {% else %}
+                                                <td>Client</td>
+                                            {% endif %}
+                                            {% if peer.site_to_site_subnets %}
+                                                <td>{{ peer.site_to_site_subnets | join(", ") }}</td>
+                                            {% else %}
+                                                <td>{{ EMPTY_FIELD | safe }}</td>
+                                            {% endif %}
+                                            {% if peer.dns1 %}
+                                                <td>{{ peer.dns1 }}</td>
+                                            {% else %}
+                                                <td>{{ EMPTY_FIELD | safe }}</td>
+                                            {% endif %}
+                                            {% if peer.dns2 %}
+                                                <td>{{ peer.dns2 }}</td>
+                                            {% else %}
+                                                <td>{{ EMPTY_FIELD | safe }}</td>
+                                            {% endif %}
+                                            <td>
+                                                <a href="/wireguard/peers/{{ peer.uuid }}/download" title="Download"
+                                                   class="mr-2"><i class="fa fa-download"></i>
+                                                </a>
+                                                <a href="/wireguard/peers/{{ peer.uuid }}" title="Edit" class="mr-2">
+                                                    <i class="fas fa-pen"></i>
+                                                </a>
+                                                <span data-toggle="modal" data-target="#removeModal-{{ peer.uuid }}"
+                                                      type="button" class="btn-link removal-link">
+                                                    <i title="Remove" class="fas fa-trash"></i>
+                                                </span>
+                                                <!-- Modal -->
+                                                <div class="modal fade" id="removeModal-{{ peer.uuid }}" tabindex="-1" role="dialog"
+                                                     aria-labelledby="removePeerTitle" aria-hidden="true">
+                                                  <div class="modal-dialog" role="document">
+                                                    <div class="modal-content">
+                                                      <div class="modal-header">
+                                                        <h5 class="modal-title" id="removeModalTitle">Delete peer</h5>
+                                                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                                          <span aria-hidden="true">&times;</span>
+                                                        </button>
+                                                      </div>
+                                                      <div class="modal-body">
+                                                          Do you really want to remove <strong>{{ peer.name }}</strong>?
+                                                          This cannot be undone.
+                                                      </div>
+                                                      <div class="modal-footer">
+                                                          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                                                          <button type="button" id="removePeerBtn-{{ peer.uuid }}"
+                                                                class="btn btn-danger removePeerBtn">Remove</button>
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                  <small class="text-muted">Information provided at {{ last_update }}.</small>
+                </div>
+            </div>
+        </div>
+    </main>
+{% endblock %}
+
+{% block additional_scripts %}
+    <script src="https://cdn.datatables.net/1.10.20/js/jquery.dataTables.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.datatables.net/1.10.20/js/dataTables.bootstrap4.min.js" crossorigin="anonymous"></script>
+    <script src="../../static/js/libs/chartUtils.js"></script>
+    <script src="../../static/js/libs/datatablesUtils.js"></script>
+    <script type="module" src="../../static/js/modules/dashboard.mjs"></script>
+{% endblock %}

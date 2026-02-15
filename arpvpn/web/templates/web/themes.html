@@ -1,0 +1,53 @@
+{% extends "web/web-main.html" %}
+
+{% block content %}
+
+    <main>
+        <div class="container-fluid">
+            <div class="page-header my-4">
+                <div>
+                    <h1 class="mb-1">{{ title }}</h1>
+                    <p class="text-muted mb-0">Choose your ARPVPN look. Auto follows your operating system.</p>
+                </div>
+                <span class="badge badge-light page-update-pill">Current: <span data-theme-current>Auto</span></span>
+            </div>
+            <div class="card mb-4 panel-glass">
+                <div class="card-header">
+                    <i class="fas fa-palette mr-1"></i>
+                    Appearance
+                </div>
+                <div class="card-body">
+                    <div class="btn-group btn-group-toggle mb-3" role="group" aria-label="Theme options">
+                        <button type="button" class="btn btn-outline-primary" data-theme-choice="auto">Auto</button>
+                        <button type="button" class="btn btn-outline-primary" data-theme-choice="light">Light</button>
+                        <button type="button" class="btn btn-outline-primary" data-theme-choice="dark">Dark</button>
+                    </div>
+                    <p class="mb-1"><strong>Auto</strong>: sync with your system theme preference.</p>
+                    <p class="mb-1"><strong>Light</strong>: brighter admin view for daytime operations.</p>
+                    <p class="mb-0"><strong>Dark</strong>: reduced glare and high contrast for night operations.</p>
+                </div>
+            </div>
+
+            <div class="card mb-4 panel-glass">
+                <div class="card-header">
+                    <i class="fas fa-book mr-1"></i>
+                    Site-to-site Quick Guide
+                </div>
+                <div class="card-body">
+                    <ol class="mb-2 pl-3">
+                        <li>Create or choose a WireGuard interface in <a href="/wireguard">WireGuard</a>.</li>
+                        <li>Add a peer and set <strong>Mode</strong> to <strong>Site-to-site</strong>.</li>
+                        <li>Set the tunnel IP for the remote gateway peer.</li>
+                        <li>Add remote LANs (CIDR) in <strong>Remote site subnets</strong>.</li>
+                        <li>Download the generated config and apply it on the remote gateway.</li>
+                        <li>Ensure both firewalls allow UDP on the interface listen port.</li>
+                    </ol>
+                    <small class="text-muted">
+                        ARPVPN will automatically include the remote site subnets in server-side `AllowedIPs`.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </main>
+
+{% endblock %}

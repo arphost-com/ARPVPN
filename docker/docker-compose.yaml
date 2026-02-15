@@ -1,0 +1,13 @@
+services:
+  arpvpn:
+    image: "ghcr.io/arphost-com/arpvpn:stable"
+    container_name: "arpvpn"
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - "${DATA_FOLDER:-/srv/arpvpn/data}:/data"  # Optional, provides a way to see and edit the configuration files directly from the host.
+    network_mode: host
+    restart: unless-stopped
+    ports:
+      - "8080:8080"

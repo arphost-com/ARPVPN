@@ -1,0 +1,15 @@
+uwsgi:
+  master: true
+  enable-threads: true
+  processes: 1
+  threads: 1
+  chdir: /var/www/arpvpn
+  venv: venv
+  wsgi-file: arpvpn/__main__.py
+  pyargv: data
+  need-plugin: python3
+  callable: app
+  die-on-term: true
+  http-socket: 0.0.0.0:8080
+  chmod-socket: 660
+  vacuum: true
