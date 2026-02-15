@@ -26,10 +26,13 @@ docker_publish:
   services:
     - name: docker:27.1.1-dind
       alias: docker
+      command:
+        - "--tls=false"
+        - "--insecure-registry=10.10.10.96:5050"
   needs:
     - package_dist
   script:
-    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "http://$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
     - docker build -t "$CI_REGISTRY_IMAGE:stable" -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA" .
     - docker push "$CI_REGISTRY_IMAGE:stable"
     - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
