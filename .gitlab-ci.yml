@@ -5,6 +5,7 @@ stages:
 variables:
   DOCKER_DRIVER: overlay2
   DOCKER_TLS_CERTDIR: ""
+  DOCKER_HOST: tcp://docker:2375
 
 package_dist:
   stage: package
@@ -23,7 +24,8 @@ docker_publish:
   stage: container
   image: docker:27.1.1
   services:
-    - docker:27.1.1-dind
+    - name: docker:27.1.1-dind
+      alias: docker
   needs:
     - package_dist
   script:

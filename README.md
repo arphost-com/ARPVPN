@@ -45,3 +45,15 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
    sudo docker-compose up -d
    ```
 NOTE: Check available tags in your GitLab project's Container Registry.
+
+### GitLab CI/CD and Registry setup
+
+Project CI builds and publishes ``arpvpn`` image to GitLab Container Registry.
+
+1. Ensure project runner is Docker executor with ``privileged = true``.
+2. Ensure Container Registry is enabled in GitLab.
+3. Push to default branch to publish:
+   * ``$CI_REGISTRY_IMAGE:stable``
+   * ``$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA``
+
+For full setup details, see ``docs/source/gitlab-deployment.rst``.
