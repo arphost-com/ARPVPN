@@ -17,7 +17,7 @@ function run {
     chown -R arpvpn:arpvpn "$EXPORTED_PATH"
     # Start uwsgi
     ls -l "$EXPORTED_PATH"
-    sudo -u arpvpn /usr/bin/uwsgi --yaml "$DATA_PATH/uwsgi.yaml"
+    sudo -E -u arpvpn /usr/bin/uwsgi --yaml "$DATA_PATH/uwsgi.yaml"
 }
 
 flag_file="$EXPORTED_PATH/.times_ran"
