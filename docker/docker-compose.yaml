@@ -2,6 +2,10 @@ services:
   arpvpn:
     image: "${ARPVPN_IMAGE:-arpvpn:stable}"
     container_name: "arpvpn"
+    environment:
+      # Use 0 for plain HTTP deployments (e.g. direct host access on :8080).
+      # Set to 1 when ARPVPN is served over HTTPS.
+      ARPVPN_SECURE_COOKIES: "${ARPVPN_SECURE_COOKIES:-0}"
     cap_add:
       - NET_ADMIN
       - NET_RAW

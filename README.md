@@ -40,7 +40,14 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
    ```bash
    export ARPVPN_IMAGE="registry.example.com/group/project/arpvpn:stable"
    ```
-3. Run ARPVPN:
+3. Configure cookie security according to how you expose the UI:
+   ```bash
+   # Direct HTTP access (for example http://host:8080)
+   export ARPVPN_SECURE_COOKIES=0
+   # Reverse proxy / HTTPS access
+   # export ARPVPN_SECURE_COOKIES=1
+   ```
+4. Run ARPVPN:
    ```bash
    sudo docker-compose up -d
    ```
