@@ -114,13 +114,16 @@ if __name__ == "__main__":
         debug(f"Commit hash: {commit}")
     app.run(debug=args.debug, port=8080, host="0.0.0.0")
 else:
-    if not release or not commit:
+    if not release:
         if global_properties.dev_env:
             warning("!! No versioning information provided !!")
         else:
             fatal("!! No versioning information provided !!")
             exit(1)
+    if not commit:
+        warning("!! No commit information provided !!")
     if "-" in release or "+" in release:
         global_properties.dev_env = True
     info(f"Running {APP_NAME} {release}")
-    debug(f"Commit hash: {commit}")
+    if commit:
+        debug(f"Commit hash: {commit}")
