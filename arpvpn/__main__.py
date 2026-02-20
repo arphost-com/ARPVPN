@@ -51,7 +51,7 @@ config_manager.load()
 if log_config.overwrite:
     log_config.reset_logfile()
 
-secure_cookies_enabled = os.environ.get("ARPVPN_SECURE_COOKIES", "1").lower() not in ("0", "false", "no")
+secure_cookies_enabled = os.environ.get("ARPVPN_SECURE_COOKIES", "0").lower() not in ("0", "false", "no")
 
 app.config['SECRET_KEY'] = web_config.secret_key
 app.config["SESSION_COOKIE_HTTPONLY"] = True
