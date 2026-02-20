@@ -3,21 +3,31 @@
 {% set footer_id = "layoutAuthentication_footer" %}
 
 {% block body_content %}
-    <div class="bg-primary">
+    <div class="auth-shell">
         <div id="layoutAuthentication">
             <div id="layoutAuthentication_content">
                 <main>
                     <div class="container">
+                        <div class="auth-theme-bar">
+                            <div class="btn-group btn-group-sm" role="group" aria-label="Theme selector">
+                                <button type="button" class="btn btn-outline-secondary" data-theme-choice="auto">Auto</button>
+                                <button type="button" class="btn btn-outline-secondary" data-theme-choice="light">Light</button>
+                                <button type="button" class="btn btn-outline-secondary" data-theme-choice="dark">Dark</button>
+                            </div>
+                            <span class="small text-muted ml-2">Theme: <span data-theme-current>Auto</span></span>
+                        </div>
                         <div class="row justify-content-center">
                             <div class="col-lg-7">
-                                <div class="card shadow-lg border-0 rounded-lg mt-5">
+                                <div class="card auth-card shadow-lg border-0 rounded-lg mt-3">
                                     <div class="card-header"><h3 class="text-center font-weight-light my-4">{{ title }}</h3></div>
                                     <div class="card-body">
                                         <form action="{{ request.url }}" method="post" novalidate>
                                             {{ form.hidden_tag() }}
-                                            {% for error in form.csrf_token.errors %}
-                                                <div class="alert alert-danger small py-2" role="alert">{{ error }}</div>
-                                            {% endfor %}
+                                            {% if form.csrf_token is defined %}
+                                                {% for error in form.csrf_token.errors %}
+                                                    <div class="alert alert-danger small py-2" role="alert">{{ error }}</div>
+                                                {% endfor %}
+                                            {% endif %}
                                             <div class="form-group">
                                                 {{ form.username.label(class="small") }}
                                                 <br>
@@ -62,4 +72,5 @@
 {% block scripts %}
     <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+    <script type="module" src="/static/js/modules/theme.mjs"></script>
 {% endblock %}

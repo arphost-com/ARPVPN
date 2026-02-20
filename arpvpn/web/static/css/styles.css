@@ -10338,6 +10338,46 @@ body {
   transition: background-color 0.25s ease, color 0.25s ease;
 }
 
+.auth-shell {
+  min-height: 100vh;
+  background:
+    radial-gradient(1400px 520px at -15% -20%, var(--theme-bg-soft), transparent 60%),
+    radial-gradient(1200px 450px at 120% -10%, var(--theme-bg-soft-alt), transparent 58%),
+    var(--theme-bg);
+}
+
+.auth-theme-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 1.5rem;
+}
+
+.auth-card {
+  border: 1px solid var(--theme-border) !important;
+  box-shadow: 0 16px 34px var(--theme-shadow);
+}
+
+.auth-card .card-header {
+  background: linear-gradient(180deg, var(--theme-surface-3), var(--theme-surface-2));
+}
+
+.auth-card .btn-primary {
+  background-color: var(--theme-primary);
+  border-color: var(--theme-primary);
+}
+
+.auth-card .btn-primary:hover,
+.auth-card .btn-primary:focus {
+  background-color: var(--theme-primary-strong);
+  border-color: var(--theme-primary-strong);
+}
+
+#layoutAuthentication_footer .bg-light {
+  background-color: transparent !important;
+}
+
 a {
   color: var(--theme-primary);
 }
@@ -10592,5 +10632,10 @@ pre {
 
   .page-header-actions {
     width: 100%;
+  }
+
+  .auth-theme-bar {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 }
