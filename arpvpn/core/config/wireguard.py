@@ -61,7 +61,21 @@ class WireguardConfig(BaseConfig):
 
     def set_default_endpoint(self):
         try:
-            self.endpoint = request.urlopen(self.__IP_RETRIEVER_URL).read().decode("utf-8")
+            # Validate the URL is using HTTPS
+            if not self.__IP_RETRIEVER_URL.startswith("https://"):
+                error("IP retriever URL must use HTTPS")
+                raise ValueError("Invalid IP retriever URL protocol")
+
+            # Set a reasonable timeout
+            with request.urlopen(self.__IP_RETRIEVER_URL, timeout=10) as response:
+                self.endpoint = response.read().decode("utf-8").strip()
+
+            # Validate the returned IP address format
+            import re
+            if not re.match(r'^(\d{1,3}\.){3}\d{1,3}$', self.endpoint):
+                error(f"Invalid IP address format received: {self.endpoint}")
+                raise ValueError("Invalid IP address format")
+
             debug(f"Public IP address is {self.endpoint}. This will be used as default endpoint.")
         except Exception as e:
             error(f"Unable to obtain server's public IP address: {e}")
