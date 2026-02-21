@@ -183,7 +183,7 @@
                         </div>
                         <div class="form-group mt-4 mb-0">
                             {{ form.submit(class="btn btn-warning") }}
-                            <a href="{{ request.path }}/download" type="button" class="btn btn-outline-info">Download</a>
+                            <a href="{{ url_for('router.download_wireguard_peer', uuid=peer.uuid) }}" type="button" class="btn btn-outline-info">Download</a>
                             <button type="button" class="btn btn-outline-secondary"
                                     data-toggle="modal" data-target="#qrModal">QR</button>
                             <div class="modal fade" id="qrModal" tabindex="-1" role="dialog"
