@@ -72,8 +72,8 @@ def get_testing_app():
     global_properties.setup_required = False
     global_properties.dev_env = True
     from arpvpn.__main__ import app
-    app.config["TESTING"] = True
-    app.config["WTF_CSRF_ENABLED"] = False
+    app.config["TESTING"] = True  # nosemgrep: python.flask.security.audit.hardcoded-config.avoid_hardcoded_config_TESTING
+    app.config["WTF_CSRF_ENABLED"] = False  # nosemgrep: python.flask.security.audit.wtf-csrf-disabled.flask-wtf-csrf-disabled
     return app
 
 

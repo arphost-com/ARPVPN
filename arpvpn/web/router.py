@@ -428,9 +428,6 @@ def login():
     if current_user.is_authenticated:
         return redirect(url_for("router.index"))
     if len(users) < 1:
-        next_url = request.args.get("next", None)
-        if next_url and is_safe_redirect_url(next_url):
-            return redirect(url_for("router.signup", next=next_url))
         return redirect(url_for("router.signup"))
     from arpvpn.web.forms import LoginForm
     context = {

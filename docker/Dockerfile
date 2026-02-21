@@ -1,4 +1,4 @@
-FROM python:3.9-slim-bullseye as python-base
+FROM python:3.12-slim-trixie as python-base
 ENV PYTHONFAULTHANDLER=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -27,16 +27,15 @@ RUN mkdir -p $EXPORTED_PATH && \
 
 WORKDIR /data
 
-COPY --chown=arpvpn:arpvpn docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY --chown=arpvpn:arpvpn --chmod=755 docker/entrypoint.sh /entrypoint.sh
+
+# Switch to non-root user
+USER arpvpn
 
 EXPOSE 8080
 
 # Add healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8080').read()" || exit 1
-
-# Switch to non-root user
-USER arpvpn
 
 CMD /bin/bash /entrypoint.sh

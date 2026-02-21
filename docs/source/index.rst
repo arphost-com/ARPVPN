@@ -5,8 +5,8 @@ ARPVPN
     :target: https://github.com/arphost-com/ARPVPN/blob/main/LICENSE.md
     :alt: License: GPL-3.0
 
-.. image:: https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11-blue?logo=python&logoColor=yellow
-    :alt: Supported python versions: 3.9, 3.10, 3.11
+.. image:: https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue?logo=python&logoColor=yellow
+    :alt: Supported python versions: 3.10, 3.11, 3.12
 
 .. image:: https://github.com/arphost-com/ARPVPN/actions/workflows/stable-test.yaml/badge.svg
     :target: https://github.com/arphost-com/ARPVPN/actions/workflows/stable-test.yaml
