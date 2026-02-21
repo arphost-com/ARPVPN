@@ -10,16 +10,33 @@ ENV PYTHONFAULTHANDLER=1 \
     DATA_PATH="/var/www/arpvpn/data" \
     EXPORTED_PATH="/data"
 ENV PATH="$POETRY_HOME/bin:$VENV_PATH/bin:$PATH"
-COPY dist/*.tar.gz arpvpn.tar.gz
-RUN mkdir arpvpn && tar -xf arpvpn.tar.gz -C arpvpn
-WORKDIR arpvpn
+
+# Create non-root user early
+RUN groupadd -g 1001 arpvpn && \
+    useradd -u 1001 -g arpvpn -s /bin/bash -m arpvpn
+
+COPY dist/*.tar.gz /tmp/arpvpn.tar.gz
+RUN mkdir /tmp/arpvpn && tar -xf /tmp/arpvpn.tar.gz -C /tmp/arpvpn
+WORKDIR /tmp/arpvpn
 RUN chmod +x ./install.sh && ./install.sh
-WORKDIR $EXPORTED_PATH
-RUN rm -rf /arpvpn*
+
+# Create data directory with correct ownership
+RUN mkdir -p $EXPORTED_PATH && \
+    chown -R arpvpn:arpvpn $EXPORTED_PATH && \
+    rm -rf /tmp/arpvpn*
+
+WORKDIR /data
+
+COPY --chown=arpvpn:arpvpn docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 EXPOSE 8080
 
-COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Add healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8080').read()" || exit 1
+
+# Switch to non-root user
+USER arpvpn
 
 CMD /bin/bash /entrypoint.sh
