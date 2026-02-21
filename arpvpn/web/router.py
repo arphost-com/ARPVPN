@@ -51,11 +51,32 @@ HIGH_TRAFFIC_THRESHOLD_MB = get_env_int("ARPVPN_HIGH_TRAFFIC_THRESHOLD_MB", 1024
 HIGH_TRAFFIC_THRESHOLD_BYTES = HIGH_TRAFFIC_THRESHOLD_MB * 1024 * 1024
 
 
+def is_safe_redirect_url(url: str) -> bool:
+    """
+    Validate that a URL is safe for redirect (prevents open redirect vulnerabilities).
+    Only allows relative URLs that start with / and don't contain //
+    """
+    if not url:
+        return False
+    # Only allow relative URLs
+    if url.startswith('/') and not url.startswith('//'):
+        # Parse to ensure it's a valid relative path
+        parsed = urlparse(url)
+        # Ensure no scheme or netloc (no external redirects)
+        if not parsed.scheme and not parsed.netloc:
+            return True
+    return False
+
+
 def get_referrer_next_value():
     next_url = parse_qs(urlparse(request.referrer).query).get("next", None)
     if not next_url or len(next_url) < 1:
         return None
-    return next_url[0]
+    url = next_url[0]
+    # Validate the URL is safe before returning
+    if is_safe_redirect_url(url):
+        return url
+    return None
 
 
 class Router(Blueprint):
@@ -373,7 +394,10 @@ def login():
     if current_user.is_authenticated:
         return redirect(url_for("router.index"))
     if len(users) < 1:
-        return redirect(url_for("router.signup", next=request.args.get("next", None)))
+        next_url = request.args.get("next", None)
+        if next_url and is_safe_redirect_url(next_url):
+            return redirect(url_for("router.signup", next=next_url))
+        return redirect(url_for("router.signup"))
     from arpvpn.web.forms import LoginForm
     context = {
         "title": "Login",
@@ -405,7 +429,8 @@ def login_post():
     info(f"Logging in user '{form.username.data}'...")
     client = get_client()
     if client.is_banned():
-        return redirect(form.next.data or url_for("router.index"))
+        next_url = form.next.data if form.next.data and is_safe_redirect_url(form.next.data) else None
+        return redirect(next_url or url_for("router.index"))
     if not form.validate():
         error("Unable to validate form.")
         context = {
@@ -424,7 +449,10 @@ def login_post():
         abort(INTERNAL_SERVER_ERROR)
     info(f"Successfully logged user '{u.name}' in!")
     router.web_login_attempts = 1
-    return redirect(request.args.get("next", url_for("router.index")))
+    next_url = request.args.get("next", None)
+    if next_url and is_safe_redirect_url(next_url):
+        return redirect(next_url)
+    return redirect(url_for("router.index"))
 
 
 @router.route("/network")
@@ -774,7 +802,8 @@ def add_wireguard_peer():
         return ViewController(view, **context).load()
     try:
         peer = RestController().add_peer(form)
-        return redirect(f"{request.url_root}wireguard/peers/{peer.uuid}")
+        # Use url_for instead of constructing URL from request.url_root
+        return redirect(url_for("router.get_wireguard_peer", uuid=peer.uuid))
     except Exception as e:
         log_exception(e)
         context["error"] = True
@@ -924,7 +953,10 @@ def save_settings():
 @login_required
 def setup():
     if global_properties.setup_file_exists():
-        return redirect(request.args.get("next", url_for("router.index")))
+        next_url = request.args.get("next", None)
+        if next_url and is_safe_redirect_url(next_url):
+            return redirect(next_url)
+        return redirect(url_for("router.index"))
     from arpvpn.web.forms import SetupForm
     form = SetupForm()
     wireguard_config.set_default_endpoint()
@@ -955,7 +987,10 @@ def apply_setup():
         RestController().apply_setup(form)
         with open(global_properties.setup_filepath, "w") as f:
             f.write("")
-        return redirect(request.args.get("next", url_for("router.index")))
+        next_url = request.args.get("next", None)
+        if next_url and is_safe_redirect_url(next_url):
+            return redirect(next_url)
+        return redirect(url_for("router.index"))
     except Exception as e:
         log_exception(e)
         context["error"] = True
