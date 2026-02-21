@@ -256,12 +256,12 @@
                                             {% if peer.description %}
                                                 <td>{{ peer.description }}</td>
                                             {% else %}
-                                                <td>{{ EMPTY_FIELD | safe }}</td>
+                                                <td>{{ EMPTY_FIELD  }}</td>
                                             {% endif %}
                                             {% if peer.ipv4_address %}
                                                 <td>{{ peer.ipv4_address }}</td>
                                             {% else %}
-                                                <td>{{ EMPTY_FIELD | safe }}</td>
+                                                <td>{{ EMPTY_FIELD  }}</td>
                                             {% endif %}
                                             {% if peer.mode == "site_to_site" %}
                                                 <td>Site-to-site</td>
@@ -271,17 +271,17 @@
                                             {% if peer.site_to_site_subnets %}
                                                 <td>{{ peer.site_to_site_subnets | join(", ") }}</td>
                                             {% else %}
-                                                <td>{{ EMPTY_FIELD | safe }}</td>
+                                                <td>{{ EMPTY_FIELD  }}</td>
                                             {% endif %}
                                             {% if peer.dns1 %}
                                                 <td>{{ peer.dns1 }}</td>
                                             {% else %}
-                                                <td>{{ EMPTY_FIELD | safe }}</td>
+                                                <td>{{ EMPTY_FIELD  }}</td>
                                             {% endif %}
                                             {% if peer.dns2 %}
                                                 <td>{{ peer.dns2 }}</td>
                                             {% else %}
-                                                <td>{{ EMPTY_FIELD | safe }}</td>
+                                                <td>{{ EMPTY_FIELD  }}</td>
                                             {% endif %}
                                             {% if peer.nat %}
                                                 <td>Yes</td>
@@ -291,7 +291,7 @@
                                             {% if peer.uuid in session_traffic and session_traffic[peer.uuid].last_handshake %}
                                                 <td>{{ session_traffic[peer.uuid].last_handshake.strftime("%H:%M:%S, %d/%m/%Y") }}</td>
                                             {% else %}
-                                                <td>{{ EMPTY_FIELD | safe }}</td>
+                                                <td>{{ EMPTY_FIELD  }}</td>
                                             {% endif %}
                                             <td>
                                                 <a href="/wireguard/peers/{{ peer.uuid }}/download" class="mr-2">
@@ -417,7 +417,7 @@
                                 <script>
                                 moment.locale("en-AU"); //dd/mm/yyyy
                                 data = {
-                                  labels: {{ chart["labels"] | safe }},
+                                  labels: {{ chart["labels"] | tojson }},
                                   datasets: [
                                       {
                                           label: "Received",

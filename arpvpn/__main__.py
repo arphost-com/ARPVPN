@@ -112,12 +112,8 @@ if __name__ == "__main__":
     else:
         info(f"Running {APP_NAME} {release}")
         debug(f"Commit hash: {commit}")
-    # Allow binding host to be configured via environment variable
-    # Default to 127.0.0.1 for security, or 0.0.0.0 if explicitly set
-    bind_host = os.environ.get("ARPVPN_BIND_HOST", "127.0.0.1")
-    if bind_host == "0.0.0.0":
-        warning("Binding to 0.0.0.0 - accessible from all network interfaces!")
-    app.run(debug=args.debug, port=8080, host=bind_host)
+    # Keep debug server local-only; expose remotely only via hardened reverse proxy.
+    app.run(debug=args.debug, port=8080, host="127.0.0.1")
 else:
     if not release:
         if global_properties.dev_env:

@@ -2,13 +2,14 @@ import csv
 import io
 import json
 import os
+import re
 from datetime import datetime
 from functools import wraps
 from http.client import BAD_REQUEST, NOT_FOUND, INTERNAL_SERVER_ERROR, UNAUTHORIZED, NO_CONTENT
 from ipaddress import IPv4Address
 from logging import warning, debug, error, info
 from time import sleep
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Any, Union, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
 from flask import Blueprint, abort, request, Response, redirect, url_for, jsonify
@@ -36,6 +37,16 @@ from arpvpn.web.static.assets.resources import EMPTY_FIELD, APP_NAME
 
 ACTIVE_PEER_MAX_AGE_SECONDS = 180
 STALE_PEER_MAX_AGE_SECONDS = 1800
+ALLOWED_NEXT_ENDPOINTS = {
+    "/": "router.index",
+    "/dashboard": "router.index",
+    "/network": "router.network",
+    "/wireguard": "router.wireguard",
+    "/settings": "router.settings",
+    "/themes": "router.themes",
+    "/about": "router.about",
+    "/setup": "router.setup",
+}
 
 
 def get_env_int(name: str, default: int) -> int:
@@ -54,26 +65,49 @@ HIGH_TRAFFIC_THRESHOLD_BYTES = HIGH_TRAFFIC_THRESHOLD_MB * 1024 * 1024
 def is_safe_redirect_url(url: str) -> bool:
     """
     Validate that a URL is safe for redirect (prevents open redirect vulnerabilities).
-    Only allows relative URLs that start with / and don't contain //
+    Only allows relative URLs with no scheme or netloc.
     """
     if not url:
         return False
-    # Only allow relative URLs
-    if url.startswith('/') and not url.startswith('//'):
-        # Parse to ensure it's a valid relative path
-        parsed = urlparse(url)
-        # Ensure no scheme or netloc (no external redirects)
-        if not parsed.scheme and not parsed.netloc:
-            return True
-    return False
+    parsed = urlparse(url)
+    return url.startswith("/") and not url.startswith("//") and not parsed.scheme and not parsed.netloc
+
+
+def get_allowed_next_target(url: str) -> Optional[Tuple[str, Dict[str, str]]]:
+    if not is_safe_redirect_url(url):
+        return None
+
+    path = urlparse(url).path.rstrip("/") or "/"
+    endpoint = ALLOWED_NEXT_ENDPOINTS.get(path)
+    if endpoint:
+        return endpoint, {}
+
+    iface_match = re.fullmatch(r"/wireguard/interfaces/([a-f0-9]{32})", path)
+    if iface_match:
+        return "router.get_wireguard_iface", {"uuid": iface_match.group(1)}
+
+    peer_match = re.fullmatch(r"/wireguard/peers/([a-f0-9]{32})", path)
+    if peer_match:
+        return "router.get_wireguard_peer", {"uuid": peer_match.group(1)}
+
+    return None
+
+
+def redirect_to_next_or_default(next_url: Optional[str], default_endpoint: str = "router.index"):
+    target = get_allowed_next_target(next_url) if next_url else None
+    if target:
+        endpoint, values = target
+        return redirect(url_for(endpoint, **values))
+    return redirect(url_for(default_endpoint))
 
 
 def get_referrer_next_value():
+    if not request.referrer:
+        return None
     next_url = parse_qs(urlparse(request.referrer).query).get("next", None)
     if not next_url or len(next_url) < 1:
         return None
     url = next_url[0]
-    # Validate the URL is safe before returning
     if is_safe_redirect_url(url):
         return url
     return None
@@ -429,8 +463,7 @@ def login_post():
     info(f"Logging in user '{form.username.data}'...")
     client = get_client()
     if client.is_banned():
-        next_url = form.next.data if form.next.data and is_safe_redirect_url(form.next.data) else None
-        return redirect(next_url or url_for("router.index"))
+        return redirect_to_next_or_default(form.next.data)
     if not form.validate():
         error("Unable to validate form.")
         context = {
@@ -449,10 +482,7 @@ def login_post():
         abort(INTERNAL_SERVER_ERROR)
     info(f"Successfully logged user '{u.name}' in!")
     router.web_login_attempts = 1
-    next_url = request.args.get("next", None)
-    if next_url and is_safe_redirect_url(next_url):
-        return redirect(next_url)
-    return redirect(url_for("router.index"))
+    return redirect_to_next_or_default(request.args.get("next", None))
 
 
 @router.route("/network")
@@ -953,10 +983,7 @@ def save_settings():
 @login_required
 def setup():
     if global_properties.setup_file_exists():
-        next_url = request.args.get("next", None)
-        if next_url and is_safe_redirect_url(next_url):
-            return redirect(next_url)
-        return redirect(url_for("router.index"))
+        return redirect_to_next_or_default(request.args.get("next", None))
     from arpvpn.web.forms import SetupForm
     form = SetupForm()
     wireguard_config.set_default_endpoint()
@@ -987,10 +1014,7 @@ def apply_setup():
         RestController().apply_setup(form)
         with open(global_properties.setup_filepath, "w") as f:
             f.write("")
-        next_url = request.args.get("next", None)
-        if next_url and is_safe_redirect_url(next_url):
-            return redirect(next_url)
-        return redirect(url_for("router.index"))
+        return redirect_to_next_or_default(request.args.get("next", None))
     except Exception as e:
         log_exception(e)
         context["error"] = True

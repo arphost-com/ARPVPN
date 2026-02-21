@@ -9,16 +9,16 @@
                     </div>
                     {% else %}
                     <div class="text-muted">
-                        {{ app_name }} <a href="{{ app_repository_url }}/releases/tag/v{{ version_info['release'] }}">{{ version_info["release"] }}</a>
+                        {{ app_name }} {{ version_info["release"] }}
                     </div>
                     {% endif %}
                 {% else %}
                     <div class="text-muted">Copyleft &#127279; {{ app_name }} {{ year }}</div>
                 {% endif %}
                 <div>
-                    <a href="{{ app_repository_url }}">Github</a>
+                    <a href="https://github.com/arphost-com/ARPVPN" rel="noopener noreferrer" target="_blank">Github</a>
                     &middot;
-                    <a href="{{ app_license_url }}">License</a>
+                    <a href="https://github.com/arphost-com/ARPVPN/blob/main/LICENSE.md" rel="noopener noreferrer" target="_blank">License</a>
                 </div>
             </div>
         </div>

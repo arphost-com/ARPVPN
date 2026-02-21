@@ -1,7 +1,8 @@
 import os
 import shlex
 from logging import debug, error
-from subprocess import run, PIPE
+from subprocess import PIPE, Popen, run
+from typing import List
 
 
 class CommandResult:
@@ -22,6 +23,28 @@ class Command:
     def __init__(self, cmd):
         self.cmd = cmd
 
+    @staticmethod
+    def _split_pipeline(cmd: str) -> List[List[str]]:
+        lexer = shlex.shlex(cmd, posix=True, punctuation_chars="|")
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+
+        segments: List[List[str]] = []
+        current_segment: List[str] = []
+        for token in lexer:
+            if token == "|":
+                if not current_segment:
+                    raise ValueError("Invalid command pipeline")
+                segments.append(current_segment)
+                current_segment = []
+                continue
+            current_segment.append(token)
+
+        if not current_segment:
+            raise ValueError("Invalid command pipeline")
+        segments.append(current_segment)
+        return segments
+
     def run(self, as_root: bool = False) -> CommandResult:
         """
         Execute the command and return information about the execution.
@@ -32,11 +55,58 @@ class Command:
         if as_root:
             cmd = f"sudo {cmd}"
         debug(f"Running '{cmd}'...")
-        # Use shlex.split to properly parse the command without shell=True
-        cmd_parts = shlex.split(cmd)
-        proc = run(cmd_parts, shell=False, check=False, stdout=PIPE, stderr=PIPE)
-        result = CommandResult(proc.returncode, proc.stdout.decode('utf-8').strip(),
-                               proc.stderr.decode('utf-8').strip())
+
+        try:
+            command_pipeline = self._split_pipeline(cmd)
+
+            if len(command_pipeline) == 1:
+                proc = run(command_pipeline[0], shell=False, check=False, stdout=PIPE, stderr=PIPE)
+                result = CommandResult(
+                    proc.returncode,
+                    proc.stdout.decode("utf-8", errors="replace").strip(),
+                    proc.stderr.decode("utf-8", errors="replace").strip(),
+                )
+            else:
+                processes = []
+                previous_proc = None
+                for segment in command_pipeline:
+                    proc = Popen(
+                        segment,
+                        stdin=previous_proc.stdout if previous_proc else None,
+                        stdout=PIPE,
+                        stderr=PIPE,
+                    )
+                    if previous_proc and previous_proc.stdout:
+                        previous_proc.stdout.close()
+                    processes.append(proc)
+                    previous_proc = proc
+
+                stdout, last_stderr = processes[-1].communicate()
+                stderr_parts = []
+                return_code = 0
+
+                for index, proc in enumerate(processes):
+                    if index < len(processes) - 1:
+                        proc.wait()
+                        stderr_blob = proc.stderr.read() if proc.stderr else b""
+                    else:
+                        stderr_blob = last_stderr
+
+                    if proc.returncode != 0 and return_code == 0:
+                        return_code = proc.returncode
+
+                    stderr_text = stderr_blob.decode("utf-8", errors="replace").strip()
+                    if stderr_text:
+                        stderr_parts.append(stderr_text)
+
+                result = CommandResult(
+                    return_code,
+                    stdout.decode("utf-8", errors="replace").strip(),
+                    "\n".join(stderr_parts).strip(),
+                )
+        except Exception as exc:
+            result = CommandResult(1, "", str(exc))
+
         if not result.successful:
             error(f"Failed to run '{cmd}': err={result.err} | out={result.output} | code={result.code}")
         return result

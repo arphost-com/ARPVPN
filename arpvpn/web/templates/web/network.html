@@ -33,19 +33,19 @@
                                                     </tr>
                                                     <tr>
                                                         <th>IPv4</th>
-                                                        <td>{{ iface.ipv4 | safe }}</td>
+                                                        <td>{{ iface.ipv4  }}</td>
                                                     </tr>
                                                     <tr>
                                                         <th>IPv6</th>
-                                                        <td>{{ iface.ipv6 | safe }}</td>
+                                                        <td>{{ iface.ipv6  }}</td>
                                                     </tr>
                                                     <tr>
                                                         <th>MAC</th>
-                                                        <td>{{ iface.mac | safe}}</td>
+                                                        <td>{{ iface.mac }}</td>
                                                     </tr>
                                                     <tr>
                                                         <th>Flags</th>
-                                                        <td>{{ iface.flags | safe }}</td>
+                                                        <td>{{ iface.flags  }}</td>
                                                     </tr>
                                                 </tbody>
                                             </table>
@@ -98,19 +98,19 @@
                                         {% if route.protocol %}
                                             <td>{{ route.protocol }}</td>
                                         {% else %}
-                                            <td>{{ EMPTY_FIELD | safe }}</td>
+                                            <td>{{ EMPTY_FIELD  }}</td>
                                         {% endif %}
                                         {% if route.scope %}
                                         <td>{{ route.scope }}</td>
                                         {% else %}
-                                            <td>{{ EMPTY_FIELD | safe }}</td>
+                                            <td>{{ EMPTY_FIELD  }}</td>
                                         {% endif %}
                                         {% if route.metric %}
                                         <td>{{ route.metric }}</td>
                                         {% else %}
-                                            <td>{{ EMPTY_FIELD | safe }}</td>
+                                            <td>{{ EMPTY_FIELD  }}</td>
                                         {% endif %}
-                                        <td>{{ route.flags | safe }}</td>
+                                        <td>{{ route.flags  }}</td>
                                     </tr>
                                 {% endfor %}
                             </tbody>

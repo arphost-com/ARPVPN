@@ -1,7 +1,7 @@
 import os
+from ipaddress import IPv4Address
 from logging import debug, warning, error
 from typing import Dict, Type, Any
-from urllib import request
 
 from yamlable import yaml_info, Y
 
@@ -61,20 +61,11 @@ class WireguardConfig(BaseConfig):
 
     def set_default_endpoint(self):
         try:
-            # Validate the URL is using HTTPS
-            if not self.__IP_RETRIEVER_URL.startswith("https://"):
-                error("IP retriever URL must use HTTPS")
-                raise ValueError("Invalid IP retriever URL protocol")
-
-            # Set a reasonable timeout
-            with request.urlopen(self.__IP_RETRIEVER_URL, timeout=10) as response:
-                self.endpoint = response.read().decode("utf-8").strip()
-
-            # Validate the returned IP address format
-            import re
-            if not re.match(r'^(\d{1,3}\.){3}\d{1,3}$', self.endpoint):
-                error(f"Invalid IP address format received: {self.endpoint}")
-                raise ValueError("Invalid IP address format")
+            result = Command("curl -fsSL --max-time 10 https://api.ipify.org").run()
+            if not result.successful:
+                raise RuntimeError(result.err or result.output or "Unable to retrieve public IP address")
+            self.endpoint = result.output.strip()
+            IPv4Address(self.endpoint)
 
             debug(f"Public IP address is {self.endpoint}. This will be used as default endpoint.")
         except Exception as e:

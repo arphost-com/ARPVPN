@@ -1,0 +1,5 @@
+# Test code intentionally uses fixtures/assertions that are not shipped to production.
+arpvpn/tests/
+
+# Generated docs are not source templates.
+docs/source/_build/

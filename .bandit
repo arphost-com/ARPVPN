@@ -1,0 +1,2 @@
+[bandit]
+exclude_dirs = arpvpn/tests,docs/source/_build

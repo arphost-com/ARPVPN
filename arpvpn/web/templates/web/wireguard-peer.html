@@ -294,7 +294,7 @@
                                     <script>
                                     moment.locale("en-AU"); //dd/mm/yyyy
                                     data = {
-                                      labels: {{ chart["labels"] | safe }},
+                                      labels: {{ chart["labels"] | tojson }},
                                       datasets: [
                                           {
                                               label: "Received",

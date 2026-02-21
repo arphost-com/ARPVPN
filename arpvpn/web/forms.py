@@ -1,6 +1,6 @@
 import ipaddress
 import json
-from random import randint
+from secrets import randbelow
 from typing import List, Tuple
 
 from flask_wtf import FlaskForm
@@ -177,9 +177,9 @@ class AddInterfaceForm(FlaskForm):
 
         tries = 0
         max_tries = 100
-        ip = ipaddress.IPv4Interface(f"{fake.ipv4_private()}/{randint(8, 30)}")
-        while tries < max_tries and Interface.is_ip_in_use(str(ip)) or Interface.is_network_in_use(ip):
-            ip = ipaddress.IPv4Interface(f"{fake.ipv4_private()}/{randint(8, 30)}")
+        ip = ipaddress.IPv4Interface(f"{fake.ipv4_private()}/{8 + randbelow(23)}")
+        while tries < max_tries and (Interface.is_ip_in_use(str(ip)) or Interface.is_network_in_use(ip)):
+            ip = ipaddress.IPv4Interface(f"{fake.ipv4_private()}/{8 + randbelow(23)}")
             tries += 1
         if tries < max_tries:
             form.ipv4.data = str(ip)

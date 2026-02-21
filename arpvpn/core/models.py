@@ -3,7 +3,7 @@ import ipaddress
 import os
 import re
 from logging import info, warning, error, debug
-from random import randint
+from secrets import randbelow
 from time import sleep
 from typing import Dict, Any, Type, List, Mapping
 from uuid import uuid4 as gen_uuid
@@ -249,7 +249,7 @@ class Interface(YamlAble):
     def get_unused_port(cls) -> int:
         tries = 100
         for i in range(0, tries):
-            port = randint(Interface.MIN_PORT_NUMBER, Interface.MAX_PORT_NUMBER)
+            port = Interface.MIN_PORT_NUMBER + randbelow(Interface.MAX_PORT_NUMBER - Interface.MIN_PORT_NUMBER + 1)
             if not Interface.is_port_in_use(port):
                 return port
         raise WireguardError(f"Unable to obtain a free port (tried {tries} times)", http.HTTPStatus.BAD_REQUEST)

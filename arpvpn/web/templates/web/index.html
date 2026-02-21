@@ -33,10 +33,10 @@
                     </div>
                     <div class="card-body">
                         {% for alert in peer_runtime["alerts"][:8] %}
-                            <div class="alert alert-{{ alert["level"] }} py-2 mb-2">
+                            <div class="alert alert-{{ alert['level'] }} py-2 mb-2">
                                 <strong>{{ alert["title"] }}:</strong> {{ alert["message"] }}
                                 {% if alert["peer_uuid"] %}
-                                    <a class="ml-2" href="/wireguard/peers/{{ alert["peer_uuid"] }}">Open peer</a>
+                                    <a class="ml-2" href="/wireguard/peers/{{ alert['peer_uuid'] }}">Open peer</a>
                                 {% endif %}
                             </div>
                         {% endfor %}
@@ -99,8 +99,8 @@
                             <canvas id="interfacesChart" width="100%"></canvas>
                             <script>
                                 const interfacesCanvas = document.getElementById("interfacesChart");
-                                const interfaceLabels = {{ interfaces_chart["labels"] | safe }};
-                                const rawInterfaceDatasets = {{ interfaces_chart["datasets"] | safe }};
+                                const interfaceLabels = {{ interfaces_chart["labels"] | tojson }};
+                                const rawInterfaceDatasets = {{ interfaces_chart["datasets"] | tojson }};
                                 let interfacesChartInstance = null;
 
                                 function buildInterfaceDatasets() {
@@ -280,7 +280,7 @@
                                             {% if item.handshake_ago %}
                                                 <td>{{ item.handshake_ago }}</td>
                                             {% else %}
-                                                <td>{{ EMPTY_FIELD | safe }}</td>
+                                                <td>{{ EMPTY_FIELD  }}</td>
                                             {% endif %}
                                             <td>{{ item.session_rx_human }}</td>
                                             <td>{{ item.session_tx_human }}</td>
@@ -329,7 +329,7 @@
                                             {% if iface.description %}
                                                 <td>{{ iface.description }}</td>
                                             {% else %}
-                                                <td>{{ EMPTY_FIELD | safe }}</td>
+                                                <td>{{ EMPTY_FIELD  }}</td>
                                             {% endif %}
                                             <td>{{ iface.ipv4_address }}</td>
                                             <td>{{ iface.listen_port}}</td>
@@ -416,12 +416,12 @@
                                             {% if peer.description %}
                                                 <td>{{ peer.description }}</td>
                                             {% else %}
-                                                <td>{{ EMPTY_FIELD | safe }}</td>
+                                                <td>{{ EMPTY_FIELD  }}</td>
                                             {% endif %}
                                             {% if peer.ipv4_address %}
                                                 <td>{{ peer.ipv4_address }}</td>
                                             {% else %}
-                                                <td>{{ EMPTY_FIELD | safe }}</td>
+                                                <td>{{ EMPTY_FIELD  }}</td>
                                             {% endif %}
                                             {% if peer.mode == "site_to_site" %}
                                                 <td>Site-to-site</td>
@@ -431,17 +431,17 @@
                                             {% if peer.site_to_site_subnets %}
                                                 <td>{{ peer.site_to_site_subnets | join(", ") }}</td>
                                             {% else %}
-                                                <td>{{ EMPTY_FIELD | safe }}</td>
+                                                <td>{{ EMPTY_FIELD  }}</td>
                                             {% endif %}
                                             {% if peer.dns1 %}
                                                 <td>{{ peer.dns1 }}</td>
                                             {% else %}
-                                                <td>{{ EMPTY_FIELD | safe }}</td>
+                                                <td>{{ EMPTY_FIELD  }}</td>
                                             {% endif %}
                                             {% if peer.dns2 %}
                                                 <td>{{ peer.dns2 }}</td>
                                             {% else %}
-                                                <td>{{ EMPTY_FIELD | safe }}</td>
+                                                <td>{{ EMPTY_FIELD  }}</td>
                                             {% endif %}
                                             <td>
                                                 <a href="/wireguard/peers/{{ peer.uuid }}/download" title="Download"
