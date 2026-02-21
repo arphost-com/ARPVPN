@@ -1,4 +1,5 @@
 import os
+import shlex
 from logging import debug, error
 from subprocess import run, PIPE
 
@@ -31,7 +32,9 @@ class Command:
         if as_root:
             cmd = f"sudo {cmd}"
         debug(f"Running '{cmd}'...")
-        proc = run(cmd, shell=True, check=False, stdout=PIPE, stderr=PIPE)
+        # Use shlex.split to properly parse the command without shell=True
+        cmd_parts = shlex.split(cmd)
+        proc = run(cmd_parts, shell=False, check=False, stdout=PIPE, stderr=PIPE)
         result = CommandResult(proc.returncode, proc.stdout.decode('utf-8').strip(),
                                proc.stderr.decode('utf-8').strip())
         if not result.successful:
