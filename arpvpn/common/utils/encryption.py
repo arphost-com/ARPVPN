@@ -1,5 +1,5 @@
 import base64
-import random
+import secrets
 
 from cryptography.fernet import Fernet
 
@@ -25,4 +25,4 @@ class CryptoUtils:
 
     @classmethod
     def generate_key(cls) -> str:
-        return ''.join(random.choices(string.ascii_letters + string.digits + string.punctuation, k=cls.KEY_LEN))
+        return ''.join(secrets.choice(string.ascii_letters + string.digits + string.punctuation) for _ in range(cls.KEY_LEN))
