@@ -1,0 +1,100 @@
+<div class="card mb-4 panel-glass">
+    <div class="card-header">
+        <i class="fas fa-laptop-code mr-1"></i>
+        Cross-platform VPN setup guide (both sides)
+    </div>
+    <div class="card-body">
+        <p class="mb-3">Use this checklist for both sides of the tunnel: ARPVPN (server side) and the remote endpoint (Windows, Linux, or macOS).</p>
+        <div class="row">
+            <div class="col-lg-6">
+                <h6 class="text-uppercase text-muted">ARPVPN side</h6>
+                <ol class="pl-3 mb-0">
+                    <li>Create or select the local WireGuard interface.</li>
+                    <li>Add/edit a peer and set <strong>Mode</strong>.
+                        <ul class="pl-3 mb-0">
+                            <li><strong>Client</strong>: end-user device.</li>
+                            <li><strong>Site-to-site</strong>: remote gateway/router.</li>
+                        </ul>
+                    </li>
+                    <li>Set the peer tunnel IP in <strong>IPv4</strong>.</li>
+                    <li>For site-to-site peers, add remote LANs in <strong>Remote site subnets</strong> (CIDR, comma-separated).</li>
+                    <li>Enable <strong>NAT</strong> when the remote side is behind upstream NAT.</li>
+                    <li>Save, then download the generated peer config (or use QR for client devices).</li>
+                </ol>
+            </div>
+            <div class="col-lg-6 mt-3 mt-lg-0">
+                <h6 class="text-uppercase text-muted">Verification (both sides)</h6>
+                <ol class="pl-3 mb-0">
+                    <li>Bring up the tunnel on the remote side.</li>
+                    <li>Confirm a recent handshake appears in ARPVPN.</li>
+                    <li>Ping tunnel IPs both directions.</li>
+                    <li>For site-to-site, test traffic to a host inside each remote LAN subnet.</li>
+                    <li>If handshake fails, check UDP listen port, firewall rules, and <code>PersistentKeepalive = 25</code> for NATed peers.</li>
+                </ol>
+            </div>
+        </div>
+
+        <hr>
+
+        <div id="platformGuideAccordion">
+            <div class="card mb-2">
+                <div class="card-header py-2" id="platformWinHeading">
+                    <button class="btn btn-link p-0" type="button" data-toggle="collapse" data-target="#platformWinBody" aria-expanded="true" aria-controls="platformWinBody">
+                        Windows (remote side)
+                    </button>
+                </div>
+                <div id="platformWinBody" class="collapse show" aria-labelledby="platformWinHeading" data-parent="#platformGuideAccordion">
+                    <div class="card-body py-3">
+                        <ol class="pl-3 mb-0">
+                            <li>Install the official WireGuard client.</li>
+                            <li>Open WireGuard, choose <strong>Import tunnel(s) from file</strong>, and select the downloaded peer config.</li>
+                            <li>Activate the tunnel and allow Windows Firewall prompts if shown.</li>
+                            <li>If this Windows host is a site-to-site gateway, enable IP forwarding and allow LAN-to-tunnel forwarding in firewall policy.</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-2">
+                <div class="card-header py-2" id="platformLinuxHeading">
+                    <button class="btn btn-link p-0 collapsed" type="button" data-toggle="collapse" data-target="#platformLinuxBody" aria-expanded="false" aria-controls="platformLinuxBody">
+                        Linux (remote side)
+                    </button>
+                </div>
+                <div id="platformLinuxBody" class="collapse" aria-labelledby="platformLinuxHeading" data-parent="#platformGuideAccordion">
+                    <div class="card-body py-3">
+                        <ol class="pl-3">
+                            <li>Install WireGuard tools.</li>
+                            <li>Place config as <code>/etc/wireguard/wg0.conf</code> with secure permissions.</li>
+                            <li>Enable and start tunnel: <code>wg-quick@wg0</code>.</li>
+                            <li>Verify with <code>wg show</code>.</li>
+                            <li>If acting as site-to-site gateway, enable <code>net.ipv4.ip_forward=1</code> and allow forwarding between LAN and WireGuard interfaces.</li>
+                        </ol>
+<pre class="site-guide-snippet rounded p-3 mb-0"><code>sudo apt install -y wireguard wireguard-tools
+sudo install -m 600 peer.conf /etc/wireguard/wg0.conf
+sudo systemctl enable --now wg-quick@wg0
+sudo wg show</code></pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-0">
+                <div class="card-header py-2" id="platformMacHeading">
+                    <button class="btn btn-link p-0 collapsed" type="button" data-toggle="collapse" data-target="#platformMacBody" aria-expanded="false" aria-controls="platformMacBody">
+                        macOS (remote side)
+                    </button>
+                </div>
+                <div id="platformMacBody" class="collapse" aria-labelledby="platformMacHeading" data-parent="#platformGuideAccordion">
+                    <div class="card-body py-3">
+                        <ol class="pl-3 mb-0">
+                            <li>Install WireGuard from the App Store (or Homebrew cask).</li>
+                            <li>Import the downloaded peer config (or QR when available).</li>
+                            <li>Activate the tunnel and confirm handshake appears in ARPVPN.</li>
+                            <li>If this Mac is a site-to-site gateway, enable IP forwarding and firewall forwarding for LAN-to-tunnel traffic.</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

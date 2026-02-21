@@ -213,20 +213,8 @@
                     </div>
                 </div>
             </form>
-            <div class="card mb-4 panel-glass">
-                <div class="card-header">
-                    <i class="fas fa-book mr-1"></i>
-                    Site-to-site operation notes
-                </div>
-                <div class="card-body">
-                    <ul class="mb-0 pl-3">
-                        <li><strong>Client mode</strong>: full-tunnel defaults for individual users.</li>
-                        <li><strong>Site-to-site mode</strong>: use <em>Remote site subnets</em> for branch LAN routes.</li>
-                        <li>Remote firewall must allow UDP on the interface listen port.</li>
-                        <li>For NATed remote gateways, keep <strong>NAT</strong> enabled to keep handshake alive.</li>
-                    </ul>
-                </div>
-            </div>
+            {% include "web/partials/wireguard-platform-guide.html" %}
+
             <!-- Traffic data -->
             <div class="row mb-1">
                     <div class="col-xl-6">

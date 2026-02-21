@@ -132,21 +132,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="card mb-4 panel-glass">
-                    <div class="card-header">
-                        <i class="fas fa-book mr-1"></i>
-                        Site-to-site setup help
-                    </div>
-                    <div class="card-body">
-                        <p class="mb-2">Use <strong>Mode = Site-to-site</strong> when this peer is a remote gateway, not an end-user client.</p>
-                        <ol class="pl-3 mb-0">
-                            <li>Enter the remote gateway tunnel IP in <strong>IPv4</strong>.</li>
-                            <li>Add remote branch LAN CIDRs in <strong>Remote site subnets</strong>.</li>
-                            <li>Enable <strong>NAT</strong> if the remote gateway is behind upstream NAT.</li>
-                            <li>Download and install the generated config on the remote gateway.</li>
-                        </ol>
-                    </div>
-                </div>
+                {% include "web/partials/wireguard-platform-guide.html" %}
 
                 <div class="form-group mt-4 mb-0">
                 {{ form.submit(class="btn btn-warning") }}

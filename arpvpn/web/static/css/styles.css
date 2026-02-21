@@ -10258,6 +10258,9 @@ body {
   --theme-surface-3: #eef4ff;
   --theme-text: #162a47;
   --theme-text-muted: #5e7090;
+  --theme-input-bg: #ffffff;
+  --theme-input-text: #000000;
+  --theme-input-placeholder: #697a96;
   --theme-border: rgba(38, 74, 129, 0.16);
   --theme-shadow: rgba(24, 54, 102, 0.08);
   --theme-primary: #2f7df6;
@@ -10290,6 +10293,9 @@ body {
   --theme-surface-3: #1e2c44;
   --theme-text: #e6edf8;
   --theme-text-muted: #b2c0d8;
+  --theme-input-bg: #1a273c;
+  --theme-input-text: #ffffff;
+  --theme-input-placeholder: #c5d2e7;
   --theme-border: rgba(149, 177, 224, 0.18);
   --theme-shadow: rgba(0, 0, 0, 0.35);
   --theme-primary: #6da5ff;
@@ -10401,6 +10407,23 @@ a:hover {
   color: #f3f6ff !important;
 }
 
+.arphost-brand-link {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 0.75rem;
+}
+
+.arphost-brand-link:hover,
+.arphost-brand-link:focus {
+  text-decoration: none;
+}
+
+.arphost-brand-logo {
+  display: block;
+  height: 30px;
+  width: auto;
+}
+
 .sidebar-modern {
   background: linear-gradient(180deg, var(--theme-sidebar-top) 0%, var(--theme-sidebar-bottom) 100%);
 }
@@ -10473,9 +10496,44 @@ a:hover {
 .form-control,
 .custom-select,
 .input-group-text {
-  background-color: var(--theme-surface);
-  color: var(--theme-text);
+  background-color: var(--theme-input-bg);
+  color: var(--theme-input-text);
   border-color: var(--theme-border);
+}
+
+.form-control::placeholder,
+.custom-select::placeholder {
+  color: var(--theme-input-placeholder);
+  opacity: 1;
+}
+
+.form-control:-ms-input-placeholder,
+.custom-select:-ms-input-placeholder {
+  color: var(--theme-input-placeholder);
+}
+
+.form-control::-ms-input-placeholder,
+.custom-select::-ms-input-placeholder {
+  color: var(--theme-input-placeholder);
+}
+
+.form-control:disabled,
+.form-control[readonly],
+.custom-select:disabled {
+  background-color: var(--theme-input-bg);
+  color: var(--theme-input-text);
+  opacity: 1;
+}
+
+input.form-control:-webkit-autofill,
+input.form-control:-webkit-autofill:hover,
+input.form-control:-webkit-autofill:focus,
+textarea.form-control:-webkit-autofill,
+textarea.form-control:-webkit-autofill:hover,
+textarea.form-control:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--theme-input-text);
+  box-shadow: 0 0 0 1000px var(--theme-input-bg) inset;
+  transition: background-color 9999s ease-in-out 0s;
 }
 
 .form-control:focus,

@@ -80,37 +80,7 @@
                     </div>
                 </div>
             </div>
-            <div class="card mb-4 panel-glass">
-                <div class="card-header">
-                    <i class="fas fa-book mr-1"></i>
-                    Site-to-site configuration guide
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-lg-7">
-                            <ol class="pl-3 mb-2">
-                                <li>Create the local WireGuard interface if needed.</li>
-                                <li>Add a peer, set <strong>Mode</strong> to <strong>Site-to-site</strong>.</li>
-                                <li>Assign tunnel address on local network for the peer.</li>
-                                <li>List remote branch LAN CIDRs in <strong>Remote site subnets</strong>.</li>
-                                <li>Download peer config and install on the remote router/firewall.</li>
-                                <li>Allow UDP on the listen port and add route return rules if your firewall requires them.</li>
-                            </ol>
-                        </div>
-                        <div class="col-lg-5">
-                            <pre class="site-guide-snippet rounded p-3 mb-0"><code># Example remote LANs
-10.10.0.0/16
-172.16.50.0/24
-
-# Optional NAT keepalive
-PersistentKeepalive = 25</code></pre>
-                        </div>
-                    </div>
-                </div>
-                <div class="card-footer">
-                    <small class="text-muted">Tip: ARPVPN automatically injects remote LAN routes into interface peer AllowedIPs.</small>
-                </div>
-            </div>
+            {% include "web/partials/wireguard-platform-guide.html" %}
             <div class="card mb-4 panel-glass">
                 <div class="card-header">
                     <i class="fas fa-ethernet mr-1"></i>
