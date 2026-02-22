@@ -1,12 +1,6 @@
 services:
   arpvpn:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-      args:
-        ARPVPN_UID: "${ARPVPN_UID:-1000}"
-        ARPVPN_GID: "${ARPVPN_GID:-1000}"
-    image: "${ARPVPN_IMAGE:-arpvpn:stable}"
+    image: "${ARPVPN_IMAGE:-10.10.10.96:5050/arphost/arpvpn:stable}"
     container_name: "arpvpn"
     # Run with host-matching UID:GID for mounted /data permissions.
     user: "${ARPVPN_UID:-1000}:${ARPVPN_GID:-1000}"
@@ -14,6 +8,25 @@ services:
       # Use 0 for plain HTTP deployments (e.g. direct host access on :8080).
       # Set to 1 when ARPVPN is served over HTTPS.
       ARPVPN_SECURE_COOKIES: "${ARPVPN_SECURE_COOKIES:-0}"
+      # Keep these configurable directly in compose/.env (no shell export required).
+      ARPVPN_UID: "${ARPVPN_UID:-1000}"
+      ARPVPN_GID: "${ARPVPN_GID:-1000}"
+    # Compatibility startup path: works with both old and new images by avoiding legacy
+    # entrypoint chown/sudo behavior and forcing runtime data path to /data.
+    command:
+      - /bin/bash
+      - -lc
+      - |
+        set -euo pipefail
+        if [ ! -f /data/uwsgi.yaml ] && [ -d /var/www/arpvpn/data ]; then
+          if find /var/www/arpvpn/data -mindepth 1 -maxdepth 1 | read -r _; then
+            cp -a /var/www/arpvpn/data/. /data/
+          fi
+        fi
+        if [ -f /data/uwsgi.yaml ]; then
+          sed -i -E 's|^([[:space:]]*pyargv:)[[:space:]]*data[[:space:]]*$|\1 /data|' /data/uwsgi.yaml || true
+        fi
+        exec /usr/bin/uwsgi --yaml /data/uwsgi.yaml
     cap_add:
       - NET_ADMIN
       - NET_RAW

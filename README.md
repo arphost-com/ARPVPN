@@ -36,28 +36,22 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
 ### Docker
 
 1. Copy the `docker/docker-compose.yaml` file from this repository.
-2. Set your GitLab Container Registry image path:
-   ```bash
-   export ARPVPN_IMAGE="registry.example.com/group/project/arpvpn:stable"
+2. Set values directly in `docker-compose.yaml` (or in a local `.env` file in the same folder):
+   ```yaml
+   services:
+     arpvpn:
+       image: "10.10.10.96:5050/arphost/arpvpn:stable"
+       user: "1000:1000"
+       environment:
+         ARPVPN_SECURE_COOKIES: "0"  # Set to "1" behind HTTPS reverse proxy.
+         ARPVPN_UID: "1000"
+         ARPVPN_GID: "1000"
    ```
-3. Configure cookie security according to how you expose the UI:
+3. Run ARPVPN:
    ```bash
-   # Direct HTTP access (for example http://host:8080)
-   export ARPVPN_SECURE_COOKIES=0
-   # Reverse proxy / HTTPS access
-   # export ARPVPN_SECURE_COOKIES=1
-   ```
-4. Set runtime/build UID:GID to match your host user that owns the mounted data folder:
-   ```bash
-   export ARPVPN_UID=1000
-   export ARPVPN_GID=1000
-   ```
-5. Build and run ARPVPN:
-   ```bash
-   sudo docker compose build --no-cache arpvpn
    sudo docker compose up -d --force-recreate arpvpn
    ```
-NOTE: Check available tags in your GitLab project's Container Registry.
+NOTE: Check available tags in your GitLab project's Container Registry and pin if needed.
 
 ### GitLab CI/CD and Registry setup
 

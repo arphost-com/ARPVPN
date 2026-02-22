@@ -58,7 +58,6 @@ On your deployment host:
 .. code-block:: bash
 
     docker login <your-registry>
-    export ARPVPN_IMAGE="<your-registry>/<group>/<project>:stable"
     docker compose -f docker/docker-compose.yaml up -d
 
-The compose file defaults to ``arpvpn:stable`` if ``ARPVPN_IMAGE`` is not set.
+Set ``ARPVPN_IMAGE`` in compose/.env when using a non-default registry path.
