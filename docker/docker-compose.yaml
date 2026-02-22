@@ -26,6 +26,15 @@ services:
           ls -ld /data || true
           exit 1
         fi
+        # Compatibility shim for older images that still invoke "sudo" while
+        # running as a numeric non-root UID that may not exist in /etc/passwd.
+        # This keeps rootless execution and lets commands run directly.
+        mkdir -p /data/bin
+        if [ ! -x /data/bin/sudo ]; then
+          printf '#!/bin/sh\nexec "$@"\n' > /data/bin/sudo
+          chmod 0755 /data/bin/sudo
+        fi
+        export PATH="/data/bin:$PATH"
         if [ ! -f /data/uwsgi.yaml ] && [ -d /var/www/arpvpn/data ]; then
           if find /var/www/arpvpn/data -mindepth 1 -maxdepth 1 | read -r _; then
             cp -r /var/www/arpvpn/data/. /data/
