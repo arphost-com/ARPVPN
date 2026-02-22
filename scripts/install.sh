@@ -44,7 +44,23 @@ cp requirements.txt "$INSTALL_DIR"
 info "Installing dependencies..."
 debug "Updating packages list..."
 apt-get -qq update
-dependencies="sudo python3 python3-venv wireguard-tools iptables libpcre3 libpcre3-dev uwsgi uwsgi-plugin-python3 iproute2"
+
+dependencies="sudo python3 python3-venv wireguard-tools iptables uwsgi uwsgi-plugin-python3 iproute2"
+
+# Debian package names changed across releases (PCRE1 -> PCRE2). Pick
+# whichever set is available so container builds keep working on current bases.
+if apt-cache show libpcre3 >/dev/null 2>&1; then
+    dependencies="$dependencies libpcre3"
+elif apt-cache show libpcre2-8-0 >/dev/null 2>&1; then
+    dependencies="$dependencies libpcre2-8-0"
+fi
+
+if apt-cache show libpcre3-dev >/dev/null 2>&1; then
+    dependencies="$dependencies libpcre3-dev"
+elif apt-cache show libpcre2-dev >/dev/null 2>&1; then
+    dependencies="$dependencies libpcre2-dev"
+fi
+
 debug "The following packages will be installed: $dependencies"
 apt-get -qq install $dependencies
 if [ $? -ne 0 ]; then
