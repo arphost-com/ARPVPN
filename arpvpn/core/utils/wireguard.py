@@ -17,7 +17,7 @@ def generate_privkey() -> str:
 
 def generate_pubkey(privkey: str) -> str:
     from arpvpn.core.config.wireguard import config
-    result = Command(f"echo {privkey} | sudo {config.wg_bin} pubkey").run()
+    result = Command(f"echo {privkey} | {config.wg_bin} pubkey").run_as_root()
     if not result.successful:
         raise WireguardError(result.err)
     return result.output

@@ -1,6 +1,6 @@
 import os
 import shlex
-from logging import debug, error
+from logging import debug, error, warning
 from subprocess import PIPE, Popen, run
 from typing import List
 
@@ -45,6 +45,65 @@ class Command:
         segments.append(current_segment)
         return segments
 
+    @staticmethod
+    def _run_pipeline(command_pipeline: List[List[str]]) -> CommandResult:
+        if len(command_pipeline) == 1:
+            proc = run(command_pipeline[0], shell=False, check=False, stdout=PIPE, stderr=PIPE)
+            return CommandResult(
+                proc.returncode,
+                proc.stdout.decode("utf-8", errors="replace").strip(),
+                proc.stderr.decode("utf-8", errors="replace").strip(),
+            )
+
+        processes = []
+        previous_proc = None
+        for segment in command_pipeline:
+            proc = Popen(
+                segment,
+                stdin=previous_proc.stdout if previous_proc else None,
+                stdout=PIPE,
+                stderr=PIPE,
+            )
+            if previous_proc and previous_proc.stdout:
+                previous_proc.stdout.close()
+            processes.append(proc)
+            previous_proc = proc
+
+        stdout, last_stderr = processes[-1].communicate()
+        stderr_parts = []
+        return_code = 0
+
+        for index, proc in enumerate(processes):
+            if index < len(processes) - 1:
+                proc.wait()
+                stderr_blob = proc.stderr.read() if proc.stderr else b""
+            else:
+                stderr_blob = last_stderr
+
+            if proc.returncode != 0 and return_code == 0:
+                return_code = proc.returncode
+
+            stderr_text = stderr_blob.decode("utf-8", errors="replace").strip()
+            if stderr_text:
+                stderr_parts.append(stderr_text)
+
+        return CommandResult(
+            return_code,
+            stdout.decode("utf-8", errors="replace").strip(),
+            "\n".join(stderr_parts).strip(),
+        )
+
+    @staticmethod
+    def _should_retry_without_sudo(err: str) -> bool:
+        if not err:
+            return False
+        checks = (
+            "you do not exist in the passwd database",
+            "No such file or directory: 'sudo'",
+            "sudo: not found",
+        )
+        return any(check in err for check in checks)
+
     def run(self, as_root: bool = False) -> CommandResult:
         """
         Execute the command and return information about the execution.
@@ -58,52 +117,10 @@ class Command:
 
         try:
             command_pipeline = self._split_pipeline(cmd)
-
-            if len(command_pipeline) == 1:
-                proc = run(command_pipeline[0], shell=False, check=False, stdout=PIPE, stderr=PIPE)
-                result = CommandResult(
-                    proc.returncode,
-                    proc.stdout.decode("utf-8", errors="replace").strip(),
-                    proc.stderr.decode("utf-8", errors="replace").strip(),
-                )
-            else:
-                processes = []
-                previous_proc = None
-                for segment in command_pipeline:
-                    proc = Popen(
-                        segment,
-                        stdin=previous_proc.stdout if previous_proc else None,
-                        stdout=PIPE,
-                        stderr=PIPE,
-                    )
-                    if previous_proc and previous_proc.stdout:
-                        previous_proc.stdout.close()
-                    processes.append(proc)
-                    previous_proc = proc
-
-                stdout, last_stderr = processes[-1].communicate()
-                stderr_parts = []
-                return_code = 0
-
-                for index, proc in enumerate(processes):
-                    if index < len(processes) - 1:
-                        proc.wait()
-                        stderr_blob = proc.stderr.read() if proc.stderr else b""
-                    else:
-                        stderr_blob = last_stderr
-
-                    if proc.returncode != 0 and return_code == 0:
-                        return_code = proc.returncode
-
-                    stderr_text = stderr_blob.decode("utf-8", errors="replace").strip()
-                    if stderr_text:
-                        stderr_parts.append(stderr_text)
-
-                result = CommandResult(
-                    return_code,
-                    stdout.decode("utf-8", errors="replace").strip(),
-                    "\n".join(stderr_parts).strip(),
-                )
+            result = self._run_pipeline(command_pipeline)
+            if as_root and not result.successful and self._should_retry_without_sudo(result.err):
+                warning(f"Unable to use sudo for '{self.cmd}', retrying without sudo.")
+                result = self._run_pipeline(self._split_pipeline(self.cmd))
         except Exception as exc:
             result = CommandResult(1, "", str(exc))
 
