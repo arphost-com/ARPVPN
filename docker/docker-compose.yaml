@@ -11,6 +11,8 @@ services:
       # Keep these configurable directly in compose/.env (no shell export required).
       ARPVPN_UID: "${ARPVPN_UID:-1000}"
       ARPVPN_GID: "${ARPVPN_GID:-1000}"
+      # HTTP bind port inside the container (host network mode uses this directly).
+      ARPVPN_HTTP_PORT: "${ARPVPN_HTTP_PORT:-8080}"
     # Compatibility startup path: works with both old and new images by avoiding legacy
     # entrypoint chown/sudo behavior and forcing runtime data path to /data.
     command:
@@ -31,6 +33,7 @@ services:
         fi
         if [ -f /data/uwsgi.yaml ]; then
           sed -i -E 's|^([[:space:]]*pyargv:)[[:space:]]*data[[:space:]]*$|\1 /data|' /data/uwsgi.yaml || true
+          sed -i -E "s|^([[:space:]]*http-socket:)[[:space:]]*0\\.0\\.0\\.0:[0-9]+[[:space:]]*$|\\1 0.0.0.0:$${ARPVPN_HTTP_PORT}|" /data/uwsgi.yaml || true
         fi
         exec /usr/bin/uwsgi --yaml /data/uwsgi.yaml
     cap_add:

@@ -44,6 +44,7 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
    * `ARPVPN_IMAGE` (image/tag to run)
    * `ARPVPN_UID` / `ARPVPN_GID` (runtime UID:GID for mounted data path)
    * `ARPVPN_SECURE_COOKIES` (`0` for HTTP, `1` behind HTTPS)
+   * `ARPVPN_HTTP_PORT` (HTTP bind port, defaults to `8080`)
    * `DATA_FOLDER` (host path mounted to `/data`)
 3. Ensure `DATA_FOLDER` is writable by the same UID:GID used by the container:
    ```bash
