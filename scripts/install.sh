@@ -49,15 +49,22 @@ dependencies="sudo python3 python3-venv wireguard-tools iptables uwsgi uwsgi-plu
 
 # Debian package names changed across releases (PCRE1 -> PCRE2). Pick
 # whichever set is available so container builds keep working on current bases.
-if apt-cache show libpcre3 >/dev/null 2>&1; then
+has_pkg_candidate() {
+    local pkg="$1"
+    local candidate
+    candidate="$(apt-cache policy "$pkg" 2>/dev/null | awk '/Candidate:/ {print $2}')"
+    [[ -n "$candidate" && "$candidate" != "(none)" ]]
+}
+
+if has_pkg_candidate libpcre3; then
     dependencies="$dependencies libpcre3"
-elif apt-cache show libpcre2-8-0 >/dev/null 2>&1; then
+elif has_pkg_candidate libpcre2-8-0; then
     dependencies="$dependencies libpcre2-8-0"
 fi
 
-if apt-cache show libpcre3-dev >/dev/null 2>&1; then
+if has_pkg_candidate libpcre3-dev; then
     dependencies="$dependencies libpcre3-dev"
-elif apt-cache show libpcre2-dev >/dev/null 2>&1; then
+elif has_pkg_candidate libpcre2-dev; then
     dependencies="$dependencies libpcre2-dev"
 fi
 
