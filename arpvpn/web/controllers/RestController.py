@@ -66,11 +66,12 @@ class RestController:
     def add_peer(form) -> Peer:
         iface = interfaces.get_value_by_attr("name", form.interface.data)
         mode = form.mode.data or Peer.MODE_CLIENT
+        full_tunnel = bool(form.full_tunnel.data) if mode == Peer.MODE_SITE_TO_SITE else False
         site_to_site_subnets = Peer.parse_site_to_site_subnets(form.site_to_site_subnets.data)
         peer = Peer(name=form.name.data, description=form.description.data,
                     interface=iface, ipv4_address=form.ipv4.data,
                     dns1=form.dns1.data, dns2=form.dns2.data, nat=form.nat.data,
-                    mode=mode, site_to_site_subnets=site_to_site_subnets)
+                    mode=mode, site_to_site_subnets=site_to_site_subnets, full_tunnel=full_tunnel)
         iface.add_peer(peer)
         config_manager.save()
         return peer
@@ -89,10 +90,11 @@ class RestController:
     def save_peer(peer: Peer, form):
         iface = interfaces.get_value_by_attr("name", form.interface.data)
         mode = form.mode.data or Peer.MODE_CLIENT
+        full_tunnel = bool(form.full_tunnel.data) if mode == Peer.MODE_SITE_TO_SITE else False
         site_to_site_subnets = Peer.parse_site_to_site_subnets(form.site_to_site_subnets.data)
         peer.edit(name=form.name.data, description=form.description.data, interface=iface,
                   ipv4_address=form.ipv4.data, nat=form.nat.data, dns1=form.dns1.data, dns2=form.dns2.data,
-                  mode=mode, site_to_site_subnets=site_to_site_subnets)
+                  mode=mode, site_to_site_subnets=site_to_site_subnets, full_tunnel=full_tunnel)
         config_manager.save()
 
     def download_peer(self, peer: Peer) -> Response:

@@ -29,7 +29,7 @@ You will need to install the following Linux packages:
 
 .. code-block::
 
-    sudo iproute2 python3 python3-venv wireguard iptables libpcre3 libpcre3-dev uwsgi uwsgi-plugin-python3
+    sudo iproute2 python3 python3-venv wireguard-tools iptables libpcre3 libpcre3-dev uwsgi uwsgi-plugin-python3
 
 
 Dependency management

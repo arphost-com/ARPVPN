@@ -1,4 +1,6 @@
 FROM python:3.12-slim-trixie as python-base
+ARG ARPVPN_UID=1000
+ARG ARPVPN_GID=1000
 ENV PYTHONFAULTHANDLER=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -12,8 +14,8 @@ ENV PYTHONFAULTHANDLER=1 \
 ENV PATH="$POETRY_HOME/bin:$VENV_PATH/bin:$PATH"
 
 # Create non-root user early
-RUN groupadd -g 1001 arpvpn && \
-    useradd -u 1001 -g arpvpn -s /bin/bash -m arpvpn
+RUN groupadd -g "${ARPVPN_GID}" arpvpn && \
+    useradd -u "${ARPVPN_UID}" -g arpvpn -s /bin/bash -m arpvpn
 
 COPY dist/*.tar.gz /tmp/arpvpn.tar.gz
 RUN mkdir /tmp/arpvpn && tar -xf /tmp/arpvpn.tar.gz -C /tmp/arpvpn

@@ -41,6 +41,11 @@
                                   Error in field <strong>{{ form.nat.label.text }}</strong>: {{ error }}
                                 </div>
                             {% endfor %}
+                            {% for error in form.full_tunnel.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ form.full_tunnel.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
                             {% for error in form.description.errors %}
                                 <div class="alert alert-danger" role="alert">
                                   Error in field <strong>{{ form.description.label.text }}</strong>: {{ error }}
@@ -115,6 +120,19 @@
                                 <small class="text-muted">
                                     Comma-separated IPv4 CIDR blocks routed behind this peer.
                                 </small>
+                            </div>
+                        </div>
+                        <div class="form-row site-to-site-fields">
+                            <div class="form-group col-md-4">
+                                <div class="custom-control custom-checkbox">
+                                    {{ form.full_tunnel(class="custom-control-input") }}
+                                    {{ form.full_tunnel.label(class="custom-control-label") }}
+                                    <span type="button" class="ml-1" data-toggle="popover"
+                                        data-placement="top"
+                                        data-content="Route all remote traffic through ARPVPN (AllowedIPs 0.0.0.0/0).">
+                                        <i class="fas fa-question-circle"></i>
+                                    </span>
+                                </div>
                             </div>
                         </div>
                         <div class="form-row">

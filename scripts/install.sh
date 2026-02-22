@@ -70,8 +70,8 @@ fi
 deactivate
 
 info "Settings permissions..."
-groupadd arpvpn
-useradd -g arpvpn arpvpn
+getent group arpvpn >/dev/null || groupadd arpvpn
+id -u arpvpn >/dev/null 2>&1 || useradd -g arpvpn arpvpn
 chown -R arpvpn:arpvpn "$INSTALL_DIR"
 chmod +x -R "$SOURCE_DIR/core/tools"
 echo "arpvpn ALL=(ALL) NOPASSWD: /usr/bin/wg" > /etc/sudoers.d/arpvpn

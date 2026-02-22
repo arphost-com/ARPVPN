@@ -242,6 +242,7 @@ class AddPeerForm(FlaskForm):
     mode = SelectField("Mode", choices=[(Peer.MODE_CLIENT, "Client"), (Peer.MODE_SITE_TO_SITE, "Site-to-site")],
                        default=Peer.MODE_CLIENT)
     nat = BooleanField("NAT", default=False)
+    full_tunnel = BooleanField("Full tunnel", default=False)
     description = TextAreaField("Description", render_kw={"placeholder": "Some details..."})
     interface = SelectField("Interface", validate_choice=False)
     ipv4 = StringField("IPv4", validators=[DataRequired(), PeerIpValidator()],
@@ -268,6 +269,7 @@ class AddPeerForm(FlaskForm):
         new_form.name.data = form.name.data
         new_form.mode.data = form.mode.data or Peer.MODE_CLIENT
         new_form.nat.data = form.nat.data
+        new_form.full_tunnel.data = form.full_tunnel.data
         new_form.description.data = form.description.data
         new_form.dns1.data = form.dns1.data
         new_form.dns2.data = form.dns2.data
@@ -281,6 +283,7 @@ class AddPeerForm(FlaskForm):
     def populate(cls, form: "AddPeerForm", iface: Interface = None) -> "AddPeerForm":
         form.name.data = Peer.generate_valid_name()
         form.mode.data = Peer.MODE_CLIENT
+        form.full_tunnel.data = False
         form.site_to_site_subnets.data = ""
         form.interface.choices = cls.get_choices()
         if iface:
@@ -308,6 +311,7 @@ class EditPeerForm(AddPeerForm):
         new_form.peer = peer
         new_form.name.data = form.name.data
         new_form.mode.data = form.mode.data or Peer.MODE_CLIENT
+        new_form.full_tunnel.data = form.full_tunnel.data
         new_form.ipv4.data = form.ipv4.data
         new_form.dns1.data = form.dns1.data
         new_form.dns2.data = form.dns2.data
@@ -317,7 +321,7 @@ class EditPeerForm(AddPeerForm):
         new_form.public_key.data = peer.public_key
         new_form.private_key.data = peer.private_key
         new_form.interface.choices = cls.get_choices()
-        new_form.interface.data = peer.interface.name
+        new_form.interface.data = form.interface.data
         return new_form
 
     @classmethod
@@ -326,6 +330,7 @@ class EditPeerForm(AddPeerForm):
         form.peer = peer
         form.name.data = peer.name
         form.mode.data = peer.mode
+        form.full_tunnel.data = peer.full_tunnel
         form.description.data = peer.description
         form.ipv4.data = peer.ipv4_address
         form.dns1.data = peer.dns1

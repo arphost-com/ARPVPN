@@ -267,11 +267,12 @@ class Peer(YamlAble):
 
     def __init__(self, name: str, description: str, ipv4_address: str, nat: bool, interface: Interface, dns1: str,
                  uuid: str = "", private_key: str = "", public_key: str = "", dns2: str = None,
-                 mode: str = MODE_CLIENT, site_to_site_subnets: List[str] = None):
+                 mode: str = MODE_CLIENT, site_to_site_subnets: List[str] = None, full_tunnel: bool = False):
         self.name = name
         self.description = description
         self.ipv4_address = ipv4_address
         self.nat = nat
+        self.full_tunnel = bool(full_tunnel)
         self.interface = interface
         self.dns1 = dns1
         self.dns2 = dns2
@@ -316,6 +317,8 @@ class Peer(YamlAble):
     @property
     def download_allowed_ips(self) -> str:
         if self.is_site_to_site:
+            if self.full_tunnel:
+                return "0.0.0.0/0"
             if not self.interface:
                 return "0.0.0.0/0"
             return str(ipaddress.IPv4Interface(self.interface.ipv4_address).network)
@@ -354,6 +357,7 @@ class Peer(YamlAble):
             "private_key": self.private_key,
             "public_key": self.public_key,
             "nat": self.nat,
+            "full_tunnel": self.full_tunnel,
             "dns1": self.dns1,
             "dns2": self.dns2,
             "mode": self.mode,
@@ -373,13 +377,14 @@ class Peer(YamlAble):
         private_key = dct["private_key"]
         public_key = dct["public_key"]
         nat = dct["nat"]
+        full_tunnel = dct.get("full_tunnel", False)
         dns1 = dct["dns1"]
         dns2 = dct.get("dns2", "")
         mode = dct.get("mode", cls.MODE_CLIENT)
         site_to_site_subnets = dct.get("site_to_site_subnets", [])
         return Peer(name=name, description=description, interface=None, ipv4_address=ipv4_address, nat=nat, uuid=uuid,
                     private_key=private_key, public_key=public_key, dns1=dns1, dns2=dns2, mode=mode,
-                    site_to_site_subnets=site_to_site_subnets)
+                    site_to_site_subnets=site_to_site_subnets, full_tunnel=full_tunnel)
 
     def generate_conf(self) -> str:
         """Generate a wireguard configuration file suitable for this client."""
@@ -403,7 +408,7 @@ class Peer(YamlAble):
         return iface + peer
 
     def edit(self, name: str, description: str, ipv4_address: str, interface: Interface, dns1: str, dns2: str,
-             nat: bool, mode: str = MODE_CLIENT, site_to_site_subnets: List[str] = None):
+             nat: bool, mode: str = MODE_CLIENT, site_to_site_subnets: List[str] = None, full_tunnel: bool = False):
         self.remove()
         self.name = name
         self.description = description
@@ -413,6 +418,7 @@ class Peer(YamlAble):
         self.dns1 = dns1
         self.dns2 = dns2
         self.nat = nat
+        self.full_tunnel = bool(full_tunnel)
         self.mode = mode if self.is_mode_valid(mode) else self.MODE_CLIENT
         self.site_to_site_subnets = self.parse_site_to_site_subnets(site_to_site_subnets or [])
 

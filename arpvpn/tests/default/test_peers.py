@@ -162,9 +162,37 @@ def test_post_edit_site_to_site_ok(client):
     assert is_http_success(response.status_code)
     assert "Error".encode() not in response.data
     assert peer.mode == Peer.MODE_SITE_TO_SITE
+    assert peer.full_tunnel is False
     assert peer.site_to_site_subnets == ["10.10.0.0/16", "172.16.50.0/24"]
     assert peer.server_allowed_ips == ["10.0.0.2/32", "10.10.0.0/16", "172.16.50.0/24"]
     assert "AllowedIPs = 10.0.0.0/24" in peer.generate_conf()
+
+
+def test_post_edit_site_to_site_full_tunnel_ok(client):
+    login(client)
+    iface = create_test_iface("iface1", "10.0.0.1/24", 50000)
+    peer = Peer(name="peer1", description="", ipv4_address="10.0.0.2/24", nat=False, interface=iface, dns1="8.8.8.8")
+    iface.add_peer(peer)
+    interfaces[iface.uuid] = iface
+
+    response = client.post(f"{url}/{peer.uuid}", data={
+        "name": peer.name,
+        "mode": Peer.MODE_SITE_TO_SITE,
+        "full_tunnel": "y",
+        "nat": True,
+        "description": "branch office",
+        "ipv4": "10.0.0.2/24",
+        "dns1": "",
+        "dns2": "",
+        "site_to_site_subnets": "10.10.0.0/16",
+        "interface": peer.interface.name
+    })
+    assert is_http_success(response.status_code)
+    assert "Error".encode() not in response.data
+    assert peer.mode == Peer.MODE_SITE_TO_SITE
+    assert peer.full_tunnel is True
+    assert "AllowedIPs = 0.0.0.0/0" in peer.generate_conf()
+    assert peer.server_allowed_ips == ["10.0.0.2/32", "10.10.0.0/16"]
 
 
 def test_post_edit_site_to_site_ko(client):
