@@ -42,16 +42,16 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
    ```
    Important variables in `.env`:
    * `ARPVPN_IMAGE` (image/tag to run)
-   * `ARPVPN_UID` / `ARPVPN_GID` (runtime UID:GID for mounted data path)
+   * `ARPVPN_RUNTIME_USER` (runtime user inside the container, default `arpvpn`)
    * `ARPVPN_SECURE_COOKIES` (`0` for HTTP, `1` behind HTTPS)
    * `ARPVPN_HTTP_PORT` (HTTP bind port, defaults to `8080`)
    * `DATA_FOLDER` (host path mounted to `/data`)
-3. Ensure `DATA_FOLDER` is writable by the same UID:GID used by the container:
+3. Ensure `DATA_FOLDER` is writable by the container runtime user:
    ```bash
    sudo mkdir -p /srv/arpvpn/data
-   sudo chown -R 1000:1000 /srv/arpvpn/data
+   sudo chown -R <container-uid>:<container-gid> /srv/arpvpn/data
    ```
-   If you use a different host owner, set matching `ARPVPN_UID`/`ARPVPN_GID`.
+   The container prints the runtime UID:GID on startup if this path is not writable.
 4. Run ARPVPN:
    ```bash
    sudo docker compose up -d --force-recreate arpvpn

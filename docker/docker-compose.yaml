@@ -2,15 +2,13 @@ services:
   arpvpn:
     image: "${ARPVPN_IMAGE:-10.10.10.96:5050/arphost/arpvpn:stable}"
     container_name: "arpvpn"
-    # Run with host-matching UID:GID for mounted /data permissions.
-    user: "${ARPVPN_UID:-1000}:${ARPVPN_GID:-1000}"
+    # Run as the image's application user by default (preserves sudo policy
+    # needed by WireGuard commands invoked by the UI).
+    user: "${ARPVPN_RUNTIME_USER:-arpvpn}"
     environment:
       # Use 0 for plain HTTP deployments (e.g. direct host access on :8080).
       # Set to 1 when ARPVPN is served over HTTPS.
       ARPVPN_SECURE_COOKIES: "${ARPVPN_SECURE_COOKIES:-0}"
-      # Keep these configurable directly in compose/.env (no shell export required).
-      ARPVPN_UID: "${ARPVPN_UID:-1000}"
-      ARPVPN_GID: "${ARPVPN_GID:-1000}"
       # HTTP bind port inside the container (host network mode uses this directly).
       ARPVPN_HTTP_PORT: "${ARPVPN_HTTP_PORT:-8080}"
     # Compatibility startup path: works with both old and new images by avoiding legacy
@@ -21,20 +19,19 @@ services:
       - |
         set -euo pipefail
         if [ ! -w /data ]; then
-          echo "ERROR: /data is not writable by UID:GID $(id -u):$(id -g)."
-          echo "Set ARPVPN_UID/ARPVPN_GID to match host ownership of DATA_FOLDER or chown the host path."
+          echo "ERROR: /data is not writable by runtime user UID:GID $(id -u):$(id -g)."
+          echo "Fix DATA_FOLDER ownership/permissions for this container user."
           ls -ld /data || true
           exit 1
         fi
-        # Compatibility shim for older images that still invoke "sudo" while
-        # running as a numeric non-root UID that may not exist in /etc/passwd.
-        # This keeps rootless execution and lets commands run directly.
-        mkdir -p /data/bin
-        if [ ! -x /data/bin/sudo ]; then
-          printf '#!/bin/sh\nexec "$@"\n' > /data/bin/sudo
-          chmod 0755 /data/bin/sudo
+        # Fail fast if UI WireGuard commands cannot elevate as expected.
+        if ! sudo -n /usr/bin/wg genkey >/dev/null 2>&1; then
+          echo "ERROR: WireGuard command preflight failed."
+          echo "Runtime user $(id -u):$(id -g) cannot execute: sudo -n /usr/bin/wg genkey"
+          echo "Use ARPVPN_RUNTIME_USER=arpvpn, or rebuild image with matching ARPVPN_UID/ARPVPN_GID."
+          getent passwd "$(id -u)" || true
+          exit 1
         fi
-        export PATH="/data/bin:$PATH"
         if [ ! -f /data/uwsgi.yaml ] && [ -d /var/www/arpvpn/data ]; then
           if find /var/www/arpvpn/data -mindepth 1 -maxdepth 1 | read -r _; then
             cp -r /var/www/arpvpn/data/. /data/
