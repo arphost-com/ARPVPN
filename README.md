@@ -47,9 +47,15 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
    # Reverse proxy / HTTPS access
    # export ARPVPN_SECURE_COOKIES=1
    ```
-4. Run ARPVPN:
+4. Set runtime/build UID:GID to match your host user that owns the mounted data folder:
    ```bash
-   sudo docker-compose up -d
+   export ARPVPN_UID=1000
+   export ARPVPN_GID=1000
+   ```
+5. Build and run ARPVPN:
+   ```bash
+   sudo docker compose build --no-cache arpvpn
+   sudo docker compose up -d --force-recreate arpvpn
    ```
 NOTE: Check available tags in your GitLab project's Container Registry.
 

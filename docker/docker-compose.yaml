@@ -1,7 +1,15 @@
 services:
   arpvpn:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        ARPVPN_UID: "${ARPVPN_UID:-1000}"
+        ARPVPN_GID: "${ARPVPN_GID:-1000}"
     image: "${ARPVPN_IMAGE:-arpvpn:stable}"
     container_name: "arpvpn"
+    # Run with host-matching UID:GID for mounted /data permissions.
+    user: "${ARPVPN_UID:-1000}:${ARPVPN_GID:-1000}"
     environment:
       # Use 0 for plain HTTP deployments (e.g. direct host access on :8080).
       # Set to 1 when ARPVPN is served over HTTPS.
