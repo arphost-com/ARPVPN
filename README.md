@@ -35,25 +35,23 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
 
 ### Docker
 
-1. Copy the `docker/docker-compose.yaml` file from this repository.
-2. Set values directly in `docker-compose.yaml` (or in a local `.env` file in the same folder):
-   ```yaml
-   services:
-     arpvpn:
-       image: "10.10.10.96:5050/arphost/arpvpn:stable"
-       user: "1000:1000"
-       environment:
-         ARPVPN_SECURE_COOKIES: "0"  # Set to "1" behind HTTPS reverse proxy.
-         ARPVPN_UID: "1000"
-         ARPVPN_GID: "1000"
+1. Copy `docker/docker-compose.yaml` and `docker/.env.example` from this repository.
+2. Create `.env` from the example and set values for your host:
+   ```bash
+   cp .env.example .env
    ```
-   Ensure `DATA_FOLDER` is writable by the same UID:GID used by the container:
+   Important variables in `.env`:
+   * `ARPVPN_IMAGE` (image/tag to run)
+   * `ARPVPN_UID` / `ARPVPN_GID` (runtime UID:GID for mounted data path)
+   * `ARPVPN_SECURE_COOKIES` (`0` for HTTP, `1` behind HTTPS)
+   * `DATA_FOLDER` (host path mounted to `/data`)
+3. Ensure `DATA_FOLDER` is writable by the same UID:GID used by the container:
    ```bash
    sudo mkdir -p /srv/arpvpn/data
    sudo chown -R 1000:1000 /srv/arpvpn/data
    ```
    If you use a different host owner, set matching `ARPVPN_UID`/`ARPVPN_GID`.
-3. Run ARPVPN:
+4. Run ARPVPN:
    ```bash
    sudo docker compose up -d --force-recreate arpvpn
    ```
