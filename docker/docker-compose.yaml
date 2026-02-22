@@ -18,9 +18,15 @@ services:
       - -lc
       - |
         set -euo pipefail
+        if [ ! -w /data ]; then
+          echo "ERROR: /data is not writable by UID:GID $(id -u):$(id -g)."
+          echo "Set ARPVPN_UID/ARPVPN_GID to match host ownership of DATA_FOLDER or chown the host path."
+          ls -ld /data || true
+          exit 1
+        fi
         if [ ! -f /data/uwsgi.yaml ] && [ -d /var/www/arpvpn/data ]; then
           if find /var/www/arpvpn/data -mindepth 1 -maxdepth 1 | read -r _; then
-            cp -a /var/www/arpvpn/data/. /data/
+            cp -r /var/www/arpvpn/data/. /data/
           fi
         fi
         if [ -f /data/uwsgi.yaml ]; then

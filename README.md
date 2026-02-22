@@ -47,6 +47,12 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
          ARPVPN_UID: "1000"
          ARPVPN_GID: "1000"
    ```
+   Ensure `DATA_FOLDER` is writable by the same UID:GID used by the container:
+   ```bash
+   sudo mkdir -p /srv/arpvpn/data
+   sudo chown -R 1000:1000 /srv/arpvpn/data
+   ```
+   If you use a different host owner, set matching `ARPVPN_UID`/`ARPVPN_GID`.
 3. Run ARPVPN:
    ```bash
    sudo docker compose up -d --force-recreate arpvpn
