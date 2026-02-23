@@ -38,6 +38,6 @@ EXPOSE 8080
 
 # Add healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8080').read()" || exit 1
+    CMD python3 -c "import os, urllib.request; port = os.environ.get('ARPVPN_HTTP_PORT', '8080'); urllib.request.urlopen(f'http://localhost:{port}').read()" || exit 1
 
 CMD /bin/bash /entrypoint.sh
