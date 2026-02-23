@@ -10542,6 +10542,22 @@ textarea.form-control:-webkit-autofill:focus {
   box-shadow: 0 0 0 0.2rem rgba(47, 125, 246, 0.2);
 }
 
+[data-theme="dark"] .auth-card .form-control {
+  color: #f4f8ff !important;
+  -webkit-text-fill-color: #f4f8ff !important;
+  caret-color: #f4f8ff;
+  text-shadow: 0 0 0 #f4f8ff;
+}
+
+[data-theme="dark"] .auth-card .form-control::placeholder {
+  color: #b8c9e6 !important;
+}
+
+[data-theme="dark"] .auth-card .form-control:-moz-focusring {
+  color: transparent;
+  text-shadow: 0 0 0 #f4f8ff;
+}
+
 .input-group-text {
   background-color: var(--theme-surface-2);
 }
