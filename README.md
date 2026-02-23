@@ -35,7 +35,7 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
 
 ### Docker
 
-1. Copy `docker/docker-compose.yaml` and `docker/.env.example` from this repository.
+1. Copy `docker/docker-compose.yaml`, `docker/.env.example`, and `docker/up.sh` from this repository.
 2. Create `.env` from the example and set values for your host:
    ```bash
    cp .env.example .env
@@ -46,16 +46,21 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
    * `ARPVPN_SECURE_COOKIES` (`0` for HTTP, `1` behind HTTPS)
    * `ARPVPN_HTTP_PORT` (HTTP bind port, defaults to `8080`)
    * `DATA_FOLDER` (host path mounted to `/data`)
-3. Ensure `DATA_FOLDER` is writable by the container runtime user:
+3. Create/validate the data folder as your current host user:
    ```bash
-   sudo mkdir -p /srv/arpvpn/data
-   sudo chown -R <container-uid>:<container-gid> /srv/arpvpn/data
+   ./up.sh pull
+   ./up.sh up -d --force-recreate arpvpn
    ```
-   The container prints the runtime UID:GID on startup if this path is not writable.
-4. Run ARPVPN:
+   `up.sh` creates `DATA_FOLDER` if missing and refuses to continue if ownership/permissions are wrong.
+4. If `DATA_FOLDER` already exists as `root:root` from a previous deployment, fix it once:
    ```bash
-   sudo docker compose up -d --force-recreate arpvpn
+   sudo chown -R "$(id -u):$(id -g)" ./data
    ```
+5. Run ARPVPN (without the wrapper) if preferred:
+   ```bash
+   docker compose up -d --force-recreate arpvpn
+   ```
+   When `network_mode: host` is enabled, Docker prints a warning that published ports are discarded. This is expected.
 NOTE: Check available tags in your GitLab project's Container Registry and pin if needed.
 
 ### GitLab CI/CD and Registry setup

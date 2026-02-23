@@ -46,8 +46,10 @@ services:
       - NET_ADMIN
       - NET_RAW
     volumes:
-      - "${DATA_FOLDER:-/srv/arpvpn/data}:/data"  # Optional, provides a way to see and edit the configuration files directly from the host.
+      - type: bind
+        source: "${DATA_FOLDER:-/srv/arpvpn/data}"  # Optional, provides a way to see and edit the configuration files directly from the host.
+        target: /data
+        bind:
+          create_host_path: false
     network_mode: host
     restart: unless-stopped
-    ports:
-      - "8080:8080"
