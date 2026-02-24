@@ -954,6 +954,16 @@ def save_settings():
         form.web_credentials_file.data = form.web_credentials_file.data or web_config.credentials_file
         form.web_login_attempts.data = form.web_login_attempts.data or web_config.login_attempts
         form.web_login_ban_time.data = form.web_login_ban_time.data or web_config.login_ban_time
+        form.web_tls_mode.data = form.web_tls_mode.data or web_config.tls_mode
+        form.web_tls_server_name.data = form.web_tls_server_name.data or web_config.tls_server_name
+        form.web_tls_letsencrypt_email.data = (
+            form.web_tls_letsencrypt_email.data or web_config.tls_letsencrypt_email
+        )
+        form.web_proxy_incoming_hostname.data = (
+            form.web_proxy_incoming_hostname.data or web_config.proxy_incoming_hostname
+        )
+        form.web_tls_generate_self_signed.data = False
+        form.web_tls_issue_letsencrypt.data = False
 
         form.app_endpoint.data = form.app_endpoint.data or wireguard_config.endpoint
         form.app_wg_bin.data = form.app_wg_bin.data or wireguard_config.wg_bin
@@ -985,6 +995,7 @@ def setup():
     form = SetupForm()
     wireguard_config.set_default_endpoint()
     form.app_endpoint.data = wireguard_config.endpoint
+    form.web_tls_server_name.data = web_config.tls_server_name or wireguard_config.endpoint
     context = {
         "title": "Setup",
         "form": form,

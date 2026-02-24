@@ -66,6 +66,36 @@
                                   Error in field <strong>{{ form.web_credentials_file.label.text }}</strong>: {{ error }}
                                 </div>
                             {% endfor %}
+                            {% for error in form.web_tls_mode.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ form.web_tls_mode.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in form.web_tls_server_name.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ form.web_tls_server_name.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in form.web_tls_letsencrypt_email.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ form.web_tls_letsencrypt_email.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in form.web_proxy_incoming_hostname.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ form.web_proxy_incoming_hostname.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in form.web_tls_generate_self_signed.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ form.web_tls_generate_self_signed.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in form.web_tls_issue_letsencrypt.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ form.web_tls_issue_letsencrypt.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
                         </div>
                         <div class="form-row">
                             <div class="form-group col-md-4">
@@ -109,6 +139,40 @@
                             </span>
                             {{ form.web_credentials_file(class="form-control") }}
                     </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-4">
+                                {{ form.web_tls_mode.label() }}
+                                {{ form.web_tls_mode(class="form-control", id="web_tls_mode") }}
+                            </div>
+                            <div class="form-group col-md-4">
+                                {{ form.web_tls_server_name.label() }}
+                                {{ form.web_tls_server_name(class="form-control", id="web_tls_server_name") }}
+                            </div>
+                            <div class="form-group col-md-4">
+                                {{ form.web_proxy_incoming_hostname.label() }}
+                                {{ form.web_proxy_incoming_hostname(class="form-control", id="web_proxy_incoming_hostname") }}
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-4">
+                                {{ form.web_tls_letsencrypt_email.label() }}
+                                {{ form.web_tls_letsencrypt_email(class="form-control", id="web_tls_letsencrypt_email") }}
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-4">
+                                <div class="custom-control custom-checkbox">
+                                    {{ form.web_tls_generate_self_signed(class="custom-control-input", id="web_tls_generate_self_signed") }}
+                                    {{ form.web_tls_generate_self_signed.label(class="custom-control-label") }}
+                                </div>
+                            </div>
+                            <div class="form-group col-md-4">
+                                <div class="custom-control custom-checkbox">
+                                    {{ form.web_tls_issue_letsencrypt(class="custom-control-input", id="web_tls_issue_letsencrypt") }}
+                                    {{ form.web_tls_issue_letsencrypt.label(class="custom-control-label") }}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -303,5 +367,5 @@
 {% endblock %}
 
 {% block additional_scripts %}
-    <script type="module" src="../../static/js/modules/settings.mjs"></script>
+    <script type="module" src="/static/js/modules/settings.mjs"></script>
 {% endblock %}

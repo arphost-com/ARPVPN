@@ -207,6 +207,22 @@ class PathExistsValidator:
 
 # https://stackoverflow.com/a/3809435
 URL_REGEX = re.compile(r"[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)")
+HOSTNAME_REGEX = re.compile(
+    r"^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.?$"
+)
+EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _validate_hostname_or_ipv4(value: str, allow_ipv4: bool = True) -> bool:
+    if not value:
+        return False
+    if any(ch in value for ch in (":", "/", "@", " ")):
+        return False
+    try:
+        ipaddress.IPv4Address(value)
+        return allow_ipv4
+    except ValueError:
+        return HOSTNAME_REGEX.match(value) is not None
 
 
 class EndpointValidator:
@@ -217,3 +233,27 @@ class EndpointValidator:
             if not URL_REGEX.match(field.data):
                 stop_validation(field, "must be valid url or IPv4 address. "
                                        "Follow the format 'X.X.X.X' or 'vpn.example.com'.")
+
+
+class HostnameOrIPv4Validator:
+    def __call__(self, form, field):
+        if not field.data:
+            return
+        if not _validate_hostname_or_ipv4(field.data.strip(), allow_ipv4=True):
+            stop_validation(field, "must be a valid hostname or IPv4 address.")
+
+
+class HostnameValidator:
+    def __call__(self, form, field):
+        if not field.data:
+            return
+        if not _validate_hostname_or_ipv4(field.data.strip(), allow_ipv4=False):
+            stop_validation(field, "must be a valid hostname (example: vpn.example.com).")
+
+
+class EmailValidator:
+    def __call__(self, form, field):
+        if not field.data:
+            return
+        if EMAIL_REGEX.match(field.data.strip()) is None:
+            stop_validation(field, "must be a valid email address.")

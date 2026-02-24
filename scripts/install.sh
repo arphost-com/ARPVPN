@@ -45,7 +45,7 @@ info "Installing dependencies..."
 debug "Updating packages list..."
 apt-get -qq update
 
-dependencies="sudo python3 python3-venv wireguard-tools iptables uwsgi uwsgi-plugin-python3 iproute2"
+dependencies="sudo python3 python3-venv wireguard-tools iptables uwsgi uwsgi-plugin-python3 iproute2 openssl"
 
 # Debian package names changed across releases (PCRE1 -> PCRE2). Pick
 # whichever set is available so container builds keep working on current bases.
@@ -66,6 +66,10 @@ if has_pkg_candidate libpcre3-dev; then
     dependencies="$dependencies libpcre3-dev"
 elif has_pkg_candidate libpcre2-dev; then
     dependencies="$dependencies libpcre2-dev"
+fi
+
+if has_pkg_candidate certbot; then
+    dependencies="$dependencies certbot"
 fi
 
 debug "The following packages will be installed: $dependencies"
@@ -99,6 +103,7 @@ chown -R arpvpn:arpvpn "$INSTALL_DIR"
 chmod +x -R "$SOURCE_DIR/core/tools"
 echo "arpvpn ALL=(ALL) NOPASSWD: /usr/bin/wg" > /etc/sudoers.d/arpvpn
 echo "arpvpn ALL=(ALL) NOPASSWD: /usr/bin/wg-quick" >> /etc/sudoers.d/arpvpn
+echo "arpvpn ALL=(ALL) NOPASSWD: /usr/bin/certbot" >> /etc/sudoers.d/arpvpn
 
 info "Adding arpvpn service..."
 cp systemd/arpvpn.service /etc/systemd/system/

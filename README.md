@@ -61,6 +61,14 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
    docker compose up -d --force-recreate arpvpn
    ```
    When `network_mode: host` is enabled, Docker prints a warning that published ports are discarded. This is expected.
+
+TLS can be configured from the UI (`Settings -> Web`):
+* `Direct HTTP` for plain HTTP.
+* `Self-signed certificate` to generate and apply a local certificate.
+* `Let's Encrypt certificate` to issue/renew with `certbot` and apply it to ARPVPN.
+* `Behind reverse proxy` to keep ARPVPN on HTTP and define the proxy incoming hostname.
+
+For Let's Encrypt issuance, your hostname must resolve publicly to the host and inbound port `80/tcp` must be reachable.
 NOTE: Check available tags in your GitLab project's Container Registry and pin if needed.
 
 ### GitLab CI/CD and Registry setup

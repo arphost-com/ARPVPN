@@ -23,7 +23,8 @@ from arpvpn.web.validators import LoginUsernameValidator, LoginPasswordValidator
     SignupUsernameValidator, SettingsSecretKeyValidator, PositiveIntegerValidator, \
     InterfaceIpValidator, InterfaceNameValidator, InterfacePortValidator, PeerIpValidator, PeerPrimaryDnsValidator, \
     PeerSecondaryDnsValidator, PeerNameValidator, NewPasswordValidator, OldPasswordValidator, JsonDataValidator, \
-    PathExistsValidator, EndpointValidator, PeerSiteToSiteSubnetsValidator
+    PathExistsValidator, EndpointValidator, PeerSiteToSiteSubnetsValidator, HostnameOrIPv4Validator, \
+    HostnameValidator, EmailValidator
 
 
 class LoginForm(FlaskForm):
@@ -60,6 +61,36 @@ class SettingsForm(FlaskForm):
     web_credentials_file = StringField("Credentials file",
                                        render_kw={"placeholder": "path/to/file", "disabled": "disabled"},
                                        default=web_config.credentials_file, validators=[DataRequired()])
+    web_tls_mode = SelectField(
+        "TLS mode",
+        choices=[
+            (web_config.TLS_MODE_HTTP, "Direct HTTP"),
+            (web_config.TLS_MODE_SELF_SIGNED, "Self-signed certificate"),
+            (web_config.TLS_MODE_LETS_ENCRYPT, "Let's Encrypt certificate"),
+            (web_config.TLS_MODE_REVERSE_PROXY, "Behind reverse proxy"),
+        ],
+        default=web_config.tls_mode,
+    )
+    web_tls_server_name = StringField(
+        "TLS / External hostname",
+        render_kw={"placeholder": "vpn.example.com"},
+        default=web_config.tls_server_name,
+        validators=[HostnameOrIPv4Validator()],
+    )
+    web_tls_letsencrypt_email = StringField(
+        "Let's Encrypt email",
+        render_kw={"placeholder": "admin@example.com"},
+        default=web_config.tls_letsencrypt_email,
+        validators=[EmailValidator()],
+    )
+    web_proxy_incoming_hostname = StringField(
+        "Reverse proxy incoming hostname",
+        render_kw={"placeholder": "vpn.example.com"},
+        default=web_config.proxy_incoming_hostname,
+        validators=[HostnameValidator()],
+    )
+    web_tls_generate_self_signed = BooleanField("Generate/re-generate self-signed certificate now", default=False)
+    web_tls_issue_letsencrypt = BooleanField("Issue/renew Let's Encrypt certificate now", default=False)
 
     app_config_file = StringField("Configuration file", render_kw={"disabled": "disabled"},
                                   default=config_manager.config_filepath, validators=[DataRequired()])
@@ -88,6 +119,55 @@ class SettingsForm(FlaskForm):
 
     submit = SubmitField('Save')
 
+    def validate(self, extra_validators=None):
+        valid = super().validate(extra_validators)
+        mode = (self.web_tls_mode.data or web_config.TLS_MODE_HTTP).strip()
+        if mode not in web_config.TLS_MODES:
+            self.web_tls_mode.errors.append("invalid TLS mode selected.")
+            valid = False
+            mode = web_config.TLS_MODE_HTTP
+        self.web_tls_mode.data = mode
+
+        requires_hostname = mode in (
+            web_config.TLS_MODE_SELF_SIGNED,
+            web_config.TLS_MODE_LETS_ENCRYPT,
+        )
+        if requires_hostname and not (self.web_tls_server_name.data or "").strip():
+            self.web_tls_server_name.errors.append(
+                "is required when TLS mode is self-signed or Let's Encrypt."
+            )
+            valid = False
+
+        if mode == web_config.TLS_MODE_LETS_ENCRYPT:
+            hostname = (self.web_tls_server_name.data or "").strip()
+            try:
+                ipaddress.IPv4Address(hostname)
+                self.web_tls_server_name.errors.append(
+                    "must be a hostname for Let's Encrypt (IP addresses are not supported)."
+                )
+                valid = False
+            except ValueError:
+                pass
+
+        if self.web_tls_generate_self_signed.data and mode != web_config.TLS_MODE_SELF_SIGNED:
+            self.web_tls_generate_self_signed.errors.append(
+                "can only be used when TLS mode is set to self-signed."
+            )
+            valid = False
+
+        if self.web_tls_issue_letsencrypt.data and mode != web_config.TLS_MODE_LETS_ENCRYPT:
+            self.web_tls_issue_letsencrypt.errors.append(
+                "can only be used when TLS mode is set to Let's Encrypt."
+            )
+            valid = False
+
+        if mode == web_config.TLS_MODE_REVERSE_PROXY and not (self.web_proxy_incoming_hostname.data or "").strip():
+            self.web_proxy_incoming_hostname.errors.append(
+                "is required when reverse proxy mode is enabled."
+            )
+            valid = False
+        return valid
+
     @classmethod
     def new(cls) -> "SettingsForm":
         form = cls()
@@ -95,6 +175,12 @@ class SettingsForm(FlaskForm):
         form.web_login_ban_time.data = web_config.login_ban_time
         form.web_secret_key.data = web_config.secret_key
         form.web_credentials_file.data = web_config.credentials_file
+        form.web_tls_mode.data = web_config.tls_mode
+        form.web_tls_server_name.data = web_config.tls_server_name
+        form.web_tls_letsencrypt_email.data = web_config.tls_letsencrypt_email
+        form.web_proxy_incoming_hostname.data = web_config.proxy_incoming_hostname
+        form.web_tls_generate_self_signed.data = False
+        form.web_tls_issue_letsencrypt.data = False
 
         form.app_config_file.data = config_manager.config_filepath
         form.app_endpoint.data = wireguard_config.endpoint
@@ -125,12 +211,91 @@ class SetupForm(FlaskForm):
     app_iptables_bin = StringField("iptables bin", render_kw={"placeholder": "path/to/file"},
                                    default=wireguard_config.iptables_bin,
                                    validators=[DataRequired(), PathExistsValidator()])
+    web_tls_mode = SelectField(
+        "TLS mode",
+        choices=[
+            (web_config.TLS_MODE_HTTP, "Direct HTTP"),
+            (web_config.TLS_MODE_SELF_SIGNED, "Self-signed certificate"),
+            (web_config.TLS_MODE_LETS_ENCRYPT, "Let's Encrypt certificate"),
+            (web_config.TLS_MODE_REVERSE_PROXY, "Behind reverse proxy"),
+        ],
+        default=web_config.tls_mode,
+    )
+    web_tls_server_name = StringField(
+        "TLS / External hostname",
+        render_kw={"placeholder": "vpn.example.com"},
+        default=web_config.tls_server_name,
+        validators=[HostnameOrIPv4Validator()],
+    )
+    web_tls_letsencrypt_email = StringField(
+        "Let's Encrypt email",
+        render_kw={"placeholder": "admin@example.com"},
+        default=web_config.tls_letsencrypt_email,
+        validators=[EmailValidator()],
+    )
+    web_proxy_incoming_hostname = StringField(
+        "Reverse proxy incoming hostname",
+        render_kw={"placeholder": "vpn.example.com"},
+        default=web_config.proxy_incoming_hostname,
+        validators=[HostnameValidator()],
+    )
+    web_tls_generate_self_signed = BooleanField("Generate self-signed certificate now", default=False)
+    web_tls_issue_letsencrypt = BooleanField("Issue Let's Encrypt certificate now", default=False)
 
     log_overwrite = BooleanField("Overwrite", default=logger_config.overwrite)
 
     traffic_enabled = BooleanField("Enabled", default=traffic_config.enabled)
 
     submit = SubmitField('Next')
+
+    def validate(self, extra_validators=None):
+        valid = super().validate(extra_validators)
+        mode = (self.web_tls_mode.data or web_config.TLS_MODE_HTTP).strip()
+        if mode not in web_config.TLS_MODES:
+            self.web_tls_mode.errors.append("invalid TLS mode selected.")
+            valid = False
+            mode = web_config.TLS_MODE_HTTP
+        self.web_tls_mode.data = mode
+
+        requires_hostname = mode in (
+            web_config.TLS_MODE_SELF_SIGNED,
+            web_config.TLS_MODE_LETS_ENCRYPT,
+        )
+        if requires_hostname and not (self.web_tls_server_name.data or "").strip():
+            self.web_tls_server_name.errors.append(
+                "is required when TLS mode is self-signed or Let's Encrypt."
+            )
+            valid = False
+
+        if mode == web_config.TLS_MODE_LETS_ENCRYPT:
+            hostname = (self.web_tls_server_name.data or "").strip()
+            try:
+                ipaddress.IPv4Address(hostname)
+                self.web_tls_server_name.errors.append(
+                    "must be a hostname for Let's Encrypt (IP addresses are not supported)."
+                )
+                valid = False
+            except ValueError:
+                pass
+
+        if self.web_tls_generate_self_signed.data and mode != web_config.TLS_MODE_SELF_SIGNED:
+            self.web_tls_generate_self_signed.errors.append(
+                "can only be used when TLS mode is set to self-signed."
+            )
+            valid = False
+
+        if self.web_tls_issue_letsencrypt.data and mode != web_config.TLS_MODE_LETS_ENCRYPT:
+            self.web_tls_issue_letsencrypt.errors.append(
+                "can only be used when TLS mode is set to Let's Encrypt."
+            )
+            valid = False
+
+        if mode == web_config.TLS_MODE_REVERSE_PROXY and not (self.web_proxy_incoming_hostname.data or "").strip():
+            self.web_proxy_incoming_hostname.errors.append(
+                "is required when reverse proxy mode is enabled."
+            )
+            valid = False
+        return valid
 
 
 class AddInterfaceForm(FlaskForm):

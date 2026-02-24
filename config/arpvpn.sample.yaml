@@ -42,4 +42,11 @@ traffic: !yamlable/traffic
   enabled: true
 web: !yamlable/web
   login_attempts: 0
-  secret_key: G,XhSEIu{>TFu$y?4-kMy+<MN%T*J@/[
+  login_ban_time: 120
+  secret_key: G,XhSEIu{>TFu$y?4-kMy+<MN%T*J@[/
+  tls_mode: http
+  tls_server_name: vpn.example.com
+  tls_letsencrypt_email: admin@example.com
+  proxy_incoming_hostname: ''
+  tls_cert_file: ''
+  tls_key_file: ''

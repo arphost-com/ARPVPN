@@ -18,6 +18,7 @@ from arpvpn.core.config.wireguard import config as wireguard_config, WireguardCo
 from arpvpn.core.exceptions import WireguardError
 from arpvpn.core.managers import traffic_storage
 from arpvpn.core.managers.config import config_manager
+from arpvpn.core.managers.tls import tls_manager
 from arpvpn.core.models import Interface, Peer, interfaces
 from arpvpn.web.controllers.ViewController import ViewController
 
@@ -137,6 +138,14 @@ class RestController:
         web_config.login_ban_time = form.web_login_ban_time.data or sample_web.login_ban_time
 
         web_config.secret_key = form.web_secret_key.data or sample_web.secret_key
+        web_config.tls_mode = form.web_tls_mode.data or sample_web.tls_mode
+        web_config.tls_server_name = (form.web_tls_server_name.data or "").strip() or sample_web.tls_server_name
+        web_config.tls_letsencrypt_email = (
+            (form.web_tls_letsencrypt_email.data or "").strip() or sample_web.tls_letsencrypt_email
+        )
+        web_config.proxy_incoming_hostname = (
+            (form.web_proxy_incoming_hostname.data or "").strip() or sample_web.proxy_incoming_hostname
+        )
 
         sample_wireguard = WireguardConfig()
 
@@ -151,11 +160,26 @@ class RestController:
         options = json.loads(form.traffic_driver_options.data.replace("\'", "\""))
         traffic_config.driver = driver.__from_yaml_dict__(options)
 
+        tls_manager.apply_web_tls_config(
+            web_config,
+            generate_self_signed=bool(form.web_tls_generate_self_signed.data),
+            issue_letsencrypt=bool(form.web_tls_issue_letsencrypt.data),
+        )
         config_manager.save()
 
     @staticmethod
     def apply_setup(form):
         logger_config.overwrite = form.log_overwrite.data
+
+        sample_web = WebConfig()
+        web_config.tls_mode = form.web_tls_mode.data or sample_web.tls_mode
+        web_config.tls_server_name = (form.web_tls_server_name.data or "").strip() or sample_web.tls_server_name
+        web_config.tls_letsencrypt_email = (
+            (form.web_tls_letsencrypt_email.data or "").strip() or sample_web.tls_letsencrypt_email
+        )
+        web_config.proxy_incoming_hostname = (
+            (form.web_proxy_incoming_hostname.data or "").strip() or sample_web.proxy_incoming_hostname
+        )
 
         sample_wireguard = WireguardConfig()
 
@@ -166,6 +190,11 @@ class RestController:
 
         traffic_config.enabled = form.traffic_enabled.data
 
+        tls_manager.apply_web_tls_config(
+            web_config,
+            generate_self_signed=bool(form.web_tls_generate_self_signed.data),
+            issue_letsencrypt=bool(form.web_tls_issue_letsencrypt.data),
+        )
         config_manager.save()
 
     @staticmethod

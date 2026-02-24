@@ -7,6 +7,7 @@ from logging import warning, fatal, info, debug
 from flask import Flask
 from flask_login import LoginManager
 from flask_qrcode import QRcode
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from arpvpn.__version__ import commit, release
 from arpvpn.common.models.user import users
@@ -51,7 +52,13 @@ config_manager.load()
 if log_config.overwrite:
     log_config.reset_logfile()
 
-secure_cookies_enabled = os.environ.get("ARPVPN_SECURE_COOKIES", "0").lower() not in ("0", "false", "no")
+secure_cookies_env = os.environ.get("ARPVPN_SECURE_COOKIES", "0").lower() not in ("0", "false", "no")
+secure_transport_by_config = web_config.tls_mode in (
+    web_config.TLS_MODE_SELF_SIGNED,
+    web_config.TLS_MODE_LETS_ENCRYPT,
+    web_config.TLS_MODE_REVERSE_PROXY,
+)
+secure_cookies_enabled = secure_cookies_env or secure_transport_by_config
 
 app.config['SECRET_KEY'] = web_config.secret_key
 app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -61,6 +68,14 @@ app.config["REMEMBER_COOKIE_HTTPONLY"] = True
 app.config["REMEMBER_COOKIE_SECURE"] = secure_cookies_enabled and not args.debug
 app.config["REMEMBER_COOKIE_SAMESITE"] = "Lax"
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=12)
+if secure_cookies_enabled:
+    app.config["PREFERRED_URL_SCHEME"] = "https"
+
+if web_config.tls_mode == web_config.TLS_MODE_REVERSE_PROXY:
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
+    if web_config.proxy_incoming_hostname:
+        app.config["SERVER_NAME"] = web_config.proxy_incoming_hostname
+
 app.register_blueprint(router)
 QRcode(app)
 login_manager.init_app(app)
@@ -75,7 +90,7 @@ def add_security_headers(response):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-    if not args.debug:
+    if secure_cookies_enabled and not args.debug:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
