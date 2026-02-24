@@ -13,11 +13,20 @@ from arpvpn.common.models.enhanced_dict import EnhancedDict, K, V
 @yaml_info(yaml_tag='user')
 class User(UserMixin, YamlAble):
     HASHING_METHOD = "pbkdf2:sha256"
+    ROLE_ADMIN = "admin"
+    ROLE_SUPPORT = "support"
+    ROLE_CLIENT = "client"
+    ROLES = (
+        ROLE_ADMIN,
+        ROLE_SUPPORT,
+        ROLE_CLIENT,
+    )
     login_date: datetime
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, role: str = ROLE_ADMIN):
         self.id = gen_uuid().hex
         self.name = name
+        self.role = role if role in self.ROLES else self.ROLE_ADMIN
         self.__password = None
         self.__authenticated = False
 
@@ -25,6 +34,7 @@ class User(UserMixin, YamlAble):
         return {
             "id": self.id,
             "name": self.name,
+            "role": self.role,
             "authenticated": self.__authenticated
         }.__str__()
 
@@ -41,6 +51,7 @@ class User(UserMixin, YamlAble):
         return {
             "id": self.id,
             "name": self.name,
+            "role": self.role,
             "password": self.password,
         }
 
@@ -49,7 +60,7 @@ class User(UserMixin, YamlAble):
                            dct,      # type: Dict[str, Any]
                            yaml_tag  # type: str
                            ):  # type: (...) -> Y
-        u = User(dct["name"])
+        u = User(dct["name"], dct.get("role", cls.ROLE_ADMIN))
         u.id = dct["id"]
         u.__password = str(dct["password"])
         return u
@@ -73,6 +84,9 @@ class User(UserMixin, YamlAble):
     @property
     def is_authenticated(self):
         return self.__authenticated
+
+    def has_role(self, *roles: str) -> bool:
+        return self.role in roles
 
 
 @yaml_info(yaml_tag='users')

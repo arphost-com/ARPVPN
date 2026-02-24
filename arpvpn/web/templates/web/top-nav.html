@@ -13,6 +13,9 @@
     {% else %}
         <a class="navbar-brand" href="/">{{ app_name }}</a>
     {% endif %}
+    {% if is_impersonating %}
+        <span class="badge badge-danger ml-2">Impersonating {{ current_user.name }} (client)</span>
+    {% endif %}
     <button class="btn btn-link btn-sm order-1 order-lg-0" id="sidebarToggle" href="#"><i class="fas fa-bars"></i></button>
     <!-- Navbar Search-->
     <div class="d-none d-md-inline-block form-inline ml-auto mr-0 mr-md-3 my-2 my-md-0"></div>
@@ -32,7 +35,22 @@
                 <span class="dropdown-item-text text-muted small">Current: <span data-theme-current>Auto</span></span>
                 <div class="dropdown-divider"></div>
                 <a class="dropdown-item" href="/profile">Profile</a>
+                {% if current_user_can_manage_users %}
+                    <a class="dropdown-item" href="/users">Users</a>
+                {% endif %}
                 <a class="dropdown-item" href="/themes">Themes & guide</a>
+                {% if is_impersonating %}
+                    <div class="dropdown-divider"></div>
+                    <span class="dropdown-item-text text-muted small">
+                        Acting as {{ current_user.name }} (from {{ impersonator_name }} / {{ impersonator_role }})
+                    </span>
+                    <div class="px-3 py-2">
+                        <form action="/impersonation/stop" method="post">
+                            {{ stop_impersonation_form.hidden_tag() }}
+                            {{ stop_impersonation_form.submit(class="btn btn-sm btn-danger btn-block") }}
+                        </form>
+                    </div>
+                {% endif %}
                 <div class="dropdown-divider"></div>
                 <a class="dropdown-item" href="/logout">Logout</a>
             </div>

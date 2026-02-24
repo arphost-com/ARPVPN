@@ -5,17 +5,17 @@ import os
 import re
 from datetime import datetime
 from functools import wraps
-from http.client import BAD_REQUEST, NOT_FOUND, INTERNAL_SERVER_ERROR, UNAUTHORIZED, NO_CONTENT
+from http.client import BAD_REQUEST, NOT_FOUND, INTERNAL_SERVER_ERROR, UNAUTHORIZED, NO_CONTENT, FORBIDDEN
 from ipaddress import IPv4Address
 from logging import warning, debug, error, info
 from time import sleep
 from typing import List, Dict, Any, Union, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
-from flask import Blueprint, abort, request, Response, redirect, url_for, jsonify
+from flask import Blueprint, abort, request, Response, redirect, url_for, jsonify, session
 from flask_login import current_user, login_required, login_user
 
-from arpvpn.common.models.user import users
+from arpvpn.common.models.user import users, User
 from arpvpn.common.properties import global_properties
 from arpvpn.common.utils.logs import log_exception
 from arpvpn.common.utils.network import get_routing_table, get_system_interfaces
@@ -43,10 +43,13 @@ ALLOWED_NEXT_ENDPOINTS = {
     "/network": "router.network",
     "/wireguard": "router.wireguard",
     "/settings": "router.settings",
+    "/users": "router.manage_users",
     "/themes": "router.themes",
     "/about": "router.about",
     "/setup": "router.setup",
 }
+IMPERSONATOR_SESSION_KEY = "impersonator_user_id"
+STAFF_ROLES = (User.ROLE_ADMIN, User.ROLE_SUPPORT)
 
 
 def get_env_int(name: str, default: int) -> int:
@@ -134,6 +137,39 @@ def setup_required(f):
         return f(*args, **kwargs)
 
     return wrapped
+
+
+def role_required(*roles: str):
+    def decorator(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            if not current_user.is_authenticated:
+                abort(UNAUTHORIZED)
+            if not current_user.has_role(*roles):
+                abort(FORBIDDEN, "Insufficient permissions.")
+            return f(*args, **kwargs)
+
+        return wrapped
+
+    return decorator
+
+
+def get_impersonator_user() -> Optional[User]:
+    impersonator_id = session.get(IMPERSONATOR_SESSION_KEY)
+    if not impersonator_id:
+        return None
+    impersonator = users.get(impersonator_id, None)
+    if not impersonator:
+        session.pop(IMPERSONATOR_SESSION_KEY, None)
+        return None
+    if current_user.is_authenticated and impersonator.id == current_user.id:
+        session.pop(IMPERSONATOR_SESSION_KEY, None)
+        return None
+    return impersonator
+
+
+def is_impersonating() -> bool:
+    return get_impersonator_user() is not None
 
 
 @router.route("/")
@@ -398,6 +434,7 @@ def csv_response(filename: str, fieldnames: List[str], rows: List[Dict[str, Any]
 @login_required
 @setup_required
 def logout():
+    session.pop(IMPERSONATOR_SESSION_KEY, None)
     current_user.logout()
     return redirect(url_for("router.index"))
 
@@ -473,6 +510,7 @@ def login_post():
             context["banned_for"] = (client.banned_until - datetime.now()).seconds
         return ViewController("web/login.html", **context).load()
     del clients[client.ip]
+    session.pop(IMPERSONATOR_SESSION_KEY, None)
     u = users.get_value_by_attr("name", form.username.data)
     if not login_user(u, form.remember_me.data):
         error(f"Unable to log user in.")
@@ -484,6 +522,7 @@ def login_post():
 
 @router.route("/network")
 @login_required
+@role_required(*STAFF_ROLES)
 @setup_required
 def network():
     wg_ifaces = list(interfaces.values())
@@ -559,6 +598,7 @@ def get_system_interfaces_summary() -> Dict[str, Dict[str, Any]]:
 
 @router.route("/wireguard")
 @login_required
+@role_required(*STAFF_ROLES)
 @setup_required
 def wireguard():
     peer_runtime = get_peer_runtime_summary()
@@ -584,6 +624,7 @@ def wireguard():
 
 @router.route("/api/v1/stats/overview", methods=["GET"])
 @login_required
+@role_required(*STAFF_ROLES)
 @setup_required
 def api_stats_overview():
     return jsonify(build_stats_snapshot())
@@ -591,6 +632,7 @@ def api_stats_overview():
 
 @router.route("/api/v1/stats/peers", methods=["GET"])
 @login_required
+@role_required(*STAFF_ROLES)
 @setup_required
 def api_stats_peers():
     runtime = get_peer_runtime_summary()
@@ -603,6 +645,7 @@ def api_stats_peers():
 
 @router.route("/api/v1/stats/alerts", methods=["GET"])
 @login_required
+@role_required(*STAFF_ROLES)
 @setup_required
 def api_stats_alerts():
     runtime = get_peer_runtime_summary()
@@ -614,6 +657,7 @@ def api_stats_alerts():
 
 @router.route("/api/v1/stats/peers.csv", methods=["GET"])
 @login_required
+@role_required(*STAFF_ROLES)
 @setup_required
 def api_stats_peers_csv():
     runtime = get_peer_runtime_summary()
@@ -629,6 +673,7 @@ def api_stats_peers_csv():
 
 @router.route("/api/v1/stats/alerts.csv", methods=["GET"])
 @login_required
+@role_required(*STAFF_ROLES)
 @setup_required
 def api_stats_alerts_csv():
     runtime = get_peer_runtime_summary()
@@ -638,6 +683,7 @@ def api_stats_alerts_csv():
 
 @router.route("/wireguard/interfaces/add", methods=['GET'])
 @login_required
+@role_required(*STAFF_ROLES)
 @setup_required
 def create_wireguard_iface():
     from arpvpn.web.forms import AddInterfaceForm
@@ -652,6 +698,7 @@ def create_wireguard_iface():
 
 @router.route("/wireguard/interfaces/add", methods=['POST'])
 @login_required
+@role_required(*STAFF_ROLES)
 @setup_required
 def add_wireguard_iface():
     from arpvpn.web.forms import AddInterfaceForm
@@ -690,6 +737,7 @@ def load_traffic_data(item: Union[Peer, Interface]):
 
 @router.route("/wireguard/interfaces/<uuid>", methods=['GET', "POST"])
 @login_required
+@role_required(*STAFF_ROLES)
 @setup_required
 def get_wireguard_iface(uuid: str):
     if uuid not in interfaces:
@@ -732,6 +780,7 @@ def get_wireguard_iface(uuid: str):
 
 @router.route("/wireguard/interfaces/<uuid>", methods=['DELETE'])
 @login_required
+@role_required(*STAFF_ROLES)
 @setup_required
 def remove_wireguard_iface(uuid: str):
     if uuid not in interfaces:
@@ -741,6 +790,7 @@ def remove_wireguard_iface(uuid: str):
 
 @router.route("/wireguard/interfaces/<uuid>/<action>", methods=['POST'])
 @login_required
+@role_required(*STAFF_ROLES)
 @setup_required
 def operate_wireguard_iface(uuid: str, action: str):
     action = action.lower()
@@ -761,6 +811,7 @@ def operate_wireguard_iface(uuid: str, action: str):
 
 @router.route("/wireguard/<action>", methods=['POST'])
 @login_required
+@role_required(*STAFF_ROLES)
 @setup_required
 def operate_wireguard_ifaces(action: str):
     action = action.lower()
@@ -784,6 +835,7 @@ def operate_wireguard_ifaces(action: str):
 
 @router.route("/wireguard/interfaces/<uuid>/download", methods=['GET'])
 @login_required
+@role_required(*STAFF_ROLES)
 @setup_required
 def download_wireguard_iface(uuid: str):
     if uuid not in interfaces.keys():
@@ -794,6 +846,7 @@ def download_wireguard_iface(uuid: str):
 
 @router.route("/wireguard/peers/add", methods=['GET'])
 @login_required
+@role_required(*STAFF_ROLES)
 @setup_required
 def create_wireguard_peer():
     if len(interfaces) < 1:
@@ -812,6 +865,7 @@ def create_wireguard_peer():
 
 @router.route("/wireguard/peers/add", methods=['POST'])
 @login_required
+@role_required(*STAFF_ROLES)
 @setup_required
 def add_wireguard_peer():
     if len(interfaces) < 1:
@@ -840,6 +894,7 @@ def add_wireguard_peer():
 
 @router.route("/wireguard/peers/<uuid>", methods=['DELETE'])
 @login_required
+@role_required(*STAFF_ROLES)
 @setup_required
 def remove_wireguard_peer(uuid: str):
     peer = get_all_peers().get(uuid, None)
@@ -850,6 +905,7 @@ def remove_wireguard_peer(uuid: str):
 
 @router.route("/wireguard/peers/<uuid>", methods=['GET', "POST"])
 @login_required
+@role_required(*STAFF_ROLES)
 @setup_required
 def get_wireguard_peer(uuid: str):
     peer = get_all_peers().get(uuid, None)
@@ -894,6 +950,7 @@ def get_wireguard_peer(uuid: str):
 
 @router.route("/wireguard/peers/<uuid>/download", methods=['GET'])
 @login_required
+@role_required(*STAFF_ROLES)
 @setup_required
 def download_wireguard_peer(uuid: str):
     peer = get_all_peers().get(uuid, None)
@@ -916,6 +973,7 @@ def themes():
 
 @router.route("/settings")
 @login_required
+@role_required(*STAFF_ROLES)
 @setup_required
 def settings():
     from arpvpn.web.forms import SettingsForm
@@ -933,6 +991,7 @@ def settings():
 
 @router.route("/settings", methods=['POST'])
 @login_required
+@role_required(*STAFF_ROLES)
 @setup_required
 def save_settings():
     from arpvpn.web.forms import SettingsForm
@@ -986,8 +1045,110 @@ def save_settings():
     return ViewController(view, **context).load()
 
 
+def get_users_management_context(create_form=None, impersonate_form=None, stop_form=None) -> Dict[str, Any]:
+    from arpvpn.web.forms import CreateUserForm, ImpersonateClientForm, ImpersonationStopForm
+    create_form = create_form or CreateUserForm()
+    if current_user.has_role(User.ROLE_SUPPORT):
+        create_form.role.choices = [(User.ROLE_CLIENT, "Client")]
+        if request.method == "GET":
+            create_form.role.data = User.ROLE_CLIENT
+    impersonate_form = impersonate_form or ImpersonateClientForm()
+    stop_form = stop_form or ImpersonationStopForm()
+    users_list = sorted(users.values(), key=lambda u: (u.role, u.name.lower()))
+    return {
+        "title": "Users",
+        "create_form": create_form,
+        "impersonate_form": impersonate_form,
+        "stop_impersonation_form": stop_form,
+        "users_list": users_list,
+        "is_impersonating": is_impersonating(),
+    }
+
+
+@router.route("/users", methods=["GET"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def manage_users():
+    context = get_users_management_context()
+    return ViewController("web/users.html", **context).load()
+
+
+@router.route("/users", methods=["POST"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def create_user():
+    from arpvpn.web.forms import CreateUserForm, ImpersonateClientForm, ImpersonationStopForm
+    form = CreateUserForm(request.form)
+    context = get_users_management_context(
+        create_form=form,
+        impersonate_form=ImpersonateClientForm(),
+        stop_form=ImpersonationStopForm(),
+    )
+    if not form.validate():
+        error("Unable to validate create-user form")
+        return ViewController("web/users.html", **context).load()
+    if current_user.has_role(User.ROLE_SUPPORT) and form.role.data != User.ROLE_CLIENT:
+        context["error"] = True
+        context["error_details"] = "Support users can only create client accounts."
+        return ViewController("web/users.html", **context).load()
+    try:
+        RestController.create_user(form.username.data, form.password.data, form.role.data)
+        context = get_users_management_context()
+        context["success"] = True
+        context["success_details"] = "User created successfully."
+    except Exception as e:
+        log_exception(e)
+        context["error"] = True
+        context["error_details"] = e
+    return ViewController("web/users.html", **context).load()
+
+
+@router.route("/users/<user_id>/impersonate", methods=["POST"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def start_impersonation(user_id: str):
+    from arpvpn.web.forms import ImpersonateClientForm
+    form = ImpersonateClientForm(request.form)
+    if not form.validate():
+        abort(BAD_REQUEST, "Invalid impersonation request.")
+    if is_impersonating():
+        abort(BAD_REQUEST, "Already impersonating a user.")
+    target_user = users.get(user_id, None)
+    if not target_user:
+        abort(NOT_FOUND, "User not found.")
+    if target_user.role != User.ROLE_CLIENT:
+        abort(BAD_REQUEST, "Only client users can be impersonated.")
+    if target_user.id == current_user.id:
+        abort(BAD_REQUEST, "Cannot impersonate your own account.")
+    session[IMPERSONATOR_SESSION_KEY] = current_user.id
+    if not login_user(target_user, remember=False):
+        abort(INTERNAL_SERVER_ERROR, "Unable to impersonate target user.")
+    return redirect(url_for("router.index"))
+
+
+@router.route("/impersonation/stop", methods=["POST"])
+@login_required
+@setup_required
+def stop_impersonation():
+    from arpvpn.web.forms import ImpersonationStopForm
+    form = ImpersonationStopForm(request.form)
+    if not form.validate():
+        abort(BAD_REQUEST, "Invalid stop-impersonation request.")
+    impersonator = get_impersonator_user()
+    if not impersonator:
+        abort(BAD_REQUEST, "No active impersonation session.")
+    session.pop(IMPERSONATOR_SESSION_KEY, None)
+    if not login_user(impersonator, remember=False):
+        abort(INTERNAL_SERVER_ERROR, "Unable to restore original user.")
+    return redirect(url_for("router.manage_users"))
+
+
 @router.route("/setup")
 @login_required
+@role_required(*STAFF_ROLES)
 def setup():
     if global_properties.setup_file_exists():
         return redirect_to_next_or_default(request.args.get("next", None))
@@ -1005,6 +1166,7 @@ def setup():
 
 @router.route("/setup", methods=['POST'])
 @login_required
+@role_required(*STAFF_ROLES)
 def apply_setup():
     if global_properties.setup_file_exists():
         abort(BAD_REQUEST, "Setup already performed!")
@@ -1082,6 +1244,10 @@ def save_profile():
         error("Unable to validate form")
         return ViewController(view, **context).load()
     try:
+        existing = users.get_value_by_attr("name", profile_form.username.data)
+        if existing and existing.id != current_user.id:
+            profile_form.username.errors.append("Username already in use")
+            return ViewController(view, **context).load()
         current_user.name = profile_form.username.data
         config_manager.save_credentials()
         context["success"] = True
@@ -1141,6 +1307,17 @@ def unauthorized(err):
             next_url = url_for(request.endpoint, uuid=uuid)
         return redirect(url_for("router.login", next=next_url))
     error_code = int(UNAUTHORIZED)
+    context = {
+        "title": error_code,
+        "error_code": error_code,
+        "error_msg": str(err).split(":", 1)[1]
+    }
+    return ViewController("error/error-main.html", **context).load(), error_code
+
+
+@router.app_errorhandler(FORBIDDEN)
+def forbidden(err):
+    error_code = int(FORBIDDEN)
     context = {
         "title": error_code,
         "error_code": error_code,

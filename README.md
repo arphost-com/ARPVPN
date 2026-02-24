@@ -15,6 +15,7 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
 * Display stored and real time traffic data using charts (storage of traffic data may be manually disabled).
 * Display general network information.
 * Encrypted user credentials (AES).
+* Multi-user roles (`admin`, `support`, `client`) with staff impersonation of client sessions for troubleshooting.
 * Easy management through the ``arpvpn`` systemd service.
 
 ## Installation

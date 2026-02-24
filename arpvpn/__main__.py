@@ -4,13 +4,13 @@ import os
 from datetime import timedelta
 from logging import warning, fatal, info, debug
 
-from flask import Flask
-from flask_login import LoginManager
+from flask import Flask, session
+from flask_login import LoginManager, current_user
 from flask_qrcode import QRcode
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from arpvpn.__version__ import commit, release
-from arpvpn.common.models.user import users
+from arpvpn.common.models.user import users, User
 from arpvpn.common.properties import global_properties
 from arpvpn.common.utils.system import try_makedir
 from arpvpn.core.managers.cron import cron_manager
@@ -82,6 +82,40 @@ login_manager.init_app(app)
 login_manager.login_view = "router.login"
 wireguard_manager.start()
 cron_manager.start()
+
+
+@app.context_processor
+def inject_user_access_context():
+    role = None
+    can_manage_users = False
+    is_staff = False
+    impersonator_name = None
+    impersonator_role = None
+    impersonating = False
+    if current_user and current_user.is_authenticated:
+        role = getattr(current_user, "role", User.ROLE_CLIENT)
+        is_staff = role in (User.ROLE_ADMIN, User.ROLE_SUPPORT)
+        can_manage_users = is_staff
+        impersonator_id = session.get("impersonator_user_id")
+        if impersonator_id:
+            impersonator = users.get(impersonator_id, None)
+            if impersonator and impersonator.id != current_user.id:
+                impersonating = True
+                can_manage_users = False
+                impersonator_name = impersonator.name
+                impersonator_role = impersonator.role
+            else:
+                session.pop("impersonator_user_id", None)
+    from arpvpn.web.forms import ImpersonationStopForm
+    return {
+        "current_user_role": role,
+        "current_user_is_staff": is_staff,
+        "current_user_can_manage_users": can_manage_users,
+        "is_impersonating": impersonating,
+        "impersonator_name": impersonator_name,
+        "impersonator_role": impersonator_role,
+        "stop_impersonation_form": ImpersonationStopForm(),
+    }
 
 
 @app.after_request

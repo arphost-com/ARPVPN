@@ -8,6 +8,7 @@ from wtforms import StringField, BooleanField, PasswordField, SubmitField, Selec
     TextAreaField
 from wtforms.validators import DataRequired, InputRequired
 
+from arpvpn.common.models.user import User
 from arpvpn.common.utils.encryption import CryptoUtils
 from arpvpn.common.utils.network import get_system_interfaces, get_default_gateway
 from arpvpn.common.utils.strings import list_to_str
@@ -45,6 +46,32 @@ class SignupForm(FlaskForm):
                             render_kw={"placeholder": "Confirm password"})
     submit = SubmitField('Create account')
     next = StringField()
+
+
+class CreateUserForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired(), SignupUsernameValidator()],
+                           render_kw={"placeholder": "Enter username"})
+    password = PasswordField('Password', validators=[DataRequired()], render_kw={"placeholder": "Enter password"})
+    confirm = PasswordField('Confirm password', validators=[DataRequired(), SignupPasswordValidator()],
+                            render_kw={"placeholder": "Confirm password"})
+    role = SelectField(
+        "Role",
+        choices=[
+            (User.ROLE_CLIENT, "Client"),
+            (User.ROLE_SUPPORT, "Support"),
+            (User.ROLE_ADMIN, "Admin"),
+        ],
+        default=User.ROLE_CLIENT,
+    )
+    submit = SubmitField('Create user')
+
+
+class ImpersonationStopForm(FlaskForm):
+    submit = SubmitField("Stop impersonating")
+
+
+class ImpersonateClientForm(FlaskForm):
+    submit = SubmitField("Impersonate")
 
 
 class SettingsForm(FlaskForm):

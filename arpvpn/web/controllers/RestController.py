@@ -206,7 +206,7 @@ class RestController:
             }
             return ViewController("web/signup.html", **context).load()
         debug(f"Signing up user '{form.username.data}'...")
-        u = User(form.username.data)
+        u = User(form.username.data, role=User.ROLE_ADMIN)
         u.password = form.password.data
         users[u.id] = u
         users.save(web_config.credentials_file, web_config.secret_key)
@@ -215,3 +215,11 @@ class RestController:
         if u.login(form.password.data) and login_user(u):
             return redirect(url_for("router.setup", next=request.args.get("next", None)))
         abort(http.HTTPStatus.INTERNAL_SERVER_ERROR)
+
+    @staticmethod
+    def create_user(username: str, password: str, role: str) -> User:
+        u = User(username, role=role)
+        u.password = password
+        users[u.id] = u
+        users.save(web_config.credentials_file, web_config.secret_key)
+        return u

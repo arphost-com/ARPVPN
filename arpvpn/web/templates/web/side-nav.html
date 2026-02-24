@@ -11,20 +11,26 @@
                     <div class="sb-nav-link-icon"><i class="fas fa-info-circle"></i></div>
                     About
                 </a>
-                <div class="sb-sidenav-menu-heading">System</div>
-                <a class="nav-link" href="/network">
-                    <div class="sb-nav-link-icon"><i class="fas fa-network-wired"></i></div>
-                    Network
-                </a>
-                <a class="nav-link" href="/wireguard">
-                    <div class="sb-nav-link-icon"><i class="fas fa-server"></i></div>
-                    Wireguard
-                </a>
-                <div class="sb-sidenav-menu-heading">Customization</div>
-                <a class="nav-link" href="/settings">
-                    <div class="sb-nav-link-icon"><i class="fas fa-cog"></i></div>
-                    Settings
-                </a>
+                {% if current_user_is_staff and not is_impersonating %}
+                    <div class="sb-sidenav-menu-heading">System</div>
+                    <a class="nav-link" href="/network">
+                        <div class="sb-nav-link-icon"><i class="fas fa-network-wired"></i></div>
+                        Network
+                    </a>
+                    <a class="nav-link" href="/wireguard">
+                        <div class="sb-nav-link-icon"><i class="fas fa-server"></i></div>
+                        Wireguard
+                    </a>
+                    <div class="sb-sidenav-menu-heading">Customization</div>
+                    <a class="nav-link" href="/settings">
+                        <div class="sb-nav-link-icon"><i class="fas fa-cog"></i></div>
+                        Settings
+                    </a>
+                    <a class="nav-link" href="/users">
+                        <div class="sb-nav-link-icon"><i class="fas fa-users"></i></div>
+                        Users
+                    </a>
+                {% endif %}
                 <a class="nav-link" href="/themes">
                     <div class="sb-nav-link-icon"><i class="fas fa-images"></i></div>
                     Themes
@@ -32,7 +38,7 @@
             </div>
         </div>
         <div class="sb-sidenav-footer">
-            <div class="small">Welcome, <strong>{{ current_user.name }}</strong></div>
+            <div class="small">Welcome, <strong>{{ current_user.name }}</strong> ({{ current_user_role }})</div>
         </div>
     </nav>
 </div>
