@@ -20,7 +20,7 @@ package_dist:
       - dist/*.tar.gz
     expire_in: 1 day
 
-docker_publish:
+docker_publish_v1:
   stage: container
   image: docker:27.1.1
   services:
@@ -33,9 +33,58 @@ docker_publish:
     - package_dist
   script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login "http://$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
-    - docker build --build-arg ARPVPN_UID=1000 --build-arg ARPVPN_GID=1000 -f docker/Dockerfile -t "$CI_REGISTRY_IMAGE:stable" -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA" .
+    - |
+      set -euo pipefail
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        docker build --build-arg ARPVPN_UID=1000 --build-arg ARPVPN_GID=1000 -f docker/Dockerfile \
+          -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG" \
+          -t "$CI_REGISTRY_IMAGE:stable" \
+          -t "$CI_REGISTRY_IMAGE:1.2.x" \
+          .
+        docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG"
+      else
+        docker build --build-arg ARPVPN_UID=1000 --build-arg ARPVPN_GID=1000 -f docker/Dockerfile \
+          -t "$CI_REGISTRY_IMAGE:stable" \
+          -t "$CI_REGISTRY_IMAGE:1.2.x" \
+          -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA" \
+          .
+        docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+      fi
     - docker push "$CI_REGISTRY_IMAGE:stable"
-    - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+    - docker push "$CI_REGISTRY_IMAGE:1.2.x"
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_TAG =~ /^v1\./'
+
+docker_publish_v2:
+  stage: container
+  image: docker:27.1.1
+  services:
+    - name: docker:27.1.1-dind
+      alias: docker
+      command:
+        - "--tls=false"
+        - "--insecure-registry=10.10.10.96:5050"
+  needs:
+    - package_dist
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "http://$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
+    - |
+      set -euo pipefail
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        docker build --build-arg ARPVPN_UID=1000 --build-arg ARPVPN_GID=1000 -f docker/Dockerfile \
+          -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG" \
+          -t "$CI_REGISTRY_IMAGE:v2-latest" \
+          .
+        docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG"
+      else
+        docker build --build-arg ARPVPN_UID=1000 --build-arg ARPVPN_GID=1000 -f docker/Dockerfile \
+          -t "$CI_REGISTRY_IMAGE:v2-latest" \
+          -t "$CI_REGISTRY_IMAGE:v2-$CI_COMMIT_SHORT_SHA" \
+          .
+        docker push "$CI_REGISTRY_IMAGE:v2-$CI_COMMIT_SHORT_SHA"
+      fi
+    - docker push "$CI_REGISTRY_IMAGE:v2-latest"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "codex/multitenant-v2"'
+    - if: '$CI_COMMIT_TAG =~ /^v2\./'
