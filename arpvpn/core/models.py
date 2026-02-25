@@ -26,10 +26,10 @@ class Interface(YamlAble):
 
     MIN_NAME_LENGTH = 2
     MAX_NAME_LENGTH = 15
-    REGEX_NAME = f"^[a-z][a-z\-_0-9]{{{MIN_NAME_LENGTH - 1},{MAX_NAME_LENGTH - 1}}}$"
-    REGEX_IPV4_PARTIAL = "([1-9]|[1-9]\d|1\d{2}|2[0-4]\d|25[0-5])(\.(\d|[1-9]\d|1\d{2}|2[0-4]\d|25[0-5])){3}"
+    REGEX_NAME = rf"^[a-z][a-z\-_0-9]{{{MIN_NAME_LENGTH - 1},{MAX_NAME_LENGTH - 1}}}$"
+    REGEX_IPV4_PARTIAL = r"([1-9]|[1-9]\d|1\d{2}|2[0-4]\d|25[0-5])(\.(\d|[1-9]\d|1\d{2}|2[0-4]\d|25[0-5])){3}"
     REGEX_IPV4 = f"^{REGEX_IPV4_PARTIAL}$"
-    REGEX_IPV4_CIDR = f"^{REGEX_IPV4_PARTIAL}\/(3[0-2]|[1-2]\d|\d)$"
+    REGEX_IPV4_CIDR = rf"^{REGEX_IPV4_PARTIAL}/(3[0-2]|[1-2]\d|\d)$"
 
     @property
     def wg_quick_bin(self):
@@ -275,7 +275,7 @@ class Peer(YamlAble):
 
     MIN_NAME_LENGTH = 2
     MAX_NAME_LENGTH = 64
-    REGEX_NAME = f"^[a-zA-Z][\w\-. ]{{{MIN_NAME_LENGTH - 1},{MAX_NAME_LENGTH - 1}}}$"
+    REGEX_NAME = rf"^[a-zA-Z][\w\-. ]{{{MIN_NAME_LENGTH - 1},{MAX_NAME_LENGTH - 1}}}$"
 
     def __init__(self, name: str, description: str, ipv4_address: str, nat: bool, interface: Interface, dns1: str,
                  uuid: str = "", private_key: str = "", public_key: str = "", dns2: str = None,
