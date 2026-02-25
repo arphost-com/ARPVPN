@@ -83,3 +83,12 @@ Project CI builds and publishes ``arpvpn`` image to GitLab Container Registry.
    * ``$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA``
 
 For full setup details, see ``docs/source/gitlab-deployment.rst``.
+
+## Release lines
+
+This project keeps current and multitenant releases separate:
+
+- `main` is the current `1.2.x` fix-only line.
+- `codex/multitenant-v2` is the multitenant `2.x` line.
+
+See [RELEASE_STRATEGY.md](RELEASE_STRATEGY.md) for branch, tag, and image publishing rules.
