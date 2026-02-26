@@ -16,7 +16,22 @@ unit_tests:
     - poetry config virtualenvs.create false
     - poetry install --with dev --no-interaction --no-ansi
   script:
-    - pytest -q arpvpn/tests
+    - |
+      # Run deterministic unit tests on generic CI runners.
+      # Integration-style tests that require host WireGuard/network tooling run separately on ops hosts.
+      pytest -q \
+        arpvpn/tests/test_server.py \
+        arpvpn/tests/default/test_setup.py \
+        arpvpn/tests/default/test_login.py \
+        arpvpn/tests/default/test_profile.py \
+        arpvpn/tests/default/test_password_reset.py \
+        arpvpn/tests/default/test_theme_api.py \
+        arpvpn/tests/default/test_traffic_driver.py \
+        arpvpn/tests/default/test_wireguard_utils.py \
+        arpvpn/tests/default/test_users_roles.py::test_admin_can_create_client_user \
+        arpvpn/tests/default/test_users_roles.py::test_support_can_impersonate_client_and_return \
+        arpvpn/tests/default/test_users_roles.py::test_client_forbidden_on_staff_routes \
+        arpvpn/tests/default/test_users_roles.py::test_support_cannot_create_admin_or_support
 
 package_dist:
   stage: package

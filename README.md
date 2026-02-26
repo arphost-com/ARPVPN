@@ -84,7 +84,7 @@ Project CI builds and publishes ``arpvpn`` image to GitLab Container Registry.
 
 1. Ensure project runner is Docker executor with ``privileged = true``.
 2. Ensure Container Registry is enabled in GitLab.
-3. Push by release line to publish:
+3. Push by release line to publish (only after ``unit_tests`` CI job passes):
    * ``main`` + ``v1.*`` tags publish ``stable``/``1.2.x`` and commit/tag images.
    * ``codex/multitenant-v2`` + ``v2.*`` tags publish ``v2-latest`` and commit/tag images.
 

@@ -43,7 +43,7 @@ CI publish behavior
 
 GitLab publish jobs are split by release line.
 
-1. Run test suite via ``pytest``.
+1. Run the ``unit_tests`` job (``pytest`` deterministic unit subset).
 2. Build package artifact via ``build.sh``.
 3. Build Docker image.
 4. Push branch/tag-specific image tags:
