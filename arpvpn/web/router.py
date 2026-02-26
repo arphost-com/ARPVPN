@@ -72,6 +72,9 @@ RRD_GRAPH_WINDOWS_SECONDS = {
     "30d": 30 * 24 * 60 * 60,
 }
 RRD_STEP_SECONDS = 60 * 60
+THEME_CHOICES = ("auto", "light", "dark")
+THEME_COOKIE_NAME = "arpvpn_theme"
+THEME_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365
 
 
 def is_safe_redirect_url(url: str) -> bool:
@@ -83,6 +86,15 @@ def is_safe_redirect_url(url: str) -> bool:
         return False
     parsed = urlparse(url)
     return url.startswith("/") and not url.startswith("//") and not parsed.scheme and not parsed.netloc
+
+
+def normalize_theme_choice(value: Optional[str]) -> str:
+    if not value:
+        return "auto"
+    choice = value.strip().lower()
+    if choice not in THEME_CHOICES:
+        return "auto"
+    return choice
 
 
 def get_allowed_next_target(url: str) -> Optional[Tuple[str, Dict[str, str]]]:
@@ -1226,6 +1238,46 @@ def themes():
         "title": "Themes"
     }
     return ViewController("web/themes.html", **context).load()
+
+
+@router.route("/api/v1/themes", methods=["GET"])
+@login_required
+@setup_required
+def api_get_theme_choice():
+    choice = normalize_theme_choice(request.cookies.get(THEME_COOKIE_NAME, "auto"))
+    return jsonify({
+        "choice": choice,
+        "choices": list(THEME_CHOICES)
+    })
+
+
+@router.route("/api/v1/themes", methods=["POST"])
+@login_required
+@setup_required
+def api_set_theme_choice():
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        abort(BAD_REQUEST, "Invalid payload.")
+    raw_choice = payload.get("choice", None)
+    if not isinstance(raw_choice, str):
+        abort(BAD_REQUEST, "Theme choice must be a string.")
+    choice = raw_choice.strip().lower()
+    if choice not in THEME_CHOICES:
+        abort(BAD_REQUEST, "Unknown theme choice.")
+    response = jsonify({
+        "choice": choice,
+        "choices": list(THEME_CHOICES)
+    })
+    secure_cookie = web_config.tls_mode != web_config.TLS_MODE_HTTP
+    response.set_cookie(
+        THEME_COOKIE_NAME,
+        choice,
+        max_age=THEME_COOKIE_MAX_AGE_SECONDS,
+        secure=secure_cookie,
+        httponly=True,
+        samesite="Lax",
+    )
+    return response
 
 
 @router.route("/settings")
