@@ -64,7 +64,7 @@ docker_publish_v1:
     - echo "$CI_REGISTRY_PASSWORD" | docker login "http://$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
     - |
       set -euo pipefail
-      if [ -n "$CI_COMMIT_TAG" ]; then
+      if [ -n "${CI_COMMIT_TAG:-}" ]; then
         docker build --build-arg ARPVPN_UID=1000 --build-arg ARPVPN_GID=1000 -f docker/Dockerfile \
           -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG" \
           -t "$CI_REGISTRY_IMAGE:stable" \
@@ -101,7 +101,7 @@ docker_publish_v2:
     - echo "$CI_REGISTRY_PASSWORD" | docker login "http://$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
     - |
       set -euo pipefail
-      if [ -n "$CI_COMMIT_TAG" ]; then
+      if [ -n "${CI_COMMIT_TAG:-}" ]; then
         docker build --build-arg ARPVPN_UID=1000 --build-arg ARPVPN_GID=1000 -f docker/Dockerfile \
           -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG" \
           -t "$CI_REGISTRY_IMAGE:v2-latest" \
