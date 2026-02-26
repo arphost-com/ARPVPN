@@ -273,8 +273,8 @@
                                 <tbody>
                                     {% for item in top_peers %}
                                         <tr>
-                                            <td><a href="/wireguard/peers/{{ item.peer.uuid }}">{{ item.peer.name }}</a></td>
-                                            <td><a href="/wireguard/interfaces/{{ item.peer.interface.uuid }}">{{ item.interface_name }}</a></td>
+                                            <td><a href="/traffic/rrd/{{ item.peer.uuid }}">{{ item.peer.name }}</a></td>
+                                            <td><a href="/traffic/rrd/{{ item.peer.interface.uuid }}">{{ item.interface_name }}</a></td>
                                             <td>{{ item.mode_label }}</td>
                                             <td><span class="badge badge-{{ item.handshake_badge }}">{{ item.handshake_state }}</span></td>
                                             {% if item.handshake_ago %}
@@ -323,9 +323,7 @@
                                 <tbody>
                                     {% for iface in interfaces.values() %}
                                         <tr>
-                                            <td>
-                                                <span>{{ iface.name }}</span>
-                                            </td>
+                                            <td><a href="/traffic/rrd/{{ iface.uuid }}">{{ iface.name }}</a></td>
                                             {% if iface.description %}
                                                 <td>{{ iface.description }}</td>
                                             {% else %}
@@ -412,9 +410,7 @@
                                     {% for iface in interfaces.values() %}
                                     {% for peer in iface.peers.values() %}
                                         <tr>
-                                            <td>
-                                                <span>{{ peer.name }}</span>
-                                            </td>
+                                            <td><a href="/traffic/rrd/{{ peer.uuid }}">{{ peer.name }}</a></td>
                                             <td><a href="/wireguard/interfaces/{{ iface.uuid }}">{{ iface.name }}</a></td>
                                             {% if peer.description %}
                                                 <td>{{ peer.description }}</td>

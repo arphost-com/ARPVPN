@@ -99,7 +99,9 @@
                                 <div class="col mb-4">
                                     <div class="card">
                                         <div class="card-body">
-                                            <h5 class="card-title mb-3">{{ iface.name }}</h5>
+                                            <h5 class="card-title mb-3">
+                                                <a href="/traffic/rrd/{{ iface.uuid }}">{{ iface.name }}</a>
+                                            </h5>
                                             <div class="table-responsive">
                                                 <table class="table table-bordered">
                                                     <tbody>
@@ -239,9 +241,7 @@
                                     {% for iface in interfaces.values() %}
                                     {% for peer in iface.peers.values() %}
                                         <tr>
-                                            <td>
-                                                <span>{{ peer.name }}</span>
-                                            </td>
+                                            <td><a href="/traffic/rrd/{{ peer.uuid }}">{{ peer.name }}</a></td>
                                             <td><a href="/wireguard/interfaces/{{ iface.uuid }}">{{ iface.name }}</a></td>
                                             {% if peer.description %}
                                                 <td>{{ peer.description }}</td>
