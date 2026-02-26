@@ -1,11 +1,12 @@
 import argparse
 import atexit
 import os
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from logging import warning, fatal, info, debug
 
-from flask import Flask, session
+from flask import Flask, session, current_app
 from flask_login import LoginManager, current_user
+from flask_login import login_manager as flask_login_manager
 from flask_qrcode import QRcode
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -17,7 +18,53 @@ from arpvpn.core.managers.cron import cron_manager
 from arpvpn.core.managers.wireguard import wireguard_manager
 from arpvpn.web.static.assets.resources import APP_NAME
 
-login_manager = LoginManager()
+class ARPLoginManager(LoginManager):
+    """
+    Flask-Login 0.6.3 uses datetime.utcnow() for remember-cookie expiry.
+    Keep behavior but avoid deprecated naive UTC datetime on Python 3.12+.
+    """
+
+    def _set_cookie(self, response):
+        config = current_app.config
+        cookie_name = config.get("REMEMBER_COOKIE_NAME", flask_login_manager.COOKIE_NAME)
+        domain = config.get("REMEMBER_COOKIE_DOMAIN")
+        path = config.get("REMEMBER_COOKIE_PATH", "/")
+
+        secure = config.get("REMEMBER_COOKIE_SECURE", flask_login_manager.COOKIE_SECURE)
+        httponly = config.get("REMEMBER_COOKIE_HTTPONLY", flask_login_manager.COOKIE_HTTPONLY)
+        samesite = config.get("REMEMBER_COOKIE_SAMESITE", flask_login_manager.COOKIE_SAMESITE)
+
+        if "_remember_seconds" in session:
+            duration = timedelta(seconds=session["_remember_seconds"])
+        else:
+            duration = config.get("REMEMBER_COOKIE_DURATION", flask_login_manager.COOKIE_DURATION)
+
+        data = flask_login_manager.encode_cookie(str(session["_user_id"]))
+
+        if isinstance(duration, int):
+            duration = timedelta(seconds=duration)
+
+        try:
+            expires = datetime.now(timezone.utc) + duration
+        except TypeError as e:
+            raise Exception(
+                "REMEMBER_COOKIE_DURATION must be a datetime.timedelta,"
+                f" instead got: {duration}"
+            ) from e
+
+        response.set_cookie(
+            cookie_name,
+            value=data,
+            expires=expires,
+            domain=domain,
+            path=path,
+            secure=secure,
+            httponly=httponly,
+            samesite=samesite,
+        )
+
+
+login_manager = ARPLoginManager()
 
 
 @login_manager.user_loader
