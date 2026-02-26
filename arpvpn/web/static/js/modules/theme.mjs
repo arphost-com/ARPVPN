@@ -1,6 +1,7 @@
 const THEME_STORAGE_KEY = "arpvpn.theme";
 const DARK_THEME_COLOR = "#0e1727";
 const LIGHT_THEME_COLOR = "#f4f7fb";
+const THEME_API_ENDPOINT = "/api/v1/themes";
 
 let mediaQuery = null;
 
@@ -17,6 +18,52 @@ function safeSetStorageItem(key, value) {
         localStorage.setItem(key, value);
     } catch (e) {
         // Ignore storage restrictions.
+    }
+}
+
+function isThemeApiAvailable() {
+    return Boolean(document.getElementById("layoutSidenav"));
+}
+
+async function fetchThemeChoiceFromApi() {
+    if (!isThemeApiAvailable()) return null;
+    try {
+        const response = await fetch(THEME_API_ENDPOINT, {
+            method: "GET",
+            credentials: "same-origin",
+            headers: {
+                "Accept": "application/json"
+            }
+        });
+        const contentType = response.headers.get("content-type") || "";
+        if (!response.ok || !contentType.includes("application/json")) {
+            return null;
+        }
+        const payload = await response.json();
+        const choice = payload && payload.choice;
+        if (choice === "auto" || choice === "light" || choice === "dark") {
+            return choice;
+        }
+    } catch (e) {
+        // Ignore API errors and keep local preference.
+    }
+    return null;
+}
+
+async function persistThemeChoiceToApi(choice) {
+    if (!isThemeApiAvailable()) return;
+    try {
+        await fetch(THEME_API_ENDPOINT, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            },
+            body: JSON.stringify({choice})
+        });
+    } catch (e) {
+        // Keep local preference even if API persistence fails.
     }
 }
 
@@ -72,6 +119,7 @@ export function setThemeChoice(choice) {
     safeSetStorageItem(THEME_STORAGE_KEY, choice);
     applyTheme(choice);
     initThemeControls();
+    void persistThemeChoiceToApi(choice);
 }
 
 function makeChoiceLabel(choice, resolved) {
@@ -108,7 +156,11 @@ function initSystemThemeListener() {
     });
 }
 
-function init() {
+async function init() {
+    const apiChoice = await fetchThemeChoiceFromApi();
+    if (apiChoice) {
+        safeSetStorageItem(THEME_STORAGE_KEY, apiChoice);
+    }
     applyTheme(getThemeChoice());
     initThemeControls();
     initSystemThemeListener();
@@ -123,7 +175,9 @@ window.arpvpnTheme = {
 };
 
 if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
+    document.addEventListener("DOMContentLoaded", () => {
+        void init();
+    });
 } else {
-    init();
+    void init();
 }
