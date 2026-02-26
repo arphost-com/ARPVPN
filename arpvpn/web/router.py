@@ -3,6 +3,7 @@ import io
 import json
 import os
 import re
+import subprocess
 from datetime import datetime
 from functools import wraps
 from http.client import BAD_REQUEST, NOT_FOUND, INTERNAL_SERVER_ERROR, UNAUTHORIZED, NO_CONTENT, FORBIDDEN
@@ -63,6 +64,13 @@ def get_env_int(name: str, default: int) -> int:
 
 HIGH_TRAFFIC_THRESHOLD_MB = get_env_int("ARPVPN_HIGH_TRAFFIC_THRESHOLD_MB", 1024)
 HIGH_TRAFFIC_THRESHOLD_BYTES = HIGH_TRAFFIC_THRESHOLD_MB * 1024 * 1024
+RRD_GRAPH_WINDOWS_SECONDS = {
+    "6h": 6 * 60 * 60,
+    "24h": 24 * 60 * 60,
+    "7d": 7 * 24 * 60 * 60,
+    "30d": 30 * 24 * 60 * 60,
+}
+RRD_STEP_SECONDS = 60 * 60
 
 
 def is_safe_redirect_url(url: str) -> bool:
@@ -92,6 +100,10 @@ def get_allowed_next_target(url: str) -> Optional[Tuple[str, Dict[str, str]]]:
     peer_match = re.fullmatch(r"/wireguard/peers/([a-f0-9]{32})", path)
     if peer_match:
         return "router.get_wireguard_peer", {"uuid": peer_match.group(1)}
+
+    rrd_match = re.fullmatch(r"/traffic/rrd/([a-f0-9]{32})", path)
+    if rrd_match:
+        return "router.connection_rrd_graph", {"uuid": rrd_match.group(1)}
 
     return None
 
@@ -381,6 +393,116 @@ def get_peer_runtime_summary() -> Dict[str, Any]:
             "high_traffic_threshold_human": to_human_filesize(HIGH_TRAFFIC_THRESHOLD_BYTES)
         }
     }
+
+
+def resolve_connection_item(uuid: str) -> Tuple[str, Union[Peer, Interface]]:
+    peer = get_all_peers().get(uuid, None)
+    if peer:
+        return "peer", peer
+    iface = interfaces.get(uuid, None)
+    if iface:
+        return "interface", iface
+    abort(NOT_FOUND, "Connection not found.")
+
+
+def user_can_access_connection(item_type: str, item: Union[Peer, Interface]) -> bool:
+    if current_user.has_role(*STAFF_ROLES):
+        return True
+    if not current_user.has_role(User.ROLE_CLIENT):
+        return False
+    if item_type == "peer":
+        return item.name.lower() == current_user.name.lower()
+    return any(peer.name.lower() == current_user.name.lower() for peer in item.peers.values())
+
+
+def get_connection_traffic_points(uuid: str) -> List[Tuple[int, int, int]]:
+    points = []
+    for timestamp, traffic_data in sorted(traffic_config.driver.load_data().items(), key=lambda pair: pair[0]):
+        sample = traffic_data.get(uuid, None)
+        if not sample:
+            continue
+        unix_ts = int(timestamp.timestamp())
+        if points and points[-1][0] == unix_ts:
+            points[-1] = (unix_ts, sample.rx, sample.tx)
+            continue
+        points.append((unix_ts, sample.rx, sample.tx))
+    return points
+
+
+def generate_rrd_graph_png(uuid: str, window_seconds: int) -> Optional[bytes]:
+    points = get_connection_traffic_points(uuid)
+    if len(points) < 1:
+        return None
+
+    graph_dir = global_properties.join_workdir("rrd_graphs")
+    os.makedirs(graph_dir, exist_ok=True)
+    rrd_file = os.path.join(graph_dir, f"{uuid}.rrd")
+    png_file = os.path.join(graph_dir, f"{uuid}-{window_seconds}.png")
+
+    if os.path.exists(rrd_file):
+        os.remove(rrd_file)
+
+    create_cmd = [
+        "rrdtool",
+        "create",
+        rrd_file,
+        "--step",
+        str(RRD_STEP_SECONDS),
+        "--start",
+        str(max(0, points[0][0] - RRD_STEP_SECONDS)),
+        f"DS:rx:GAUGE:{RRD_STEP_SECONDS * 2}:0:U",
+        f"DS:tx:GAUGE:{RRD_STEP_SECONDS * 2}:0:U",
+        "RRA:AVERAGE:0.5:1:10000",
+    ]
+    created = subprocess.run(create_cmd, capture_output=True, text=True, check=False)
+    if created.returncode != 0:
+        err_detail = (created.stderr or created.stdout or "unknown rrdtool error").strip()
+        raise RuntimeError(f"Unable to create RRD file: {err_detail}")
+
+    for unix_ts, rx, tx in points:
+        update = subprocess.run(
+            ["rrdtool", "update", rrd_file, f"{unix_ts}:{rx}:{tx}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if update.returncode != 0:
+            err_detail = (update.stderr or update.stdout or "unknown rrdtool error").strip()
+            raise RuntimeError(f"Unable to update RRD data: {err_detail}")
+
+    graph_cmd = [
+        "rrdtool",
+        "graph",
+        png_file,
+        "--start",
+        f"end-{window_seconds}",
+        "--end",
+        "now",
+        "--width",
+        "960",
+        "--height",
+        "280",
+        "--title",
+        "Connection traffic history",
+        "--vertical-label",
+        "Bytes",
+        f"DEF:rx={rrd_file}:rx:AVERAGE",
+        f"DEF:tx={rrd_file}:tx:AVERAGE",
+        "LINE2:rx#1f77b4:Received",
+        "LINE2:tx#ff7f0e:Transmitted",
+        r"GPRINT:rx:LAST:Last RX\: %8.2lf%sB",
+        r"GPRINT:tx:LAST:Last TX\: %8.2lf%sB",
+    ]
+    graphed = subprocess.run(graph_cmd, capture_output=True, text=True, check=False)
+    if graphed.returncode != 0:
+        err_detail = (graphed.stderr or graphed.stdout or "unknown rrdtool error").strip()
+        raise RuntimeError(f"Unable to generate RRD graph: {err_detail}")
+
+    if not os.path.exists(png_file):
+        raise RuntimeError("RRD graph generation finished without producing an image.")
+
+    with open(png_file, "rb") as handle:
+        return handle.read()
 
 
 def serialize_peer_runtime_row(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -679,6 +801,57 @@ def api_stats_alerts_csv():
     runtime = get_peer_runtime_summary()
     fields = ["level", "title", "message", "peer_name", "peer_uuid"]
     return csv_response("arpvpn-alerts.csv", fields, runtime["alerts"])
+
+
+@router.route("/traffic/rrd/<uuid>", methods=["GET"])
+@login_required
+@setup_required
+def connection_rrd_graph(uuid: str):
+    item_type, item = resolve_connection_item(uuid)
+    if not user_can_access_connection(item_type, item):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    requested_window = (request.args.get("window", "24h") or "24h").lower()
+    if requested_window not in RRD_GRAPH_WINDOWS_SECONDS:
+        abort(BAD_REQUEST, "Unknown graph window.")
+    context = {
+        "title": "Connection graph",
+        "connection_type": item_type,
+        "connection_uuid": uuid,
+        "connection_name": item.name,
+        "window": requested_window,
+        "window_options": sorted(
+            RRD_GRAPH_WINDOWS_SECONDS.keys(),
+            key=lambda key: RRD_GRAPH_WINDOWS_SECONDS[key]
+        ),
+        "image_url": url_for("router.connection_rrd_graph_png", uuid=uuid, window=requested_window),
+    }
+    return ViewController("web/traffic-rrd.html", **context).load()
+
+
+@router.route("/traffic/rrd/<uuid>.png", methods=["GET"])
+@login_required
+@setup_required
+def connection_rrd_graph_png(uuid: str):
+    item_type, item = resolve_connection_item(uuid)
+    if not user_can_access_connection(item_type, item):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    requested_window = (request.args.get("window", "24h") or "24h").lower()
+    if requested_window not in RRD_GRAPH_WINDOWS_SECONDS:
+        abort(BAD_REQUEST, "Unknown graph window.")
+
+    try:
+        png_data = generate_rrd_graph_png(uuid, RRD_GRAPH_WINDOWS_SECONDS[requested_window])
+    except RuntimeError as e:
+        log_exception(e)
+        abort(INTERNAL_SERVER_ERROR, str(e))
+
+    if png_data is None:
+        abort(NOT_FOUND, "No traffic data available for this connection yet.")
+    return Response(
+        png_data,
+        mimetype="image/png",
+        headers={"Cache-Control": "no-store, max-age=0"}
+    )
 
 
 @router.route("/wireguard/interfaces/add", methods=['GET'])

@@ -336,6 +336,9 @@
                                             <td>{{ iface.peers | length}}</td>
                                             <td>{{ iface.status}}</td>
                                             <td>
+                                                <a href="/traffic/rrd/{{ iface.uuid }}" title="RRD graph"
+                                                   class="mr-2"><i class="fas fa-chart-line"></i>
+                                                </a>
                                                 <a href="/wireguard/interfaces/{{ iface.uuid }}/download" title="Download"
                                                    class="mr-2"><i class="fa fa-download"></i>
                                                 </a>
@@ -444,6 +447,9 @@
                                                 <td>{{ EMPTY_FIELD  }}</td>
                                             {% endif %}
                                             <td>
+                                                <a href="/traffic/rrd/{{ peer.uuid }}" title="RRD graph"
+                                                   class="mr-2"><i class="fas fa-chart-line"></i>
+                                                </a>
                                                 <a href="/wireguard/peers/{{ peer.uuid }}/download" title="Download"
                                                    class="mr-2"><i class="fa fa-download"></i>
                                                 </a>
