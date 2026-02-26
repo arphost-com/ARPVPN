@@ -1,4 +1,5 @@
 import csv
+import copy
 import io
 import json
 import os
@@ -193,7 +194,8 @@ def index():
         traffic = traffic_config.driver.get_session_and_stored_data()
     else:
         traffic = {datetime.now(): traffic_config.driver.get_session_data()}
-    peer_runtime = get_peer_runtime_summary()
+    peer_runtime = filter_peer_runtime_for_current_user(get_peer_runtime_summary())
+    visible_interfaces = get_visible_interfaces_for_current_user()
     iface_names = []
     ifaces_traffic = [
         {"label": "Received", "data": []},
@@ -204,7 +206,7 @@ def index():
         {"label": "Received", "data": []},
         {"label": "Transmitted", "data": []},
     ]
-    for iface in interfaces.values():
+    for iface in visible_interfaces.values():
         iface_names.append(iface.name)
         iface_traffic = __get_total_traffic__(iface.uuid, traffic)
         ifaces_traffic[0]["data"].append(iface_traffic.rx)
@@ -215,13 +217,18 @@ def index():
             peers_traffic[0]["data"].append(peer_traffic.rx)
             peers_traffic[1]["data"].append(peer_traffic.tx)
 
-    interface_totals = get_interface_totals()
+    interface_statuses = [iface.status for iface in visible_interfaces.values()]
+    interface_totals = {
+        "total": len(visible_interfaces),
+        "up": interface_statuses.count("up"),
+        "down": interface_statuses.count("down")
+    }
 
     context = {
         "title": "Dashboard",
         "interfaces_chart": {"labels": iface_names, "datasets": ifaces_traffic},
         "peers_chart": {"labels": peer_names, "datasets": peers_traffic},
-        "interfaces": interfaces,
+        "interfaces": visible_interfaces,
         "interface_totals": interface_totals,
         "peer_runtime": peer_runtime,
         "top_peers": peer_runtime["rows"][:10],
@@ -393,6 +400,83 @@ def get_peer_runtime_summary() -> Dict[str, Any]:
             "high_traffic_threshold_human": to_human_filesize(HIGH_TRAFFIC_THRESHOLD_BYTES)
         }
     }
+
+
+def calculate_peer_runtime_totals(rows: List[Dict[str, Any]], alerts: List[Dict[str, Any]]) -> Dict[str, Any]:
+    totals = {
+        "peers": len(rows),
+        "site_to_site_peers": 0,
+        "client_peers": 0,
+        "active_peers": 0,
+        "stale_peers": 0,
+        "offline_peers": 0,
+        "never_seen_peers": 0,
+        "high_traffic_peers": 0,
+        "session_rx": 0,
+        "session_tx": 0,
+    }
+    for row in rows:
+        if row["mode"] == Peer.MODE_SITE_TO_SITE:
+            totals["site_to_site_peers"] += 1
+        else:
+            totals["client_peers"] += 1
+        if row["handshake_state"] == "active":
+            totals["active_peers"] += 1
+        elif row["handshake_state"] == "stale":
+            totals["stale_peers"] += 1
+        elif row["handshake_state"] == "offline":
+            totals["offline_peers"] += 1
+        else:
+            totals["never_seen_peers"] += 1
+        if row["high_traffic"]:
+            totals["high_traffic_peers"] += 1
+        totals["session_rx"] += row["session_rx"]
+        totals["session_tx"] += row["session_tx"]
+    totals["session_total"] = totals["session_rx"] + totals["session_tx"]
+    totals["session_rx_human"] = to_human_filesize(totals["session_rx"])
+    totals["session_tx_human"] = to_human_filesize(totals["session_tx"])
+    totals["session_total_human"] = to_human_filesize(totals["session_total"])
+    totals["alerts"] = len(alerts)
+    return totals
+
+
+def filter_peer_runtime_for_current_user(runtime: Dict[str, Any]) -> Dict[str, Any]:
+    if current_user.has_role(*STAFF_ROLES):
+        return runtime
+    if not current_user.has_role(User.ROLE_CLIENT):
+        return runtime
+    client_name = current_user.name.lower()
+    rows = [row for row in runtime["rows"] if row["peer_name"].lower() == client_name]
+    alerts = [alert for alert in runtime["alerts"] if alert["peer_name"].lower() == client_name]
+    return {
+        "totals": calculate_peer_runtime_totals(rows, alerts),
+        "rows": rows,
+        "alerts": alerts,
+        "thresholds": runtime["thresholds"]
+    }
+
+
+def get_visible_interfaces_for_current_user() -> Dict[str, Interface]:
+    if current_user.has_role(*STAFF_ROLES):
+        return dict(interfaces.items())
+    if not current_user.has_role(User.ROLE_CLIENT):
+        return {}
+    visible: Dict[str, Interface] = {}
+    client_name = current_user.name.lower()
+    for iface in interfaces.values():
+        visible_peers = [
+            peer for peer in iface.peers.values()
+            if peer.name.lower() == client_name
+        ]
+        if not visible_peers:
+            continue
+        iface_view = copy.copy(iface)
+        iface_view.peers = iface.peers.__class__()
+        for peer in visible_peers:
+            iface_view.peers[peer.uuid] = peer
+        iface_view.peers.sort()
+        visible[iface.uuid] = iface_view
+    return visible
 
 
 def resolve_connection_item(uuid: str) -> Tuple[str, Union[Peer, Interface]]:
@@ -1297,6 +1381,7 @@ def start_impersonation(user_id: str):
     if target_user.id == current_user.id:
         abort(BAD_REQUEST, "Cannot impersonate your own account.")
     session[IMPERSONATOR_SESSION_KEY] = current_user.id
+    target_user.set_authenticated(True)
     if not login_user(target_user, remember=False):
         abort(INTERNAL_SERVER_ERROR, "Unable to impersonate target user.")
     return redirect(url_for("router.index"))
@@ -1314,6 +1399,7 @@ def stop_impersonation():
     if not impersonator:
         abort(BAD_REQUEST, "No active impersonation session.")
     session.pop(IMPERSONATOR_SESSION_KEY, None)
+    impersonator.set_authenticated(True)
     if not login_user(impersonator, remember=False):
         abort(INTERNAL_SERVER_ERROR, "Unable to restore original user.")
     return redirect(url_for("router.manage_users"))

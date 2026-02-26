@@ -2,6 +2,7 @@ import pytest
 from flask_login import current_user
 
 from arpvpn.common.models.user import User, users
+from arpvpn.core.models import Interface, interfaces, Peer
 from arpvpn.tests.utils import default_cleanup, is_http_success, get_testing_app
 
 
@@ -31,6 +32,33 @@ def login(client, username: str, password: str):
         follow_redirects=True,
     )
     assert is_http_success(response.status_code)
+
+
+def setup_iface_with_peers(peer_names):
+    iface = Interface(
+        name="wgdemo0",
+        description="",
+        gw_iface="eth0",
+        ipv4_address="10.200.0.1/24",
+        listen_port=53111,
+        auto=False,
+        on_up=[],
+        on_down=[],
+    )
+    for idx, peer_name in enumerate(peer_names, start=2):
+        peer = Peer(
+            name=peer_name,
+            description="",
+            interface=iface,
+            ipv4_address=f"10.200.0.{idx}/24",
+            dns1="8.8.8.8",
+            dns2="",
+            nat=False,
+        )
+        iface.add_peer(peer)
+    interfaces[iface.uuid] = iface
+    interfaces.sort()
+    return iface
 
 
 def test_admin_can_create_client_user(client):
@@ -67,8 +95,11 @@ def test_support_can_impersonate_client_and_return(client):
 
     response = client.post("/impersonation/stop", data={}, follow_redirects=True)
     assert is_http_success(response.status_code)
-    assert current_user.name == "support"
-    assert current_user.role == User.ROLE_SUPPORT
+    with client.session_transaction() as sess:
+        assert sess.get("impersonator_user_id") is None
+        assert sess.get("_user_id") == support.id
+    response = client.get("/users")
+    assert is_http_success(response.status_code)
 
 
 def test_client_forbidden_on_staff_routes(client):
@@ -98,3 +129,18 @@ def test_support_cannot_create_admin_or_support(client):
     )
     assert is_http_success(response.status_code)
     assert users.get_value_by_attr("name", "admin2") is None
+
+
+def test_client_dashboard_hides_staff_controls_and_other_clients(client):
+    create_user("client01", "clientpass", User.ROLE_CLIENT)
+    create_user("client02", "clientpass", User.ROLE_CLIENT)
+    setup_iface_with_peers(["client01", "client02"])
+    login(client, "client01", "clientpass")
+
+    response = client.get("/dashboard")
+    assert is_http_success(response.status_code)
+    assert b"/wireguard/interfaces/add" not in response.data
+    assert b"/wireguard/peers/add" not in response.data
+    assert b"/api/v1/stats/overview" not in response.data
+    assert b"client01" in response.data
+    assert b"client02" not in response.data
