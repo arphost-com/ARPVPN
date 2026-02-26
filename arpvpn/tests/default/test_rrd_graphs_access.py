@@ -1,0 +1,87 @@
+import pytest
+
+from arpvpn.common.models.user import User, users
+from arpvpn.core.models import interfaces, Peer
+from arpvpn.tests.utils import default_cleanup, is_http_success, get_testing_app, create_test_iface
+
+
+@pytest.fixture(autouse=True)
+def cleanup():
+    yield
+    default_cleanup()
+
+
+@pytest.fixture
+def client():
+    with get_testing_app().test_client() as client:
+        yield client
+
+
+def login(client, username: str, password: str):
+    response = client.post(
+        "/login",
+        data={"username": username, "password": password, "remember_me": False},
+        follow_redirects=True,
+    )
+    assert is_http_success(response.status_code)
+
+
+def create_user(name: str, password: str, role: str):
+    user = User(name, role=role)
+    user.password = password
+    users[user.id] = user
+    return user
+
+
+def setup_connection(owner_name: str = "client01"):
+    iface = create_test_iface(name="wgdemo0", ipv4="10.123.0.1/24", port=53111)
+    peer = Peer(
+        name=owner_name,
+        description="",
+        interface=iface,
+        ipv4_address="10.123.0.2/24",
+        dns1="8.8.8.8",
+        dns2="",
+        nat=False,
+    )
+    iface.add_peer(peer)
+    interfaces[iface.uuid] = iface
+    interfaces.sort()
+    return iface, peer
+
+
+def test_admin_can_open_rrd_page(client):
+    create_user("admin", "admin", User.ROLE_ADMIN)
+    _, peer = setup_connection()
+    login(client, "admin", "admin")
+
+    response = client.get(f"/traffic/rrd/{peer.uuid}")
+    assert is_http_success(response.status_code)
+    assert b"RRD traffic history" in response.data
+
+
+def test_client_can_open_own_peer_rrd_page(client):
+    create_user("client01", "clientpass", User.ROLE_CLIENT)
+    _, peer = setup_connection(owner_name="client01")
+    login(client, "client01", "clientpass")
+
+    response = client.get(f"/traffic/rrd/{peer.uuid}")
+    assert is_http_success(response.status_code)
+
+
+def test_client_cannot_open_other_peer_rrd_page(client):
+    create_user("client01", "clientpass", User.ROLE_CLIENT)
+    _, peer = setup_connection(owner_name="client02")
+    login(client, "client01", "clientpass")
+
+    response = client.get(f"/traffic/rrd/{peer.uuid}")
+    assert response.status_code == 403
+
+
+def test_client_can_open_owned_interface_rrd_page(client):
+    create_user("client01", "clientpass", User.ROLE_CLIENT)
+    iface, _ = setup_connection(owner_name="client01")
+    login(client, "client01", "clientpass")
+
+    response = client.get(f"/traffic/rrd/{iface.uuid}")
+    assert is_http_success(response.status_code)
