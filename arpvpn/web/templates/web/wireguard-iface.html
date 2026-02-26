@@ -253,7 +253,7 @@
                                 <tbody>
                                     {% for peer in iface.peers.values() %}
                                         <tr>
-                                            <td>{{ peer.name }}</td>
+                                            <td><a href="{{ url_for('router.connection_rrd_graph', uuid=peer.uuid) }}">{{ peer.name }}</a></td>
                                             {% if peer.description %}
                                                 <td>{{ peer.description }}</td>
                                             {% else %}

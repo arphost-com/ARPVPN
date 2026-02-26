@@ -1,8 +1,8 @@
 import pytest
 
 from arpvpn.common.models.user import User, users
-from arpvpn.core.models import interfaces, Peer
-from arpvpn.tests.utils import default_cleanup, is_http_success, get_testing_app, create_test_iface
+from arpvpn.core.models import Interface, interfaces, Peer
+from arpvpn.tests.utils import default_cleanup, is_http_success, get_testing_app
 
 
 @pytest.fixture(autouse=True)
@@ -34,7 +34,16 @@ def create_user(name: str, password: str, role: str):
 
 
 def setup_connection(owner_name: str = "client01"):
-    iface = create_test_iface(name="wgdemo0", ipv4="10.123.0.1/24", port=53111)
+    iface = Interface(
+        name="wgdemo0",
+        description="",
+        gw_iface="eth0",
+        ipv4_address="10.123.0.1/24",
+        listen_port=53111,
+        auto=False,
+        on_up=[],
+        on_down=[],
+    )
     peer = Peer(
         name=owner_name,
         description="",
@@ -85,3 +94,25 @@ def test_client_can_open_owned_interface_rrd_page(client):
 
     response = client.get(f"/traffic/rrd/{iface.uuid}")
     assert is_http_success(response.status_code)
+
+
+def test_admin_dashboard_contains_rrd_links_for_connections(client):
+    create_user("admin", "admin", User.ROLE_ADMIN)
+    iface, peer = setup_connection(owner_name="client01")
+    login(client, "admin", "admin")
+
+    response = client.get("/dashboard")
+    assert is_http_success(response.status_code)
+    assert f"/traffic/rrd/{iface.uuid}".encode() in response.data
+    assert f"/traffic/rrd/{peer.uuid}".encode() in response.data
+
+
+def test_client_dashboard_contains_rrd_links_for_owned_connections(client):
+    create_user("client01", "clientpass", User.ROLE_CLIENT)
+    iface, peer = setup_connection(owner_name="client01")
+    login(client, "client01", "clientpass")
+
+    response = client.get("/dashboard")
+    assert is_http_success(response.status_code)
+    assert f"/traffic/rrd/{iface.uuid}".encode() in response.data
+    assert f"/traffic/rrd/{peer.uuid}".encode() in response.data
