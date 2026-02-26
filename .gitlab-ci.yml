@@ -1,4 +1,5 @@
 stages:
+  - test
   - package
   - container
 
@@ -7,11 +8,23 @@ variables:
   DOCKER_TLS_CERTDIR: ""
   DOCKER_HOST: tcp://docker:2375
 
+unit_tests:
+  stage: test
+  image: python:3.11-slim
+  before_script:
+    - pip install --no-cache-dir poetry==1.8.3
+    - poetry config virtualenvs.create false
+    - poetry install --with dev --no-interaction --no-ansi
+  script:
+    - pytest -q arpvpn/tests
+
 package_dist:
   stage: package
   image: python:3.11-slim
   before_script:
     - pip install --no-cache-dir poetry==1.8.3
+  needs:
+    - unit_tests
   script:
     - rm -rf dist
     - ./build.sh
@@ -30,6 +43,7 @@ docker_publish_v1:
         - "--tls=false"
         - "--insecure-registry=10.10.10.96:5050"
   needs:
+    - unit_tests
     - package_dist
   script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login "http://$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
@@ -66,6 +80,7 @@ docker_publish_v2:
         - "--tls=false"
         - "--insecure-registry=10.10.10.96:5050"
   needs:
+    - unit_tests
     - package_dist
   script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login "http://$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin

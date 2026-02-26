@@ -43,9 +43,10 @@ CI publish behavior
 
 On push to default branch (or tags), pipeline will:
 
-1. Build package artifact via ``build.sh``.
-2. Build Docker image.
-3. Push:
+1. Run test suite via ``pytest``.
+2. Build package artifact via ``build.sh``.
+3. Build Docker image.
+4. Push:
 
    * ``$CI_REGISTRY_IMAGE:stable``
    * ``$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA``
