@@ -43,9 +43,10 @@ CI publish behavior
 
 GitLab publish jobs are split by release line.
 
-1. Build package artifact via ``build.sh``.
-2. Build Docker image.
-3. Push branch/tag-specific image tags:
+1. Run test suite via ``pytest``.
+2. Build package artifact via ``build.sh``.
+3. Build Docker image.
+4. Push branch/tag-specific image tags:
 
    * ``main`` + ``v1.*`` tags:
       * ``$CI_REGISTRY_IMAGE:stable``
