@@ -43,7 +43,7 @@ CI publish behavior
 
 On push to default branch (or tags), pipeline will:
 
-1. Run test suite via ``pytest``.
+1. Run the ``unit_tests`` job (``pytest`` deterministic unit subset).
 2. Build package artifact via ``build.sh``.
 3. Build Docker image.
 4. Push:
