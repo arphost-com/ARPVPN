@@ -73,6 +73,9 @@ class User(UserMixin, YamlAble):
             self.login_date = datetime.now()
         return self.__authenticated
 
+    def set_authenticated(self, authenticated: bool = True):
+        self.__authenticated = bool(authenticated)
+
     def check_password(self, password: str) -> bool:
         """Check if the specified password matches the user's password without triggering a proper login."""
         return check_password_hash(self.password, password)
