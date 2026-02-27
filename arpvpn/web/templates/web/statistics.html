@@ -1,0 +1,169 @@
+{% extends "web/web-main.html" %}
+
+{% block content %}
+    <main>
+        <div class="container-fluid">
+            <div class="page-header my-4">
+                <div>
+                    <h1 class="mb-1">{{ title }}</h1>
+                    <p class="text-muted mb-0">Historical RRD visibility by peer and interface plus operational health indicators.</p>
+                </div>
+                <div class="page-header-actions">
+                    <a href="/api/v1/stats/overview" class="btn btn-outline-primary btn-sm">Overview JSON</a>
+                    <a href="/api/v1/stats/peers.csv" class="btn btn-outline-primary btn-sm">Peers CSV</a>
+                    <span class="badge badge-light page-update-pill">Updated {{ last_update }}</span>
+                </div>
+            </div>
+
+            {% if not traffic_config.enabled %}
+                <div class="alert alert-warning">
+                    Traffic collection is disabled. Enable it in <a href="/settings">Settings</a> to populate RRD history.
+                </div>
+            {% endif %}
+
+            <div class="row mb-4">
+                <div class="col-sm-6 col-xl-2 mb-3">
+                    <div class="stat-tile">
+                        <div class="stat-label">Connections</div>
+                        <div class="stat-value">{{ connections_total }}</div>
+                        <div class="stat-subtle">peers + interfaces</div>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-xl-2 mb-3">
+                    <div class="stat-tile">
+                        <div class="stat-label">RRD ready</div>
+                        <div class="stat-value text-success">{{ rrd_ready_count }}</div>
+                        <div class="stat-subtle">with historical samples</div>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-xl-2 mb-3">
+                    <div class="stat-tile">
+                        <div class="stat-label">Failures</div>
+                        <div class="stat-value text-danger">{{ failure_count }}</div>
+                        <div class="stat-subtle">stale/offline/never seen</div>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-xl-2 mb-3">
+                    <div class="stat-tile">
+                        <div class="stat-label">Alerts</div>
+                        <div class="stat-value text-warning">{{ peer_runtime["totals"]["alerts"] }}</div>
+                        <div class="stat-subtle">active recommendations</div>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-xl-2 mb-3">
+                    <div class="stat-tile">
+                        <div class="stat-label">Session RX</div>
+                        <div class="stat-value">{{ peer_runtime["totals"]["session_rx_human"] }}</div>
+                        <div class="stat-subtle">received traffic</div>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-xl-2 mb-3">
+                    <div class="stat-tile">
+                        <div class="stat-label">Session TX</div>
+                        <div class="stat-value">{{ peer_runtime["totals"]["session_tx_human"] }}</div>
+                        <div class="stat-subtle">transmitted traffic</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4 panel-glass">
+                <div class="card-header">
+                    <i class="fas fa-file-alt mr-1"></i>
+                    Runtime log summary
+                </div>
+                <div class="card-body">
+                    {% if log_summary["available"] %}
+                        <div class="row">
+                            <div class="col-md-4 mb-2"><strong>Total lines:</strong> {{ log_summary["total_lines"] }}</div>
+                            <div class="col-md-4 mb-2"><strong>Warnings (tail):</strong> {{ log_summary["warning_lines"] }}</div>
+                            <div class="col-md-4 mb-2"><strong>Errors/Fatal (tail):</strong> {{ log_summary["error_lines"] }}</div>
+                        </div>
+                        {% if log_summary["recent_issues"] %}
+                            <div class="table-responsive mt-3">
+                                <table class="table table-bordered table-sm mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Recent warnings/errors</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for line in log_summary["recent_issues"] %}
+                                            <tr>
+                                                <td><code>{{ line }}</code></td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <span class="text-muted">No warning or error lines in the inspected log tail.</span>
+                        {% endif %}
+                    {% elif log_summary["read_error"] %}
+                        <span class="text-danger">Unable to read logfile: {{ log_summary["read_error"] }}</span>
+                    {% else %}
+                        <span class="text-muted">Logfile not available yet.</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card mb-4 panel-glass">
+                <div class="card-header">
+                    <i class="fas fa-chart-line mr-1"></i>
+                    Connection history
+                </div>
+                <div class="card-body">
+                    {% if statistics_rows %}
+                        <div class="table-responsive">
+                            <table class="table table-bordered mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Type</th>
+                                        <th>Name</th>
+                                        <th>Parent</th>
+                                        <th>Status</th>
+                                        <th>Session RX / TX / Total</th>
+                                        <th>History</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for row in statistics_rows %}
+                                        <tr>
+                                            <td>{{ row["type_label"] }}</td>
+                                            <td><a href="{{ url_for('router.connection_rrd_graph', uuid=row['uuid']) }}">{{ row["name"] }}</a></td>
+                                            <td>{{ row["parent_name"] }}</td>
+                                            <td>{{ row["status"] }}</td>
+                                            <td>{{ row["session_rx_human"] }} / {{ row["session_tx_human"] }} / {{ row["session_total_human"] }}</td>
+                                            <td>
+                                                <img
+                                                  class="img-fluid border rounded mb-2"
+                                                  style="max-width: 240px;"
+                                                  src="{{ url_for('router.connection_rrd_graph_png', uuid=row['uuid'], window=default_window) }}"
+                                                  alt="RRD graph for {{ row['name'] }}"
+                                                  onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"
+                                                />
+                                                <span class="text-muted small" style="display:none;">No graph data yet.</span>
+                                                <div class="mt-2">
+                                                    {% for option in window_options %}
+                                                        <a
+                                                          class="btn btn-sm btn-outline-primary mr-1 mb-1"
+                                                          href="{{ url_for('router.connection_rrd_graph', uuid=row['uuid'], window=option) }}"
+                                                        >
+                                                            {{ option }}
+                                                        </a>
+                                                    {% endfor %}
+                                                </div>
+                                                <small class="text-muted d-block mt-1">{{ row["sample_points"] }} stored samples</small>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <span class="text-muted">No visible connections for this account.</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </main>
+{% endblock %}
