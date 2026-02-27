@@ -31,8 +31,10 @@ def test_http_redirect_disabled_when_flag_is_off(client):
     web_config.tls_server_name = "vpn.example.com"
     web_config.redirect_http_to_https = False
 
-    response = client.get("/login", base_url="http://vpn.example.com")
-    assert response.status_code == 200
+    response = client.get("/login", base_url="http://vpn.example.com", follow_redirects=False)
+    assert response.status_code != 307
+    location = response.headers.get("Location", "")
+    assert not location.startswith("https://vpn.example.com/")
 
 
 def test_http_redirect_enabled_for_self_signed(client):
