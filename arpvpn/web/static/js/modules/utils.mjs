@@ -1,5 +1,9 @@
 (function($) {
     $("[data-toggle=popover]").popover();
+    // Keep the dashboard shell in fixed-layout mode whenever the sidenav exists.
+    if ($("#layoutSidenav").length) {
+        $("body").addClass("sb-nav-fixed");
+    }
     // Add active state to sidebar nav links
     const path = window.location.href; // because the 'href' property of the DOM element is the absolute path
         $("#layoutSidenav_nav .sb-sidenav a.nav-link").each(function() {
