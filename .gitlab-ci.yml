@@ -34,6 +34,22 @@ unit_tests:
         arpvpn/tests/default/test_users_roles.py::test_client_forbidden_on_staff_routes \
         arpvpn/tests/default/test_users_roles.py::test_support_cannot_create_admin_or_support
 
+integration_tests_env:
+  stage: test
+  image: python:3.11-slim
+  allow_failure: true
+  before_script:
+    - pip install --no-cache-dir poetry==1.8.3
+    - poetry config virtualenvs.create false
+    - poetry install --with dev --no-interaction --no-ansi
+  script:
+    - |
+      # Full environment/integration suite (requires WireGuard/network tooling on runner host).
+      pytest -q arpvpn/tests
+  rules:
+    - if: '$RUN_ENV_INTEGRATION_TESTS == "1"'
+    - when: never
+
 package_dist:
   stage: package
   image: python:3.11-slim

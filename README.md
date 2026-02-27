@@ -87,6 +87,8 @@ Project CI builds and publishes ``arpvpn`` image to GitLab Container Registry.
 3. Push by release line to publish (only after ``unit_tests`` CI job passes):
    * ``main`` + ``v1.*`` tags publish ``stable``/``1.2.x`` and commit/tag images.
    * ``codex/multitenant-v2`` + ``v2.*`` tags publish ``v2-latest`` and commit/tag images.
+4. Optional environment/integration tests can be run by setting pipeline variable
+   ``RUN_ENV_INTEGRATION_TESTS=1`` (non-blocking; informative only).
 
 For full setup details, see ``docs/source/gitlab-deployment.rst``.
 
