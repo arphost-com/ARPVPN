@@ -116,6 +116,10 @@ class SettingsForm(FlaskForm):
         default=web_config.proxy_incoming_hostname,
         validators=[HostnameValidator()],
     )
+    web_redirect_http_to_https = BooleanField(
+        "Redirect HTTP requests to HTTPS",
+        default=web_config.redirect_http_to_https,
+    )
     web_tls_generate_self_signed = BooleanField("Generate/re-generate self-signed certificate now", default=False)
     web_tls_issue_letsencrypt = BooleanField("Issue/renew Let's Encrypt certificate now", default=False)
 
@@ -193,6 +197,12 @@ class SettingsForm(FlaskForm):
                 "is required when reverse proxy mode is enabled."
             )
             valid = False
+
+        if self.web_redirect_http_to_https.data and mode == web_config.TLS_MODE_HTTP:
+            self.web_redirect_http_to_https.errors.append(
+                "can only be enabled when TLS mode is not Direct HTTP."
+            )
+            valid = False
         return valid
 
     @classmethod
@@ -206,6 +216,7 @@ class SettingsForm(FlaskForm):
         form.web_tls_server_name.data = web_config.tls_server_name
         form.web_tls_letsencrypt_email.data = web_config.tls_letsencrypt_email
         form.web_proxy_incoming_hostname.data = web_config.proxy_incoming_hostname
+        form.web_redirect_http_to_https.data = web_config.redirect_http_to_https
         form.web_tls_generate_self_signed.data = False
         form.web_tls_issue_letsencrypt.data = False
 
@@ -266,6 +277,10 @@ class SetupForm(FlaskForm):
         default=web_config.proxy_incoming_hostname,
         validators=[HostnameValidator()],
     )
+    web_redirect_http_to_https = BooleanField(
+        "Redirect HTTP requests to HTTPS",
+        default=web_config.redirect_http_to_https,
+    )
     web_tls_generate_self_signed = BooleanField("Generate self-signed certificate now", default=False)
     web_tls_issue_letsencrypt = BooleanField("Issue Let's Encrypt certificate now", default=False)
 
@@ -320,6 +335,12 @@ class SetupForm(FlaskForm):
         if mode == web_config.TLS_MODE_REVERSE_PROXY and not (self.web_proxy_incoming_hostname.data or "").strip():
             self.web_proxy_incoming_hostname.errors.append(
                 "is required when reverse proxy mode is enabled."
+            )
+            valid = False
+
+        if self.web_redirect_http_to_https.data and mode == web_config.TLS_MODE_HTTP:
+            self.web_redirect_http_to_https.errors.append(
+                "can only be enabled when TLS mode is not Direct HTTP."
             )
             valid = False
         return valid

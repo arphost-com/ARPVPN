@@ -48,5 +48,6 @@ web: !yamlable/web
   tls_server_name: vpn.example.com
   tls_letsencrypt_email: admin@example.com
   proxy_incoming_hostname: ''
+  redirect_http_to_https: false
   tls_cert_file: ''
   tls_key_file: ''

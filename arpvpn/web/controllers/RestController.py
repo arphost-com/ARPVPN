@@ -146,6 +146,9 @@ class RestController:
         web_config.proxy_incoming_hostname = (
             (form.web_proxy_incoming_hostname.data or "").strip() or sample_web.proxy_incoming_hostname
         )
+        web_config.redirect_http_to_https = (
+            bool(form.web_redirect_http_to_https.data) and web_config.tls_mode != web_config.TLS_MODE_HTTP
+        )
 
         sample_wireguard = WireguardConfig()
 
@@ -179,6 +182,9 @@ class RestController:
         )
         web_config.proxy_incoming_hostname = (
             (form.web_proxy_incoming_hostname.data or "").strip() or sample_web.proxy_incoming_hostname
+        )
+        web_config.redirect_http_to_https = (
+            bool(form.web_redirect_http_to_https.data) and web_config.tls_mode != web_config.TLS_MODE_HTTP
         )
 
         sample_wireguard = WireguardConfig()

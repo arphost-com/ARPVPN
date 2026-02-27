@@ -10407,6 +10407,22 @@ a:hover {
   color: #f3f6ff !important;
 }
 
+.topbar-modern .theme-toggle-inline .btn {
+  min-width: 3.25rem;
+}
+
+.topbar-modern .theme-toggle-inline .btn-outline-secondary {
+  color: #d6def0;
+  border-color: rgba(214, 222, 240, 0.45);
+}
+
+.topbar-modern .theme-toggle-inline .btn-outline-secondary:hover,
+.topbar-modern .theme-toggle-inline .btn-outline-secondary.active {
+  color: #ffffff;
+  border-color: rgba(126, 172, 255, 0.85);
+  background-color: rgba(82, 137, 238, 0.35);
+}
+
 .arphost-brand-link {
   display: inline-flex;
   align-items: center;
@@ -10532,8 +10548,19 @@ textarea.form-control:-webkit-autofill,
 textarea.form-control:-webkit-autofill:hover,
 textarea.form-control:-webkit-autofill:focus {
   -webkit-text-fill-color: var(--theme-input-text);
+  -webkit-box-shadow: 0 0 0 1000px var(--theme-input-bg) inset;
   box-shadow: 0 0 0 1000px var(--theme-input-bg) inset;
   transition: background-color 9999s ease-in-out 0s;
+}
+
+input.form-control:-moz-autofill,
+input.form-control:-moz-autofill:hover,
+input.form-control:-moz-autofill:focus,
+textarea.form-control:-moz-autofill,
+textarea.form-control:-moz-autofill:hover,
+textarea.form-control:-moz-autofill:focus {
+  color: var(--theme-input-text) !important;
+  box-shadow: 0 0 0 1000px var(--theme-input-bg) inset !important;
 }
 
 .form-control:focus,

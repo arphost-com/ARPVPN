@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from logging import warning, fatal, info, debug
 
-from flask import Flask, session, current_app
+from flask import Flask, session, current_app, request, redirect
 from flask_login import LoginManager, current_user
 from flask_login import login_manager as flask_login_manager
 from flask_qrcode import QRcode
@@ -131,6 +131,45 @@ wireguard_manager.start()
 cron_manager.start()
 
 
+def _https_redirect_mode_enabled() -> bool:
+    if not bool(getattr(web_config, "redirect_http_to_https", False)):
+        return False
+    return web_config.tls_mode in (
+        web_config.TLS_MODE_SELF_SIGNED,
+        web_config.TLS_MODE_LETS_ENCRYPT,
+        web_config.TLS_MODE_REVERSE_PROXY,
+    )
+
+
+def _https_redirect_host() -> str:
+    if web_config.tls_mode == web_config.TLS_MODE_REVERSE_PROXY:
+        return (web_config.proxy_incoming_hostname or "").strip()
+    return (web_config.tls_server_name or "").strip()
+
+
+@app.before_request
+def maybe_redirect_http_to_https():
+    if not _https_redirect_mode_enabled():
+        return None
+    if request.is_secure:
+        return None
+    x_forwarded_proto = request.headers.get("X-Forwarded-Proto", "").split(",", 1)[0].strip().lower()
+    if x_forwarded_proto == "https":
+        return None
+
+    host = _https_redirect_host()
+    if not host:
+        warning("HTTP->HTTPS redirect enabled but no trusted hostname configured; skipping redirect.")
+        return None
+
+    path = request.path or "/"
+    query = request.query_string.decode("utf-8", errors="ignore")
+    location = f"https://{host}{path}"
+    if query:
+        location = f"{location}?{query}"
+    return redirect(location, code=307)
+
+
 @app.context_processor
 def inject_user_access_context():
     role = None
@@ -176,7 +215,7 @@ def add_security_headers(response):
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' https://code.jquery.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://cdn.datatables.net; "
-        "style-src 'self' 'unsafe-inline' https://cdn.datatables.net; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.datatables.net; "
         "img-src 'self' data:; "
         "font-src 'self' https: data:; "
         "connect-src 'self'; "

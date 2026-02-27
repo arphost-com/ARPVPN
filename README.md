@@ -68,6 +68,7 @@ TLS can be configured from the UI (`Settings -> Web`):
 * `Self-signed certificate` to generate and apply a local certificate.
 * `Let's Encrypt certificate` to issue/renew with `certbot` and apply it to ARPVPN.
 * `Behind reverse proxy` to keep ARPVPN on HTTP and define the proxy incoming hostname.
+* `Redirect HTTP to HTTPS` can be enabled when TLS mode is active.
 
 For Let's Encrypt issuance, your hostname must resolve publicly to the host and inbound port `80/tcp` must be reachable.
 NOTE: Check available tags in your GitLab project's Container Registry and pin if needed.

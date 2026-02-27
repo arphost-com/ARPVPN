@@ -79,6 +79,11 @@
                                                               Error in field <strong>{{ form.web_proxy_incoming_hostname.label.text }}</strong>: {{ error }}
                                                             </div>
                                                         {% endfor %}
+                                                        {% for error in form.web_redirect_http_to_https.errors %}
+                                                            <div class="alert alert-danger" role="alert">
+                                                              Error in field <strong>{{ form.web_redirect_http_to_https.label.text }}</strong>: {{ error }}
+                                                            </div>
+                                                        {% endfor %}
                                                         {% for error in form.web_tls_generate_self_signed.errors %}
                                                             <div class="alert alert-danger" role="alert">
                                                               Error in field <strong>{{ form.web_tls_generate_self_signed.label.text }}</strong>: {{ error }}
@@ -115,6 +120,12 @@
                                                         <div class="form-group col-md-4">
                                                             {{ form.web_tls_letsencrypt_email.label() }}
                                                             {{ form.web_tls_letsencrypt_email(class="form-control", id="web_tls_letsencrypt_email") }}
+                                                        </div>
+                                                        <div class="form-group col-md-4 d-flex align-items-end">
+                                                            <div class="custom-control custom-checkbox mb-2">
+                                                                {{ form.web_redirect_http_to_https(class="custom-control-input", id="web_redirect_http_to_https") }}
+                                                                {{ form.web_redirect_http_to_https.label(class="custom-control-label") }}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                     <div class="form-row">

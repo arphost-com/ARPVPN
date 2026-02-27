@@ -8,6 +8,16 @@ from arpvpn.common.utils.encryption import CryptoUtils
 from arpvpn.core.config.base import BaseConfig
 
 
+def parse_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    return bool(value)
+
+
 @yaml_info(yaml_tag='web')
 class WebConfig(BaseConfig):
     MAX_PORT = 65535
@@ -33,6 +43,7 @@ class WebConfig(BaseConfig):
     tls_server_name: str
     tls_letsencrypt_email: str
     proxy_incoming_hostname: str
+    redirect_http_to_https: bool
     tls_cert_file: str
     tls_key_file: str
 
@@ -60,6 +71,7 @@ class WebConfig(BaseConfig):
         self.tls_server_name = ""
         self.tls_letsencrypt_email = ""
         self.proxy_incoming_hostname = ""
+        self.redirect_http_to_https = False
         self.tls_cert_file = ""
         self.tls_key_file = ""
 
@@ -73,6 +85,7 @@ class WebConfig(BaseConfig):
         self.tls_server_name = config.tls_server_name or self.tls_server_name
         self.tls_letsencrypt_email = config.tls_letsencrypt_email or self.tls_letsencrypt_email
         self.proxy_incoming_hostname = config.proxy_incoming_hostname or self.proxy_incoming_hostname
+        self.redirect_http_to_https = parse_bool(getattr(config, "redirect_http_to_https", False), False)
         self.tls_cert_file = config.tls_cert_file or self.tls_cert_file
         self.tls_key_file = config.tls_key_file or self.tls_key_file
 
@@ -85,6 +98,7 @@ class WebConfig(BaseConfig):
             "tls_server_name": self.tls_server_name,
             "tls_letsencrypt_email": self.tls_letsencrypt_email,
             "proxy_incoming_hostname": self.proxy_incoming_hostname,
+            "redirect_http_to_https": self.redirect_http_to_https,
             "tls_cert_file": self.tls_cert_file,
             "tls_key_file": self.tls_key_file,
         }
@@ -104,6 +118,7 @@ class WebConfig(BaseConfig):
         config.tls_server_name = dct.get("tls_server_name", None) or config.tls_server_name
         config.tls_letsencrypt_email = dct.get("tls_letsencrypt_email", None) or config.tls_letsencrypt_email
         config.proxy_incoming_hostname = dct.get("proxy_incoming_hostname", None) or config.proxy_incoming_hostname
+        config.redirect_http_to_https = parse_bool(dct.get("redirect_http_to_https", False), False)
         config.tls_cert_file = dct.get("tls_cert_file", None) or config.tls_cert_file
         config.tls_key_file = dct.get("tls_key_file", None) or config.tls_key_file
         return config
