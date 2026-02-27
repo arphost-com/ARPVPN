@@ -22,8 +22,26 @@ def test_get(client):
     login(client)
     iface1 = create_test_iface("iface1", "10.0.0.1/24", 50000)
     iface2 = create_test_iface("iface2", "10.0.1.1/24", 50001)
-    peer1 = Peer(name="peer1", description="", ipv4_address="10.0.0.2/24", nat=False, interface=iface1, dns1="8.8.8.8")
-    peer2 = Peer(name="peer2", description="", ipv4_address="10.0.1.2/24", nat=False, interface=iface2, dns1="8.8.8.8")
+    peer1 = Peer(
+        name="peer1",
+        description="",
+        ipv4_address="10.0.0.2/24",
+        nat=False,
+        interface=iface1,
+        dns1="8.8.8.8",
+        private_key="test-peer1-private",
+        public_key="test-peer1-public",
+    )
+    peer2 = Peer(
+        name="peer2",
+        description="",
+        ipv4_address="10.0.1.2/24",
+        nat=False,
+        interface=iface2,
+        dns1="8.8.8.8",
+        private_key="test-peer2-private",
+        public_key="test-peer2-public",
+    )
     iface1.add_peer(peer1)
     iface2.add_peer(peer2)
     interfaces[iface1.uuid] = iface1
@@ -39,12 +57,23 @@ def test_get(client):
 def test_stats_overview_api(client):
     login(client)
     iface = create_test_iface("iface1", "10.0.0.1/24", 50000)
-    peer = Peer(name="peer1", description="", ipv4_address="10.0.0.2/24", nat=False, interface=iface, dns1="8.8.8.8")
+    peer = Peer(
+        name="peer1",
+        description="",
+        ipv4_address="10.0.0.2/24",
+        nat=False,
+        interface=iface,
+        dns1="8.8.8.8",
+        private_key="test-peer-private",
+        public_key="test-peer-public",
+    )
     iface.add_peer(peer)
     interfaces[iface.uuid] = iface
     response = client.get("/api/v1/stats/overview")
     assert is_http_success(response.status_code)
-    body = response.get_json()
+    envelope = response.get_json()
+    assert envelope["ok"] is True
+    body = envelope["data"]
     assert "generated_at" in body
     assert "interfaces" in body
     assert "peers" in body
@@ -55,7 +84,16 @@ def test_stats_overview_api(client):
 def test_stats_peers_csv(client):
     login(client)
     iface = create_test_iface("iface1", "10.0.0.1/24", 50000)
-    peer = Peer(name="peer1", description="", ipv4_address="10.0.0.2/24", nat=False, interface=iface, dns1="8.8.8.8")
+    peer = Peer(
+        name="peer1",
+        description="",
+        ipv4_address="10.0.0.2/24",
+        nat=False,
+        interface=iface,
+        dns1="8.8.8.8",
+        private_key="test-peer-private",
+        public_key="test-peer-public",
+    )
     iface.add_peer(peer)
     interfaces[iface.uuid] = iface
     response = client.get("/api/v1/stats/peers.csv")

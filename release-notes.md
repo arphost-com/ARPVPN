@@ -2,6 +2,13 @@
 
 ## What's new
 
+### 1.2.2
+
+* Added scoped statistics APIs for admins/clients including per-connection history and RRD metadata endpoints.
+* Added TLS management APIs for mode switching, self-signed generation, Let's Encrypt issue/renew, and certificate status.
+* Standardized API error/success envelopes for JSON APIs and added request ID propagation (`X-Request-ID`).
+* Expanded tests and CI hard-gate coverage for statistics and TLS API behavior.
+
 ### 1.2.1
 
 * Improved theme consistency on the login screen by fixing browser autofill color overrides.

@@ -4,9 +4,10 @@ import io
 import json
 import os
 import re
+import secrets
 import subprocess
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import wraps
 from http.client import BAD_REQUEST, NOT_FOUND, INTERNAL_SERVER_ERROR, UNAUTHORIZED, NO_CONTENT, FORBIDDEN
 from ipaddress import IPv4Address
@@ -15,7 +16,7 @@ from time import sleep
 from typing import List, Dict, Any, Union, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
-from flask import Blueprint, abort, request, Response, redirect, url_for, jsonify, session
+from flask import Blueprint, abort, request, Response, redirect, url_for, jsonify, session, g
 from flask_login import current_user, login_required, login_user
 
 from arpvpn.common.models.user import users, User
@@ -31,6 +32,7 @@ from arpvpn.core.config.wireguard import config as wireguard_config
 from arpvpn.core.drivers.traffic_storage_driver import TrafficData
 from arpvpn.core.exceptions import WireguardError
 from arpvpn.core.managers.config import config_manager
+from arpvpn.core.managers.tls import tls_manager
 from arpvpn.core.models import interfaces, Interface, get_all_peers, Peer
 from arpvpn.core.utils.wireguard import is_wg_iface_up
 from arpvpn.web.client import clients, Client
@@ -83,6 +85,7 @@ RRD_STEP_SECONDS = 60 * 60
 THEME_CHOICES = ("auto", "light", "dark")
 THEME_COOKIE_NAME = "arpvpn_theme"
 THEME_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365
+MAX_HISTORY_POINTS = 5000
 
 
 def is_safe_redirect_url(url: str) -> bool:
@@ -160,6 +163,75 @@ class Router(Blueprint):
 router = Router("router", __name__)
 
 config_manager.load()
+
+
+def is_api_request() -> bool:
+    return request.path.startswith("/api/")
+
+
+def current_scope_label() -> str:
+    return "staff" if current_user.has_role(*STAFF_ROLES) else "client"
+
+
+def ensure_request_id() -> str:
+    request_id = request.headers.get("X-Request-ID", "").strip()
+    if not request_id:
+        request_id = secrets.token_hex(16)
+    g.request_id = request_id
+    return request_id
+
+
+def get_request_id() -> str:
+    request_id = getattr(g, "request_id", None)
+    if request_id:
+        return request_id
+    return ensure_request_id()
+
+
+@router.before_request
+def assign_request_id():
+    ensure_request_id()
+
+
+@router.after_request
+def apply_request_id_header(response: Response):
+    response.headers["X-Request-ID"] = get_request_id()
+    return response
+
+
+def api_success(
+    data: Any,
+    status_code: int = 200,
+    meta: Optional[Dict[str, Any]] = None
+) -> Tuple[Response, int]:
+    payload: Dict[str, Any] = {
+        "ok": True,
+        "request_id": get_request_id(),
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "data": data,
+    }
+    if meta:
+        payload["meta"] = meta
+    return jsonify(payload), status_code
+
+
+def api_error(
+    status_code: int,
+    code: str,
+    message: str,
+    details: Optional[Dict[str, Any]] = None
+) -> Tuple[Response, int]:
+    payload: Dict[str, Any] = {
+        "ok": False,
+        "request_id": get_request_id(),
+        "error": {
+            "code": code,
+            "message": message,
+        },
+    }
+    if details:
+        payload["error"]["details"] = details
+    return jsonify(payload), status_code
 
 
 def setup_required(f):
@@ -505,7 +577,7 @@ def build_statistics_payload(include_log_issues: bool = False) -> Dict[str, Any]
         "handshake_failures": handshake_failures,
         "log_summary": log_summary,
         "failure_metrics": failure_metrics,
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "scope": "staff" if current_user.has_role(*STAFF_ROLES) else "client",
     }
 
@@ -549,13 +621,21 @@ def __get_total_traffic__(uuid: str, traffic: Dict[datetime, Dict[str, TrafficDa
     return TrafficData(rx, tx)
 
 
-def get_interface_totals() -> Dict[str, int]:
-    statuses = [iface.status for iface in interfaces.values()]
+def calculate_interface_totals(visible_interfaces: Dict[str, Interface]) -> Dict[str, int]:
+    statuses = [iface.status for iface in visible_interfaces.values()]
     return {
-        "total": len(interfaces),
+        "total": len(visible_interfaces),
         "up": statuses.count("up"),
         "down": statuses.count("down")
     }
+
+
+def get_interface_totals() -> Dict[str, int]:
+    return calculate_interface_totals(dict(interfaces.items()))
+
+
+def get_visible_interface_totals_for_current_user() -> Dict[str, int]:
+    return calculate_interface_totals(get_visible_interfaces_for_current_user())
 
 
 def to_human_filesize(size_bytes: int) -> str:
@@ -965,11 +1045,53 @@ def serialize_peer_runtime_row(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def build_stats_snapshot() -> Dict[str, Any]:
-    peer_runtime = get_peer_runtime_summary()
+def get_scoped_peer_runtime_summary() -> Dict[str, Any]:
+    return filter_peer_runtime_for_current_user(get_peer_runtime_summary())
+
+
+def build_connection_descriptor(item_type: str, item: Union[Peer, Interface]) -> Dict[str, Any]:
+    parent_name = EMPTY_FIELD
+    if item_type == "peer" and item.interface:
+        parent_name = item.interface.name
     return {
-        "generated_at": datetime.utcnow().isoformat() + "Z",
-        "interfaces": get_interface_totals(),
+        "type": item_type,
+        "uuid": item.uuid,
+        "name": item.name,
+        "parent_name": parent_name,
+    }
+
+
+def filter_points_for_window(points: List[Tuple[int, int, int]], requested_window: str) -> List[Tuple[int, int, int]]:
+    if requested_window == "all" or not points:
+        return points
+    if requested_window not in RRD_GRAPH_WINDOWS_SECONDS:
+        abort(BAD_REQUEST, "Unknown graph window.")
+    latest_ts = points[-1][0]
+    start_ts = latest_ts - RRD_GRAPH_WINDOWS_SECONDS[requested_window]
+    return [point for point in points if point[0] >= start_ts]
+
+
+def serialize_traffic_points(points: List[Tuple[int, int, int]]) -> List[Dict[str, Any]]:
+    serialized: List[Dict[str, Any]] = []
+    for unix_ts, rx_bytes, tx_bytes in points[-MAX_HISTORY_POINTS:]:
+        total_bytes = rx_bytes + tx_bytes
+        serialized.append({
+            "timestamp_unix": unix_ts,
+            "timestamp_iso": datetime.fromtimestamp(unix_ts, timezone.utc).isoformat().replace("+00:00", "Z"),
+            "rx_bytes": rx_bytes,
+            "tx_bytes": tx_bytes,
+            "total_bytes": total_bytes,
+            "total_human": to_human_filesize(total_bytes),
+        })
+    return serialized
+
+
+def build_stats_snapshot() -> Dict[str, Any]:
+    peer_runtime = get_scoped_peer_runtime_summary()
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "scope": current_scope_label(),
+        "interfaces": get_visible_interface_totals_for_current_user(),
         "peers": peer_runtime["totals"],
         "thresholds": peer_runtime["thresholds"],
         "alerts": peer_runtime["alerts"],
@@ -1032,6 +1154,129 @@ def csv_response(filename: str, fieldnames: List[str], rows: List[Dict[str, Any]
         mimetype="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+def parse_openssl_time(raw_value: str) -> Optional[datetime]:
+    value = (raw_value or "").strip()
+    if not value:
+        return None
+    for fmt in ("%b %d %H:%M:%S %Y %Z", "%b %d %H:%M:%S %Y GMT"):
+        try:
+            parsed = datetime.strptime(value, fmt)
+            return parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None
+
+
+def read_certificate_metadata(cert_file: str, key_file: str) -> Dict[str, Any]:
+    metadata: Dict[str, Any] = {
+        "cert_file": cert_file,
+        "key_file": key_file,
+        "cert_exists": bool(cert_file) and os.path.exists(cert_file),
+        "key_exists": bool(key_file) and os.path.exists(key_file),
+        "subject": None,
+        "issuer": None,
+        "not_before": None,
+        "not_after": None,
+        "days_remaining": None,
+        "sans": [],
+        "read_error": None,
+    }
+    if not metadata["cert_exists"]:
+        return metadata
+
+    openssl_cmd = [
+        "openssl",
+        "x509",
+        "-in",
+        cert_file,
+        "-noout",
+        "-subject",
+        "-issuer",
+        "-startdate",
+        "-enddate",
+        "-ext",
+        "subjectAltName",
+    ]
+    try:
+        result = subprocess.run(openssl_cmd, capture_output=True, text=True, check=False)
+    except FileNotFoundError:
+        metadata["read_error"] = "openssl command not found."
+        return metadata
+
+    if result.returncode != 0:
+        metadata["read_error"] = (result.stderr or result.stdout or "unknown openssl error").strip()
+        return metadata
+
+    for raw_line in result.stdout.splitlines():
+        line = raw_line.strip()
+        if line.startswith("subject="):
+            metadata["subject"] = line.split("=", 1)[1].strip()
+        elif line.startswith("issuer="):
+            metadata["issuer"] = line.split("=", 1)[1].strip()
+        elif line.startswith("notBefore="):
+            metadata["not_before"] = line.split("=", 1)[1].strip()
+        elif line.startswith("notAfter="):
+            metadata["not_after"] = line.split("=", 1)[1].strip()
+        elif "DNS:" in line:
+            sans = [item.strip().replace("DNS:", "") for item in line.split(",") if "DNS:" in item]
+            metadata["sans"] = [item for item in sans if item]
+
+    expiry = parse_openssl_time(metadata["not_after"] or "")
+    if expiry:
+        metadata["not_after_iso"] = expiry.isoformat()
+        metadata["days_remaining"] = int((expiry - datetime.now(timezone.utc)).total_seconds() // 86400)
+    else:
+        metadata["not_after_iso"] = None
+    return metadata
+
+
+def build_tls_status_payload() -> Dict[str, Any]:
+    cert_metadata = read_certificate_metadata(web_config.tls_cert_file, web_config.tls_key_file)
+    return {
+        "scope": current_scope_label(),
+        "mode": web_config.tls_mode,
+        "available_modes": list(web_config.TLS_MODES),
+        "server_name": web_config.tls_server_name,
+        "letsencrypt_email": web_config.tls_letsencrypt_email,
+        "redirect_http_to_https": web_config.redirect_http_to_https,
+        "proxy_incoming_hostname": web_config.proxy_incoming_hostname,
+        "certificate": cert_metadata,
+    }
+
+
+def parse_json_payload() -> Dict[str, Any]:
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        abort(BAD_REQUEST, "Invalid payload.")
+    return payload
+
+
+def parse_tls_mode(mode_value: Any) -> str:
+    mode = str(mode_value or "").strip()
+    if not mode:
+        abort(BAD_REQUEST, "TLS mode is required.")
+    if mode not in web_config.TLS_MODES:
+        abort(BAD_REQUEST, "Unknown TLS mode.")
+    return mode
+
+
+def parse_json_bool(payload: Dict[str, Any], key: str, default: bool = False) -> bool:
+    if key not in payload:
+        return default
+    value = payload.get(key)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value != 0
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in ("1", "true", "yes", "on"):
+            return True
+        if lowered in ("0", "false", "no", "off"):
+            return False
+    abort(BAD_REQUEST, f"Invalid boolean value for '{key}'.")
 
 
 @router.route("/logout")
@@ -1228,20 +1473,18 @@ def wireguard():
 
 @router.route("/api/v1/stats/overview", methods=["GET"])
 @login_required
-@role_required(*STAFF_ROLES)
 @setup_required
 def api_stats_overview():
-    return jsonify(build_stats_snapshot())
+    return api_success(build_stats_snapshot())
 
 
 @router.route("/api/v1/stats/peers", methods=["GET"])
 @login_required
-@role_required(*STAFF_ROLES)
 @setup_required
 def api_stats_peers():
-    runtime = get_peer_runtime_summary()
-    return jsonify({
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+    runtime = get_scoped_peer_runtime_summary()
+    return api_success({
+        "scope": current_scope_label(),
         "thresholds": runtime["thresholds"],
         "peers": [serialize_peer_runtime_row(row) for row in runtime["rows"]]
     })
@@ -1249,22 +1492,21 @@ def api_stats_peers():
 
 @router.route("/api/v1/stats/alerts", methods=["GET"])
 @login_required
-@role_required(*STAFF_ROLES)
 @setup_required
 def api_stats_alerts():
-    runtime = get_peer_runtime_summary()
-    return jsonify({
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+    runtime = get_scoped_peer_runtime_summary()
+    return api_success({
+        "scope": current_scope_label(),
+        "thresholds": runtime["thresholds"],
         "alerts": runtime["alerts"]
     })
 
 
 @router.route("/api/v1/stats/peers.csv", methods=["GET"])
 @login_required
-@role_required(*STAFF_ROLES)
 @setup_required
 def api_stats_peers_csv():
-    runtime = get_peer_runtime_summary()
+    runtime = get_scoped_peer_runtime_summary()
     rows = [serialize_peer_runtime_row(row) for row in runtime["rows"]]
     fields = [
         "peer_uuid", "peer_name", "interface_uuid", "interface_name", "mode", "mode_label",
@@ -1277,10 +1519,9 @@ def api_stats_peers_csv():
 
 @router.route("/api/v1/stats/alerts.csv", methods=["GET"])
 @login_required
-@role_required(*STAFF_ROLES)
 @setup_required
 def api_stats_alerts_csv():
-    runtime = get_peer_runtime_summary()
+    runtime = get_scoped_peer_runtime_summary()
     fields = ["level", "title", "message", "peer_name", "peer_uuid"]
     return csv_response("arpvpn-alerts.csv", fields, runtime["alerts"])
 
@@ -1295,8 +1536,7 @@ def api_stats_statistics():
         serialize_statistics_row(row, payload["rollup_index"])
         for row in payload["statistics_rows"]
     ]
-    return jsonify({
-        "generated_at": payload["generated_at"],
+    return api_success({
         "scope": payload["scope"],
         "connections_total": payload["connections_total"],
         "rrd_ready_count": payload["rrd_ready_count"],
@@ -1315,8 +1555,7 @@ def api_stats_statistics():
 @setup_required
 def api_stats_rollups():
     payload = build_statistics_payload(include_log_issues=False)
-    return jsonify({
-        "generated_at": payload["generated_at"],
+    return api_success({
         "scope": payload["scope"],
         "rollup_windows": list(TRAFFIC_ROLLUP_WINDOWS_SECONDS.keys()),
         "totals": payload["rollup_totals"],
@@ -1349,12 +1588,59 @@ def api_stats_rollups_csv():
 @setup_required
 def api_stats_failures():
     payload = build_statistics_payload(include_log_issues=False)
-    return jsonify({
-        "generated_at": payload["generated_at"],
+    return api_success({
         "scope": payload["scope"],
         "failure_count": payload["failure_count"],
         "handshake_failures": payload["handshake_failures"],
         "failure_metrics": payload["failure_metrics"],
+    })
+
+
+@router.route("/api/v1/stats/history/<uuid>", methods=["GET"])
+@login_required
+@setup_required
+def api_stats_history(uuid: str):
+    item_type, item = resolve_connection_item(uuid)
+    if not user_can_access_connection(item_type, item):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    requested_window = (request.args.get("window", "24h") or "24h").lower()
+    points = get_connection_traffic_points(uuid)
+    filtered_points = filter_points_for_window(points, requested_window)
+    return api_success({
+        "scope": current_scope_label(),
+        "connection": build_connection_descriptor(item_type, item),
+        "window": requested_window,
+        "window_seconds": RRD_GRAPH_WINDOWS_SECONDS.get(requested_window, None),
+        "points_count": len(filtered_points),
+        "points": serialize_traffic_points(filtered_points),
+        "rrd_page_url": url_for("router.connection_rrd_graph", uuid=uuid, window=requested_window),
+        "rrd_image_url": url_for("router.connection_rrd_graph_png", uuid=uuid, window=requested_window),
+    })
+
+
+@router.route("/api/v1/stats/rrd/<uuid>", methods=["GET"])
+@login_required
+@setup_required
+def api_stats_rrd(uuid: str):
+    item_type, item = resolve_connection_item(uuid)
+    if not user_can_access_connection(item_type, item):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    requested_window = (request.args.get("window", "24h") or "24h").lower()
+    if requested_window not in RRD_GRAPH_WINDOWS_SECONDS:
+        abort(BAD_REQUEST, "Unknown graph window.")
+    windows = []
+    for window_name in sorted(RRD_GRAPH_WINDOWS_SECONDS.keys(), key=lambda key: RRD_GRAPH_WINDOWS_SECONDS[key]):
+        windows.append({
+            "name": window_name,
+            "seconds": RRD_GRAPH_WINDOWS_SECONDS[window_name],
+            "rrd_page_url": url_for("router.connection_rrd_graph", uuid=uuid, window=window_name),
+            "rrd_image_url": url_for("router.connection_rrd_graph_png", uuid=uuid, window=window_name),
+        })
+    return api_success({
+        "scope": current_scope_label(),
+        "connection": build_connection_descriptor(item_type, item),
+        "selected_window": requested_window,
+        "windows": windows,
     })
 
 
@@ -1739,6 +2025,99 @@ def api_set_theme_choice():
     return response
 
 
+@router.route("/api/v1/tls/status", methods=["GET"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_tls_status():
+    return api_success(build_tls_status_payload())
+
+
+@router.route("/api/v1/tls/certificate", methods=["GET"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_tls_certificate_status():
+    payload = build_tls_status_payload()
+    return api_success({
+        "scope": payload["scope"],
+        "mode": payload["mode"],
+        "server_name": payload["server_name"],
+        "certificate": payload["certificate"],
+    })
+
+
+@router.route("/api/v1/tls/mode", methods=["POST"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_tls_mode_update():
+    payload = parse_json_payload()
+    mode = parse_tls_mode(payload.get("mode"))
+    server_name = str(payload.get("server_name", web_config.tls_server_name) or "").strip()
+    letsencrypt_email = str(payload.get("letsencrypt_email", web_config.tls_letsencrypt_email) or "").strip()
+    proxy_incoming_hostname = str(payload.get("proxy_incoming_hostname", web_config.proxy_incoming_hostname) or "").strip()
+    redirect_http_to_https = parse_json_bool(payload, "redirect_http_to_https", web_config.redirect_http_to_https)
+
+    requires_hostname = mode in (web_config.TLS_MODE_SELF_SIGNED, web_config.TLS_MODE_LETS_ENCRYPT)
+    if requires_hostname and not server_name:
+        abort(BAD_REQUEST, "server_name is required for selected TLS mode.")
+    if mode == web_config.TLS_MODE_LETS_ENCRYPT and not letsencrypt_email:
+        warning("TLS mode switched to letsencrypt without explicit email; certbot may require follow-up.")
+
+    web_config.tls_mode = mode
+    web_config.tls_server_name = server_name
+    web_config.tls_letsencrypt_email = letsencrypt_email
+    web_config.proxy_incoming_hostname = proxy_incoming_hostname
+    web_config.redirect_http_to_https = redirect_http_to_https and mode != web_config.TLS_MODE_HTTP
+
+    tls_manager.apply_web_tls_config(web_config)
+    config_manager.save()
+    return api_success(build_tls_status_payload())
+
+
+@router.route("/api/v1/tls/self-signed", methods=["POST"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_tls_generate_self_signed():
+    payload = parse_json_payload()
+    server_name = str(payload.get("server_name", web_config.tls_server_name) or "").strip()
+    regenerate = parse_json_bool(payload, "regenerate", True)
+    redirect_http_to_https = parse_json_bool(payload, "redirect_http_to_https", web_config.redirect_http_to_https)
+    if not server_name:
+        abort(BAD_REQUEST, "server_name is required for self-signed certificates.")
+
+    web_config.tls_mode = web_config.TLS_MODE_SELF_SIGNED
+    web_config.tls_server_name = server_name
+    web_config.redirect_http_to_https = redirect_http_to_https
+    tls_manager.apply_web_tls_config(web_config, generate_self_signed=regenerate)
+    config_manager.save()
+    return api_success(build_tls_status_payload())
+
+
+@router.route("/api/v1/tls/letsencrypt", methods=["POST"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_tls_issue_letsencrypt():
+    payload = parse_json_payload()
+    server_name = str(payload.get("server_name", web_config.tls_server_name) or "").strip()
+    email = str(payload.get("email", web_config.tls_letsencrypt_email) or "").strip()
+    issue_now = parse_json_bool(payload, "issue_now", True)
+    redirect_http_to_https = parse_json_bool(payload, "redirect_http_to_https", web_config.redirect_http_to_https)
+    if not server_name:
+        abort(BAD_REQUEST, "server_name is required for Let's Encrypt.")
+
+    web_config.tls_mode = web_config.TLS_MODE_LETS_ENCRYPT
+    web_config.tls_server_name = server_name
+    web_config.tls_letsencrypt_email = email
+    web_config.redirect_http_to_https = redirect_http_to_https
+    tls_manager.apply_web_tls_config(web_config, issue_letsencrypt=issue_now)
+    config_manager.save()
+    return api_success(build_tls_status_payload())
+
+
 @router.route("/settings")
 @login_required
 @role_required(*STAFF_ROLES)
@@ -2056,13 +2435,25 @@ def password_reset():
     return ViewController(view, **context).load()
 
 
+def get_error_message(err: Exception, fallback: str) -> str:
+    raw = str(err).strip()
+    if not raw:
+        return fallback
+    if ":" in raw:
+        return raw.split(":", 1)[1].strip()
+    return raw
+
+
 @router.app_errorhandler(BAD_REQUEST)
 def bad_request(err):
     error_code = int(BAD_REQUEST)
+    error_msg = get_error_message(err, "Invalid request.")
+    if is_api_request():
+        return api_error(error_code, "bad_request", error_msg.strip())
     context = {
         "title": error_code,
         "error_code": error_code,
-        "error_msg": str(err).split(":", 1)[1]
+        "error_msg": error_msg
     }
     return ViewController("error/error-main.html", **context).load(), error_code
 
@@ -2070,6 +2461,10 @@ def bad_request(err):
 @router.app_errorhandler(UNAUTHORIZED)
 def unauthorized(err):
     warning(f"Unauthorized request from {request.remote_addr}!")
+    error_code = int(UNAUTHORIZED)
+    error_msg = get_error_message(err, "Authentication required.")
+    if is_api_request():
+        return api_error(error_code, "unauthorized", error_msg.strip())
     if request.method == "GET":
         debug(f"Redirecting to login...")
         try:
@@ -2078,11 +2473,10 @@ def unauthorized(err):
             uuid = request.path.rsplit("/", 1)[-1]
             next_url = url_for(request.endpoint, uuid=uuid)
         return redirect(url_for("router.login", next=next_url))
-    error_code = int(UNAUTHORIZED)
     context = {
         "title": error_code,
         "error_code": error_code,
-        "error_msg": str(err).split(":", 1)[1]
+        "error_msg": error_msg
     }
     return ViewController("error/error-main.html", **context).load(), error_code
 
@@ -2090,10 +2484,13 @@ def unauthorized(err):
 @router.app_errorhandler(FORBIDDEN)
 def forbidden(err):
     error_code = int(FORBIDDEN)
+    error_msg = get_error_message(err, "Insufficient permissions.")
+    if is_api_request():
+        return api_error(error_code, "forbidden", error_msg.strip())
     context = {
         "title": error_code,
         "error_code": error_code,
-        "error_msg": str(err).split(":", 1)[1]
+        "error_msg": error_msg
     }
     return ViewController("error/error-main.html", **context).load(), error_code
 
@@ -2101,21 +2498,27 @@ def forbidden(err):
 @router.app_errorhandler(NOT_FOUND)
 def not_found(err):
     error_code = int(NOT_FOUND)
+    error_msg = get_error_message(err, "Resource not found.")
+    if is_api_request():
+        return api_error(error_code, "not_found", error_msg.strip())
     context = {
         "title": error_code,
         "error_code": error_code,
-        "error_msg": str(err).split(":", 1)[1],
+        "error_msg": error_msg,
         "image": "/static/assets/img/error-404-monochrome.svg"
     }
     return ViewController("error/error-img.html", **context).load(), error_code
 
 
 @router.app_errorhandler(INTERNAL_SERVER_ERROR)
-def not_found(err):
+def internal_server_error(err):
     error_code = int(INTERNAL_SERVER_ERROR)
+    error_msg = get_error_message(err, "Internal server error.")
+    if is_api_request():
+        return api_error(error_code, "internal_server_error", error_msg.strip())
     context = {
         "title": error_code,
         "error_code": error_code,
-        "error_msg": str(err).split(":", 1)[1]
+        "error_msg": error_msg
     }
     return ViewController("error/error-main.html", **context).load(), error_code

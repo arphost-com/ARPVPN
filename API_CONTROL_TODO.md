@@ -4,8 +4,8 @@ Goal: provide secure API control for all ARPVPN features (users, tenants, WireGu
 
 ## Phase 0: API Foundation
 - [ ] Define API versioning strategy (`/api/v1`, deprecation policy, compatibility guarantees).
-- [ ] Standardize response envelope (success/error shape, request IDs, pagination metadata).
-- [ ] Define error model (`code`, `message`, `details`, HTTP mapping).
+- [x] Standardize response envelope (success/error shape, request IDs, pagination metadata).
+- [x] Define error model (`code`, `message`, `details`, HTTP mapping).
 - [ ] Add OpenAPI source of truth and CI validation.
 - [ ] Add API changelog process per release line (`main` and `codex/multitenant-v2`).
 
@@ -32,17 +32,17 @@ Goal: provide secure API control for all ARPVPN features (users, tenants, WireGu
 - [ ] Safe async job model for long-running operations (apply/restart/regenerate keys).
 
 ## Phase 4: Traffic, Usage, and RRD APIs
-- [ ] Per-connection traffic history API (interface + peer).
-- [ ] RRD graph URL/API endpoints for admins and clients.
-- [ ] Bandwidth usage summary APIs (hour/day/week/month windows).
-- [ ] Alert APIs for offline/stale/high-traffic peers.
-- [ ] Export APIs (CSV/JSON) with tenant-scoped filtering.
+- [x] Per-connection traffic history API (interface + peer).
+- [x] RRD graph URL/API endpoints for admins and clients.
+- [x] Bandwidth usage summary APIs (hour/day/week/month windows).
+- [x] Alert APIs for offline/stale/high-traffic peers.
+- [x] Export APIs (CSV/JSON) with tenant-scoped filtering.
 
 ## Phase 5: TLS and Certificate Management APIs
-- [ ] TLS mode APIs (`http`, `self-signed`, `letsencrypt`, `reverse-proxy`).
-- [ ] Endpoint to generate self-signed certs for configured hostnames.
-- [ ] Endpoint to issue/renew Let’s Encrypt certificates.
-- [ ] Read-only certificate status endpoint (issuer, expiry, SANs).
+- [x] TLS mode APIs (`http`, `self-signed`, `letsencrypt`, `reverse-proxy`).
+- [x] Endpoint to generate self-signed certs for configured hostnames.
+- [x] Endpoint to issue/renew Let’s Encrypt certificates.
+- [x] Read-only certificate status endpoint (issuer, expiry, SANs).
 - [ ] Permission gates: super admin global, tenant admin tenant-scoped.
 
 ## Phase 6: Configuration and System APIs

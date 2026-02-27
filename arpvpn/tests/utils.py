@@ -90,5 +90,15 @@ def create_test_iface(name, ipv4, port):
         f"{config.iptables_bin} -D FORWARD -o {name} -j ACCEPT\n" +
         f"{config.iptables_bin} -t nat -D POSTROUTING -o {gw} -j MASQUERADE\n"
     ]
-    return Interface(name=name, description="", gw_iface=gw, ipv4_address=ipv4, listen_port=port, auto=False,
-                     on_up=on_up, on_down=on_down)
+    return Interface(
+        name=name,
+        description="",
+        gw_iface=gw,
+        ipv4_address=ipv4,
+        listen_port=port,
+        auto=False,
+        on_up=on_up,
+        on_down=on_down,
+        private_key="test-private-key",
+        public_key="test-public-key",
+    )
