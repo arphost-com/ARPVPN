@@ -9,15 +9,20 @@
                     <p class="text-muted mb-0">Historical RRD visibility by peer and interface plus operational health indicators.</p>
                 </div>
                 <div class="page-header-actions">
-                    <a href="/api/v1/stats/overview" class="btn btn-outline-primary btn-sm">Overview JSON</a>
-                    <a href="/api/v1/stats/peers.csv" class="btn btn-outline-primary btn-sm">Peers CSV</a>
+                    <a href="/api/v1/stats/statistics" class="btn btn-outline-primary btn-sm">Stats JSON</a>
+                    <a href="/api/v1/stats/rollups" class="btn btn-outline-primary btn-sm">Rollups JSON</a>
+                    <a href="/api/v1/stats/rollups.csv" class="btn btn-outline-primary btn-sm">Rollups CSV</a>
                     <span class="badge badge-light page-update-pill">Updated {{ last_update }}</span>
                 </div>
             </div>
 
             {% if not traffic_config.enabled %}
                 <div class="alert alert-warning">
-                    Traffic collection is disabled. Enable it in <a href="/settings">Settings</a> to populate RRD history.
+                    {% if is_staff_view %}
+                        Traffic collection is disabled. Enable it in <a href="/settings">Settings</a> to populate RRD history.
+                    {% else %}
+                        Traffic collection is disabled. Ask your administrator to enable traffic history.
+                    {% endif %}
                 </div>
             {% endif %}
 
@@ -40,7 +45,7 @@
                     <div class="stat-tile">
                         <div class="stat-label">Failures</div>
                         <div class="stat-value text-danger">{{ failure_count }}</div>
-                        <div class="stat-subtle">stale/offline/never seen</div>
+                        <div class="stat-subtle">handshake + runtime failures</div>
                     </div>
                 </div>
                 <div class="col-sm-6 col-xl-2 mb-3">
@@ -68,11 +73,30 @@
 
             <div class="card mb-4 panel-glass">
                 <div class="card-header">
+                    <i class="fas fa-exclamation-triangle mr-1"></i>
+                    Failure diagnostics
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-2"><strong>Handshake failures:</strong> {{ handshake_failures }}</div>
+                        <div class="col-md-4 mb-2"><strong>Auth failures (log tail):</strong> {{ failure_metrics["auth_failures"] }}</div>
+                        <div class="col-md-4 mb-2"><strong>Interface failures (log tail):</strong> {{ failure_metrics["interface_failures"] }}</div>
+                        <div class="col-md-4 mb-2"><strong>TLS failures (log tail):</strong> {{ failure_metrics["tls_failures"] }}</div>
+                        <div class="col-md-4 mb-2"><strong>RRD failures (log tail):</strong> {{ failure_metrics["rrd_failures"] }}</div>
+                        <div class="col-md-4 mb-2"><strong>Active login bans:</strong> {{ failure_metrics["active_login_bans"] }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4 panel-glass">
+                <div class="card-header">
                     <i class="fas fa-file-alt mr-1"></i>
                     Runtime log summary
                 </div>
                 <div class="card-body">
-                    {% if log_summary["available"] %}
+                    {% if not is_staff_view %}
+                        <span class="text-muted">Detailed runtime logs are only visible to administrators.</span>
+                    {% elif log_summary["available"] %}
                         <div class="row">
                             <div class="col-md-4 mb-2"><strong>Total lines:</strong> {{ log_summary["total_lines"] }}</div>
                             <div class="col-md-4 mb-2"><strong>Warnings (tail):</strong> {{ log_summary["warning_lines"] }}</div>
@@ -108,6 +132,21 @@
 
             <div class="card mb-4 panel-glass">
                 <div class="card-header">
+                    <i class="fas fa-calendar-alt mr-1"></i>
+                    Usage rollups
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-2"><strong>Last hour:</strong> {{ rollup_totals["hour"]["total_human"] }}</div>
+                        <div class="col-md-3 mb-2"><strong>Last day:</strong> {{ rollup_totals["day"]["total_human"] }}</div>
+                        <div class="col-md-3 mb-2"><strong>Last week:</strong> {{ rollup_totals["week"]["total_human"] }}</div>
+                        <div class="col-md-3 mb-2"><strong>Last month:</strong> {{ rollup_totals["month"]["total_human"] }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4 panel-glass">
+                <div class="card-header">
                     <i class="fas fa-chart-line mr-1"></i>
                     Connection history
                 </div>
@@ -134,6 +173,7 @@
                                             <td>{{ row["status"] }}</td>
                                             <td>{{ row["session_rx_human"] }} / {{ row["session_tx_human"] }} / {{ row["session_total_human"] }}</td>
                                             <td>
+                                                {% set rollups = rollup_index.get(row["uuid"], {}) %}
                                                 <img
                                                   class="img-fluid border rounded mb-2"
                                                   style="max-width: 240px;"
@@ -152,6 +192,10 @@
                                                         </a>
                                                     {% endfor %}
                                                 </div>
+                                                {% if rollups %}
+                                                    <small class="text-muted d-block">hour {{ rollups["hour"]["total_human"] }} | day {{ rollups["day"]["total_human"] }}</small>
+                                                    <small class="text-muted d-block">week {{ rollups["week"]["total_human"] }} | month {{ rollups["month"]["total_human"] }}</small>
+                                                {% endif %}
                                                 <small class="text-muted d-block mt-1">{{ row["sample_points"] }} stored samples</small>
                                             </td>
                                         </tr>
