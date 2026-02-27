@@ -43,6 +43,8 @@ def setup_interface_with_peers(peer_names):
         auto=False,
         on_up=[],
         on_down=[],
+        private_key="test-iface-private",
+        public_key="test-iface-public",
     )
     created_peers = []
     for idx, peer_name in enumerate(peer_names, start=2):
@@ -54,6 +56,8 @@ def setup_interface_with_peers(peer_names):
             dns1="8.8.8.8",
             dns2="",
             nat=False,
+            private_key=f"test-peer-private-{idx}",
+            public_key=f"test-peer-public-{idx}",
         )
         iface.add_peer(peer)
         created_peers.append(peer)
