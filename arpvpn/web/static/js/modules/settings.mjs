@@ -22,6 +22,7 @@ const tlsMode = document.getElementById("web_tls_mode");
 const tlsServerName = document.getElementById("web_tls_server_name");
 const letsencryptEmail = document.getElementById("web_tls_letsencrypt_email");
 const proxyIncomingHostname = document.getElementById("web_proxy_incoming_hostname");
+const redirectHttpToHttps = document.getElementById("web_redirect_http_to_https");
 const generateSelfSigned = document.getElementById("web_tls_generate_self_signed");
 const issueLetsencrypt = document.getElementById("web_tls_issue_letsencrypt");
 
@@ -41,13 +42,18 @@ function syncTlsForm() {
     const isLetsEncrypt = mode === "letsencrypt";
     const isReverseProxy = mode === "reverse_proxy";
     const needsTlsServerName = isSelfSigned || isLetsEncrypt;
+    const supportsHttps = mode !== "http";
 
     setDisabled(tlsServerName, !needsTlsServerName);
     setDisabled(letsencryptEmail, !isLetsEncrypt);
     setDisabled(proxyIncomingHostname, !isReverseProxy);
+    setDisabled(redirectHttpToHttps, !supportsHttps);
     setDisabled(generateSelfSigned, !isSelfSigned);
     setDisabled(issueLetsencrypt, !isLetsEncrypt);
 
+    if (redirectHttpToHttps && !supportsHttps) {
+        redirectHttpToHttps.checked = false;
+    }
     if (generateSelfSigned && !isSelfSigned) {
         generateSelfSigned.checked = false;
     }

@@ -1330,6 +1330,7 @@ def save_settings():
         form.web_proxy_incoming_hostname.data = (
             form.web_proxy_incoming_hostname.data or web_config.proxy_incoming_hostname
         )
+        form.web_redirect_http_to_https.data = web_config.redirect_http_to_https
         form.web_tls_generate_self_signed.data = False
         form.web_tls_issue_letsencrypt.data = False
 
@@ -1468,6 +1469,7 @@ def setup():
     wireguard_config.set_default_endpoint()
     form.app_endpoint.data = wireguard_config.endpoint
     form.web_tls_server_name.data = web_config.tls_server_name or wireguard_config.endpoint
+    form.web_redirect_http_to_https.data = web_config.redirect_http_to_https
     context = {
         "title": "Setup",
         "form": form,

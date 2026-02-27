@@ -86,6 +86,11 @@
                                   Error in field <strong>{{ form.web_proxy_incoming_hostname.label.text }}</strong>: {{ error }}
                                 </div>
                             {% endfor %}
+                            {% for error in form.web_redirect_http_to_https.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ form.web_redirect_http_to_https.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
                             {% for error in form.web_tls_generate_self_signed.errors %}
                                 <div class="alert alert-danger" role="alert">
                                   Error in field <strong>{{ form.web_tls_generate_self_signed.label.text }}</strong>: {{ error }}
@@ -96,6 +101,18 @@
                                   Error in field <strong>{{ form.web_tls_issue_letsencrypt.label.text }}</strong>: {{ error }}
                                 </div>
                             {% endfor %}
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-6">
+                                <label class="d-block">Theme</label>
+                                <div class="btn-group btn-group-sm" role="group" aria-label="Theme switcher">
+                                    <button type="button" class="btn btn-outline-secondary" data-theme-choice="auto">Auto</button>
+                                    <button type="button" class="btn btn-outline-secondary" data-theme-choice="light">Light</button>
+                                    <button type="button" class="btn btn-outline-secondary" data-theme-choice="dark">Dark</button>
+                                </div>
+                                <small class="text-muted d-block mt-2">Current: <span data-theme-current>Auto</span></small>
+                                <a class="small" href="/themes">Open theme guide</a>
+                            </div>
                         </div>
                         <div class="form-row">
                             <div class="form-group col-md-4">
@@ -158,6 +175,12 @@
                             <div class="form-group col-md-4">
                                 {{ form.web_tls_letsencrypt_email.label() }}
                                 {{ form.web_tls_letsencrypt_email(class="form-control", id="web_tls_letsencrypt_email") }}
+                            </div>
+                            <div class="form-group col-md-4 d-flex align-items-end">
+                                <div class="custom-control custom-checkbox mb-2">
+                                    {{ form.web_redirect_http_to_https(class="custom-control-input", id="web_redirect_http_to_https") }}
+                                    {{ form.web_redirect_http_to_https.label(class="custom-control-label") }}
+                                </div>
                             </div>
                         </div>
                         <div class="form-row">
