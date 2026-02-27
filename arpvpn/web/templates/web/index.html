@@ -248,6 +248,37 @@
                     </div>
                 </div>
             </div>
+            <div class="card mb-4 panel-glass">
+                <div class="card-header">
+                    <i class="fas fa-wave-square mr-1"></i>
+                    Current RRD snapshots
+                </div>
+                <div class="card-body">
+                    {% if top_peers %}
+                        <div class="row">
+                            {% for item in top_peers[:4] %}
+                                <div class="col-md-6 mb-3">
+                                    <div class="border rounded p-2 h-100">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <strong>{{ item.peer.name }}</strong>
+                                            <a href="{{ url_for('router.connection_rrd_graph', uuid=item.peer.uuid, window='24h') }}">Open</a>
+                                        </div>
+                                        <img
+                                          class="img-fluid border rounded"
+                                          src="{{ url_for('router.connection_rrd_graph_png', uuid=item.peer.uuid, window='24h') }}"
+                                          alt="RRD graph for {{ item.peer.name }}"
+                                          onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"
+                                        />
+                                        <span class="text-muted small" style="display:none;">No RRD history available yet.</span>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <span class="text-muted">No peers configured yet.</span>
+                    {% endif %}
+                </div>
+            </div>
             <!-- Peer health -->
             <div class="card mb-4 panel-glass">
                 <div class="card-header">

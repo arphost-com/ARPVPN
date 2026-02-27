@@ -5,6 +5,7 @@ import json
 import os
 import re
 import subprocess
+from collections import deque
 from datetime import datetime
 from functools import wraps
 from http.client import BAD_REQUEST, NOT_FOUND, INTERNAL_SERVER_ERROR, UNAUTHORIZED, NO_CONTENT, FORBIDDEN
@@ -42,6 +43,7 @@ STALE_PEER_MAX_AGE_SECONDS = 1800
 ALLOWED_NEXT_ENDPOINTS = {
     "/": "router.index",
     "/dashboard": "router.index",
+    "/statistics": "router.statistics",
     "/network": "router.network",
     "/wireguard": "router.wireguard",
     "/settings": "router.settings",
@@ -249,6 +251,82 @@ def index():
         "traffic_config": traffic_config
     }
     return ViewController("web/index.html", **context).load()
+
+
+def build_statistics_rows(
+        visible_interfaces: Dict[str, Interface],
+        peer_runtime: Dict[str, Any],
+        traffic: Dict[datetime, Dict[str, TrafficData]],
+        sample_counts: Dict[str, int]
+) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for iface in visible_interfaces.values():
+        iface_traffic = __get_total_traffic__(iface.uuid, traffic)
+        rows.append({
+            "type": "interface",
+            "type_label": "Interface",
+            "uuid": iface.uuid,
+            "name": iface.name,
+            "parent_name": EMPTY_FIELD,
+            "status": iface.status,
+            "session_rx_human": to_human_filesize(iface_traffic.rx),
+            "session_tx_human": to_human_filesize(iface_traffic.tx),
+            "session_total_human": to_human_filesize(iface_traffic.rx + iface_traffic.tx),
+            "sample_points": sample_counts.get(iface.uuid, 0),
+        })
+
+    for peer in peer_runtime["rows"]:
+        rows.append({
+            "type": "peer",
+            "type_label": "Peer",
+            "uuid": peer["peer_uuid"],
+            "name": peer["peer_name"],
+            "parent_name": peer["interface_name"],
+            "status": peer["handshake_state"],
+            "session_rx_human": peer["session_rx_human"],
+            "session_tx_human": peer["session_tx_human"],
+            "session_total_human": peer["session_total_human"],
+            "sample_points": sample_counts.get(peer["peer_uuid"], 0),
+        })
+    rows.sort(key=lambda item: (item["type"], item["name"].lower()))
+    return rows
+
+
+@router.route("/statistics", methods=["GET"])
+@login_required
+@setup_required
+def statistics():
+    if traffic_config.enabled:
+        traffic = traffic_config.driver.get_session_and_stored_data()
+    else:
+        traffic = {datetime.now(): traffic_config.driver.get_session_data()}
+    peer_runtime = filter_peer_runtime_for_current_user(get_peer_runtime_summary())
+    visible_interfaces = get_visible_interfaces_for_current_user()
+    sample_counts = get_connection_sample_counts()
+    statistics_rows = build_statistics_rows(visible_interfaces, peer_runtime, traffic, sample_counts)
+    log_summary = get_log_summary()
+
+    peer_totals = peer_runtime["totals"]
+    failure_count = peer_totals["stale_peers"] + peer_totals["offline_peers"] + peer_totals["never_seen_peers"]
+    rrd_ready_count = len([row for row in statistics_rows if row["sample_points"] > 0])
+
+    context = {
+        "title": "Statistics",
+        "statistics_rows": statistics_rows,
+        "peer_runtime": peer_runtime,
+        "window_options": sorted(
+            RRD_GRAPH_WINDOWS_SECONDS.keys(),
+            key=lambda key: RRD_GRAPH_WINDOWS_SECONDS[key]
+        ),
+        "default_window": "24h",
+        "connections_total": len(statistics_rows),
+        "rrd_ready_count": rrd_ready_count,
+        "failure_count": failure_count,
+        "log_summary": log_summary,
+        "last_update": datetime.now().strftime("%H:%M"),
+        "traffic_config": traffic_config
+    }
+    return ViewController("web/statistics.html", **context).load()
 
 
 def __get_total_traffic__(uuid: str, traffic: Dict[datetime, Dict[str, TrafficData]]) -> TrafficData:
@@ -523,6 +601,61 @@ def get_connection_traffic_points(uuid: str) -> List[Tuple[int, int, int]]:
             continue
         points.append((unix_ts, sample.rx, sample.tx))
     return points
+
+
+def get_connection_sample_counts() -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+    try:
+        history = traffic_config.driver.load_data()
+    except Exception as e:
+        log_exception(e)
+        return counts
+    for _, traffic_data in sorted(history.items(), key=lambda pair: pair[0]):
+        for device_uuid in traffic_data.keys():
+            counts[device_uuid] = counts.get(device_uuid, 0) + 1
+    return counts
+
+
+def get_log_summary(max_tail_lines: int = 5000) -> Dict[str, Any]:
+    logfile = logger_config.logfile
+    summary: Dict[str, Any] = {
+        "available": False,
+        "logfile": logfile,
+        "total_lines": 0,
+        "tail_lines": 0,
+        "warning_lines": 0,
+        "error_lines": 0,
+        "recent_issues": [],
+        "read_error": None,
+    }
+    if not os.path.exists(logfile):
+        return summary
+
+    tail: deque[str] = deque(maxlen=max_tail_lines)
+    try:
+        with open(logfile, "r", encoding="utf-8", errors="ignore") as handle:
+            for line in handle:
+                summary["total_lines"] += 1
+                entry = line.strip()
+                if not entry:
+                    continue
+                tail.append(entry)
+    except OSError as e:
+        summary["read_error"] = str(e)
+        return summary
+
+    for entry in tail:
+        if "[ERROR]" in entry or "[FATAL]" in entry:
+            summary["error_lines"] += 1
+        elif "[WARNING]" in entry:
+            summary["warning_lines"] += 1
+    summary["tail_lines"] = len(tail)
+    summary["recent_issues"] = [
+        entry for entry in reversed(tail)
+        if "[ERROR]" in entry or "[FATAL]" in entry or "[WARNING]" in entry
+    ][:8]
+    summary["available"] = True
+    return summary
 
 
 def generate_rrd_graph_png(uuid: str, window_seconds: int) -> Optional[bytes]:

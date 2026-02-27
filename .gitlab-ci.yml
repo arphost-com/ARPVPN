@@ -26,6 +26,7 @@ unit_tests:
         arpvpn/tests/default/test_profile.py \
         arpvpn/tests/default/test_password_reset.py \
         arpvpn/tests/default/test_theme_api.py \
+        arpvpn/tests/default/test_statistics_page.py \
         arpvpn/tests/default/test_https_redirect.py \
         arpvpn/tests/default/test_traffic_driver.py \
         arpvpn/tests/default/test_wireguard_utils.py \
