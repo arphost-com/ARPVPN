@@ -73,6 +73,12 @@ RRD_GRAPH_WINDOWS_SECONDS = {
     "7d": 7 * 24 * 60 * 60,
     "30d": 30 * 24 * 60 * 60,
 }
+TRAFFIC_ROLLUP_WINDOWS_SECONDS = {
+    "hour": 60 * 60,
+    "day": 24 * 60 * 60,
+    "week": 7 * 24 * 60 * 60,
+    "month": 30 * 24 * 60 * 60,
+}
 RRD_STEP_SECONDS = 60 * 60
 THEME_CHOICES = ("auto", "light", "dark")
 THEME_COOKIE_NAME = "arpvpn_theme"
@@ -292,10 +298,176 @@ def build_statistics_rows(
     return rows
 
 
-@router.route("/statistics", methods=["GET"])
-@login_required
-@setup_required
-def statistics():
+def get_connection_history_map() -> Dict[str, List[Tuple[int, int, int]]]:
+    history_by_uuid: Dict[str, List[Tuple[int, int, int]]] = {}
+    try:
+        history = traffic_config.driver.load_data()
+    except Exception as e:
+        log_exception(e)
+        return history_by_uuid
+
+    for timestamp, traffic_data in sorted(history.items(), key=lambda pair: pair[0]):
+        unix_ts = int(timestamp.timestamp())
+        for device_uuid, sample in traffic_data.items():
+            points = history_by_uuid.setdefault(device_uuid, [])
+            if points and points[-1][0] == unix_ts:
+                points[-1] = (unix_ts, sample.rx, sample.tx)
+            else:
+                points.append((unix_ts, sample.rx, sample.tx))
+    return history_by_uuid
+
+
+def compute_rollup_window(points: List[Tuple[int, int, int]], window_seconds: int) -> Dict[str, Any]:
+    if not points:
+        return {
+            "rx_bytes": 0,
+            "tx_bytes": 0,
+            "total_bytes": 0,
+            "rx_human": to_human_filesize(0),
+            "tx_human": to_human_filesize(0),
+            "total_human": to_human_filesize(0),
+        }
+
+    latest_ts, latest_rx, latest_tx = points[-1]
+    start_ts = latest_ts - window_seconds
+    baseline_rx = points[0][1]
+    baseline_tx = points[0][2]
+    for ts, rx_value, tx_value in points:
+        if ts <= start_ts:
+            baseline_rx = rx_value
+            baseline_tx = tx_value
+            continue
+        break
+
+    rx_delta = max(latest_rx - baseline_rx, 0)
+    tx_delta = max(latest_tx - baseline_tx, 0)
+    total_delta = rx_delta + tx_delta
+    return {
+        "rx_bytes": rx_delta,
+        "tx_bytes": tx_delta,
+        "total_bytes": total_delta,
+        "rx_human": to_human_filesize(rx_delta),
+        "tx_human": to_human_filesize(tx_delta),
+        "total_human": to_human_filesize(total_delta),
+    }
+
+
+def build_connection_rollups(
+        statistics_rows: List[Dict[str, Any]],
+        history_by_uuid: Dict[str, List[Tuple[int, int, int]]]
+) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for row in statistics_rows:
+        points = history_by_uuid.get(row["uuid"], [])
+        windows: Dict[str, Dict[str, Any]] = {}
+        for window_name, seconds in TRAFFIC_ROLLUP_WINDOWS_SECONDS.items():
+            windows[window_name] = compute_rollup_window(points, seconds)
+        rows.append({
+            "uuid": row["uuid"],
+            "type": row["type"],
+            "type_label": row["type_label"],
+            "name": row["name"],
+            "parent_name": row["parent_name"],
+            "status": row["status"],
+            "sample_points": row["sample_points"],
+            "windows": windows,
+        })
+    return rows
+
+
+def summarize_rollups(rollup_rows: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    totals: Dict[str, Dict[str, Any]] = {}
+    for window_name in TRAFFIC_ROLLUP_WINDOWS_SECONDS.keys():
+        totals[window_name] = {"rx_bytes": 0, "tx_bytes": 0, "total_bytes": 0}
+    for row in rollup_rows:
+        for window_name, values in row["windows"].items():
+            totals[window_name]["rx_bytes"] += values["rx_bytes"]
+            totals[window_name]["tx_bytes"] += values["tx_bytes"]
+            totals[window_name]["total_bytes"] += values["total_bytes"]
+    for window_name, values in totals.items():
+        values["rx_human"] = to_human_filesize(values["rx_bytes"])
+        values["tx_human"] = to_human_filesize(values["tx_bytes"])
+        values["total_human"] = to_human_filesize(values["total_bytes"])
+    return totals
+
+
+def get_failure_metrics(max_tail_lines: int = 5000) -> Dict[str, Any]:
+    metrics: Dict[str, Any] = {
+        "auth_failures": 0,
+        "interface_failures": 0,
+        "tls_failures": 0,
+        "rrd_failures": 0,
+        "active_login_bans": 0,
+        "inspected_log_lines": 0,
+        "log_available": False,
+        "total": 0,
+    }
+
+    metrics["active_login_bans"] = sum(1 for client in clients.values() if client.is_banned())
+    logfile = logger_config.logfile
+    if not os.path.exists(logfile):
+        metrics["total"] = metrics["active_login_bans"]
+        return metrics
+
+    tail: deque[str] = deque(maxlen=max_tail_lines)
+    try:
+        with open(logfile, "r", encoding="utf-8", errors="ignore") as handle:
+            for line in handle:
+                entry = line.strip()
+                if not entry:
+                    continue
+                tail.append(entry)
+    except OSError:
+        metrics["total"] = metrics["active_login_bans"]
+        return metrics
+
+    auth_patterns = (
+        "login_post): unable to validate form",
+        "unable to log in",
+        "unable to validate field 'password'",
+        "unable to validate field 'username'",
+    )
+    interface_patterns = (
+        "failed to start interface",
+        "failed to stop interface",
+        "invalid operation:",
+    )
+    tls_patterns = (
+        "unable to issue let's encrypt certificate",
+        "unable to generate self-signed certificate",
+        "tls mode requires certificate",
+        "let's encrypt certificate was issued but expected files were not found",
+    )
+    rrd_patterns = (
+        "unable to create rrd file",
+        "unable to update rrd data",
+        "unable to generate rrd graph",
+    )
+
+    for entry in tail:
+        lowered = entry.lower()
+        if any(pattern in lowered for pattern in auth_patterns):
+            metrics["auth_failures"] += 1
+        if any(pattern in lowered for pattern in interface_patterns):
+            metrics["interface_failures"] += 1
+        if any(pattern in lowered for pattern in tls_patterns):
+            metrics["tls_failures"] += 1
+        if any(pattern in lowered for pattern in rrd_patterns):
+            metrics["rrd_failures"] += 1
+
+    metrics["inspected_log_lines"] = len(tail)
+    metrics["log_available"] = True
+    metrics["total"] = (
+        metrics["auth_failures"] +
+        metrics["interface_failures"] +
+        metrics["tls_failures"] +
+        metrics["rrd_failures"] +
+        metrics["active_login_bans"]
+    )
+    return metrics
+
+
+def build_statistics_payload(include_log_issues: bool = False) -> Dict[str, Any]:
     if traffic_config.enabled:
         traffic = traffic_config.driver.get_session_and_stored_data()
     else:
@@ -304,16 +476,24 @@ def statistics():
     visible_interfaces = get_visible_interfaces_for_current_user()
     sample_counts = get_connection_sample_counts()
     statistics_rows = build_statistics_rows(visible_interfaces, peer_runtime, traffic, sample_counts)
-    log_summary = get_log_summary()
+    history_by_uuid = get_connection_history_map()
+    rollup_rows = build_connection_rollups(statistics_rows, history_by_uuid)
+    rollup_totals = summarize_rollups(rollup_rows)
+    rollup_index = {row["uuid"]: row["windows"] for row in rollup_rows}
+    log_summary = get_log_summary(include_recent_issues=include_log_issues)
+    failure_metrics = get_failure_metrics()
 
     peer_totals = peer_runtime["totals"]
-    failure_count = peer_totals["stale_peers"] + peer_totals["offline_peers"] + peer_totals["never_seen_peers"]
+    handshake_failures = peer_totals["stale_peers"] + peer_totals["offline_peers"] + peer_totals["never_seen_peers"]
+    failure_count = handshake_failures + failure_metrics["total"]
     rrd_ready_count = len([row for row in statistics_rows if row["sample_points"] > 0])
 
-    context = {
-        "title": "Statistics",
+    return {
         "statistics_rows": statistics_rows,
         "peer_runtime": peer_runtime,
+        "rollup_rows": rollup_rows,
+        "rollup_totals": rollup_totals,
+        "rollup_index": rollup_index,
         "window_options": sorted(
             RRD_GRAPH_WINDOWS_SECONDS.keys(),
             key=lambda key: RRD_GRAPH_WINDOWS_SECONDS[key]
@@ -322,7 +502,35 @@ def statistics():
         "connections_total": len(statistics_rows),
         "rrd_ready_count": rrd_ready_count,
         "failure_count": failure_count,
+        "handshake_failures": handshake_failures,
         "log_summary": log_summary,
+        "failure_metrics": failure_metrics,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "scope": "staff" if current_user.has_role(*STAFF_ROLES) else "client",
+    }
+
+
+@router.route("/statistics", methods=["GET"])
+@login_required
+@setup_required
+def statistics():
+    is_staff_view = current_user.has_role(*STAFF_ROLES)
+    payload = build_statistics_payload(include_log_issues=is_staff_view)
+    context = {
+        "title": "Statistics",
+        "statistics_rows": payload["statistics_rows"],
+        "peer_runtime": payload["peer_runtime"],
+        "window_options": payload["window_options"],
+        "default_window": payload["default_window"],
+        "connections_total": payload["connections_total"],
+        "rrd_ready_count": payload["rrd_ready_count"],
+        "failure_count": payload["failure_count"],
+        "handshake_failures": payload["handshake_failures"],
+        "rollup_index": payload["rollup_index"],
+        "rollup_totals": payload["rollup_totals"],
+        "failure_metrics": payload["failure_metrics"],
+        "log_summary": payload["log_summary"],
+        "is_staff_view": is_staff_view,
         "last_update": datetime.now().strftime("%H:%M"),
         "traffic_config": traffic_config
     }
@@ -616,7 +824,7 @@ def get_connection_sample_counts() -> Dict[str, int]:
     return counts
 
 
-def get_log_summary(max_tail_lines: int = 5000) -> Dict[str, Any]:
+def get_log_summary(max_tail_lines: int = 5000, include_recent_issues: bool = False) -> Dict[str, Any]:
     logfile = logger_config.logfile
     summary: Dict[str, Any] = {
         "available": False,
@@ -650,10 +858,11 @@ def get_log_summary(max_tail_lines: int = 5000) -> Dict[str, Any]:
         elif "[WARNING]" in entry:
             summary["warning_lines"] += 1
     summary["tail_lines"] = len(tail)
-    summary["recent_issues"] = [
-        entry for entry in reversed(tail)
-        if "[ERROR]" in entry or "[FATAL]" in entry or "[WARNING]" in entry
-    ][:8]
+    if include_recent_issues:
+        summary["recent_issues"] = [
+            entry for entry in reversed(tail)
+            if "[ERROR]" in entry or "[FATAL]" in entry or "[WARNING]" in entry
+        ][:8]
     summary["available"] = True
     return summary
 
@@ -766,6 +975,50 @@ def build_stats_snapshot() -> Dict[str, Any]:
         "alerts": peer_runtime["alerts"],
         "top_peers": [serialize_peer_runtime_row(row) for row in peer_runtime["rows"][:10]]
     }
+
+
+def serialize_statistics_row(row: Dict[str, Any], rollup_index: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    return {
+        "type": row["type"],
+        "type_label": row["type_label"],
+        "uuid": row["uuid"],
+        "name": row["name"],
+        "parent_name": row["parent_name"],
+        "status": row["status"],
+        "sample_points": row["sample_points"],
+        "session_rx_human": row["session_rx_human"],
+        "session_tx_human": row["session_tx_human"],
+        "session_total_human": row["session_total_human"],
+        "rrd_page_url": url_for("router.connection_rrd_graph", uuid=row["uuid"]),
+        "rrd_image_url": url_for("router.connection_rrd_graph_png", uuid=row["uuid"], window="24h"),
+        "rollups": rollup_index.get(row["uuid"], {}),
+    }
+
+
+def flatten_rollup_rows_for_csv(rows: List[Dict[str, Any]], rollup_index: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
+    flattened: List[Dict[str, Any]] = []
+    for row in rows:
+        rollups = rollup_index.get(row["uuid"], {})
+        item: Dict[str, Any] = {
+            "type": row["type"],
+            "type_label": row["type_label"],
+            "uuid": row["uuid"],
+            "name": row["name"],
+            "parent_name": row["parent_name"],
+            "status": row["status"],
+            "sample_points": row["sample_points"],
+            "session_rx_human": row["session_rx_human"],
+            "session_tx_human": row["session_tx_human"],
+            "session_total_human": row["session_total_human"],
+        }
+        for window_name in TRAFFIC_ROLLUP_WINDOWS_SECONDS.keys():
+            rollup = rollups.get(window_name, {})
+            item[f"{window_name}_rx_bytes"] = rollup.get("rx_bytes", 0)
+            item[f"{window_name}_tx_bytes"] = rollup.get("tx_bytes", 0)
+            item[f"{window_name}_total_bytes"] = rollup.get("total_bytes", 0)
+            item[f"{window_name}_total_human"] = rollup.get("total_human", to_human_filesize(0))
+        flattened.append(item)
+    return flattened
 
 
 def csv_response(filename: str, fieldnames: List[str], rows: List[Dict[str, Any]]) -> Response:
@@ -1030,6 +1283,79 @@ def api_stats_alerts_csv():
     runtime = get_peer_runtime_summary()
     fields = ["level", "title", "message", "peer_name", "peer_uuid"]
     return csv_response("arpvpn-alerts.csv", fields, runtime["alerts"])
+
+
+@router.route("/api/v1/stats/statistics", methods=["GET"])
+@login_required
+@setup_required
+def api_stats_statistics():
+    include_log_issues = current_user.has_role(*STAFF_ROLES)
+    payload = build_statistics_payload(include_log_issues=include_log_issues)
+    rows = [
+        serialize_statistics_row(row, payload["rollup_index"])
+        for row in payload["statistics_rows"]
+    ]
+    return jsonify({
+        "generated_at": payload["generated_at"],
+        "scope": payload["scope"],
+        "connections_total": payload["connections_total"],
+        "rrd_ready_count": payload["rrd_ready_count"],
+        "failure_count": payload["failure_count"],
+        "handshake_failures": payload["handshake_failures"],
+        "peers": payload["peer_runtime"]["totals"],
+        "failure_metrics": payload["failure_metrics"],
+        "log_summary": payload["log_summary"],
+        "rollup_windows": list(TRAFFIC_ROLLUP_WINDOWS_SECONDS.keys()),
+        "connections": rows,
+    })
+
+
+@router.route("/api/v1/stats/rollups", methods=["GET"])
+@login_required
+@setup_required
+def api_stats_rollups():
+    payload = build_statistics_payload(include_log_issues=False)
+    return jsonify({
+        "generated_at": payload["generated_at"],
+        "scope": payload["scope"],
+        "rollup_windows": list(TRAFFIC_ROLLUP_WINDOWS_SECONDS.keys()),
+        "totals": payload["rollup_totals"],
+        "connections": payload["rollup_rows"],
+    })
+
+
+@router.route("/api/v1/stats/rollups.csv", methods=["GET"])
+@login_required
+@setup_required
+def api_stats_rollups_csv():
+    payload = build_statistics_payload(include_log_issues=False)
+    rows = flatten_rollup_rows_for_csv(payload["statistics_rows"], payload["rollup_index"])
+    fieldnames = [
+        "type", "type_label", "uuid", "name", "parent_name", "status", "sample_points",
+        "session_rx_human", "session_tx_human", "session_total_human",
+    ]
+    for window_name in TRAFFIC_ROLLUP_WINDOWS_SECONDS.keys():
+        fieldnames.extend([
+            f"{window_name}_rx_bytes",
+            f"{window_name}_tx_bytes",
+            f"{window_name}_total_bytes",
+            f"{window_name}_total_human",
+        ])
+    return csv_response("arpvpn-rollups.csv", fieldnames, rows)
+
+
+@router.route("/api/v1/stats/failures", methods=["GET"])
+@login_required
+@setup_required
+def api_stats_failures():
+    payload = build_statistics_payload(include_log_issues=False)
+    return jsonify({
+        "generated_at": payload["generated_at"],
+        "scope": payload["scope"],
+        "failure_count": payload["failure_count"],
+        "handshake_failures": payload["handshake_failures"],
+        "failure_metrics": payload["failure_metrics"],
+    })
 
 
 @router.route("/traffic/rrd/<uuid>", methods=["GET"])
