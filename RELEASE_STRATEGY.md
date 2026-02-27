@@ -22,6 +22,7 @@ Do not merge `codex/multitenant-v2` into `main`.
 GitLab CI is configured so images are published by release line:
 
 - Publish jobs run only after the `unit_tests` job succeeds.
+- Full-suite environment/integration tests run only when `RUN_ENV_INTEGRATION_TESTS=1` and are non-blocking.
 
 - `main` + `v1.*` tags publish:
   - `$CI_REGISTRY_IMAGE:stable`

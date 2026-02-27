@@ -79,9 +79,11 @@ Project CI builds and publishes ``arpvpn`` image to GitLab Container Registry.
 
 1. Ensure project runner is Docker executor with ``privileged = true``.
 2. Ensure Container Registry is enabled in GitLab.
-3. Push to default branch to publish (only after the `unit_tests` CI job passes):
+3. Push to default branch to publish (only after the required `unit_tests` CI job passes):
    * ``$CI_REGISTRY_IMAGE:stable``
    * ``$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA``
+4. Optional environment/integration tests can be run by setting pipeline variable
+   ``RUN_ENV_INTEGRATION_TESTS=1`` (non-blocking; informative only).
 
 For full setup details, see ``docs/source/gitlab-deployment.rst``.
 

@@ -43,13 +43,22 @@ CI publish behavior
 
 On push to default branch (or tags), pipeline will:
 
-1. Run the ``unit_tests`` job (``pytest`` deterministic unit subset).
+1. Run the required ``unit_tests`` job (``pytest`` deterministic unit subset).
 2. Build package artifact via ``build.sh``.
 3. Build Docker image.
 4. Push:
 
    * ``$CI_REGISTRY_IMAGE:stable``
    * ``$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA``
+
+Optional environment/integration suite
+--------------------------------------
+
+The full pytest suite is available as ``integration_tests_env`` and is intended for runners/hosts
+with WireGuard/network tooling available.
+
+- Trigger by setting pipeline variable ``RUN_ENV_INTEGRATION_TESTS=1``.
+- This job is non-blocking (``allow_failure``) and does not gate image publication.
 
 Deploying ARPVPN with compose
 -----------------------------
