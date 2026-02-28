@@ -22,6 +22,7 @@ unit_tests:
       pytest -q \
         arpvpn/tests/test_server.py \
         arpvpn/tests/default/test_setup.py \
+        arpvpn/tests/default/test_about_page.py \
         arpvpn/tests/default/test_login.py \
         arpvpn/tests/default/test_profile.py \
         arpvpn/tests/default/test_password_reset.py \

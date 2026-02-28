@@ -1,12 +1,12 @@
 # UI TODO
 
 ## Theme/Footer
-- [ ] Fix the bottom white footer bar overlap in dark theme.
-- [ ] Replace footer GitHub link with ARPHost branding/logo.
-- [ ] Remove direct GitHub footer link from end-user UI.
+- [x] Fix the bottom white footer bar overlap in dark theme.
+- [x] Replace footer GitHub link with ARPHost branding/logo.
+- [x] Remove direct GitHub footer link from end-user UI.
 
 ## About Page
-- [ ] Expand About page to describe ARPVPN software features and architecture.
-- [ ] Add ARPHost company/about section on the About page.
-- [ ] Show current app revision/build number on the About page.
-- [ ] Add a short "About WireGuard" explainer section for users/admins.
+- [x] Expand About page to describe ARPVPN software features and architecture.
+- [x] Add ARPHost company/about section on the About page.
+- [x] Show current app revision/build number on the About page.
+- [x] Add a short "About WireGuard" explainer section for users/admins.

@@ -72,6 +72,46 @@ body {
   color: var(--theme-text-muted) !important;
 }
 
+#layoutSidenav_footer,
+#layoutAuthentication_footer,
+#layoutError_footer,
+#layoutApp_footer {
+  min-width: 0;
+}
+
+.app-footer {
+  background-color: var(--theme-surface-2);
+  border-top: 1px solid var(--theme-border);
+  color: var(--theme-text-muted);
+  position: relative;
+  z-index: 2;
+}
+
+.app-footer-row {
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.app-footer-brand a {
+  display: inline-flex;
+  align-items: center;
+}
+
+.app-footer-logo {
+  display: block;
+  width: auto;
+  height: 28px;
+  max-height: 28px;
+  max-width: 168px;
+}
+
+@media (max-width: 576px) {
+  .app-footer-row {
+    justify-content: center !important;
+    text-align: center;
+  }
+}
+
 .sb-topnav {
   padding-left: 0;
   height: 56px;

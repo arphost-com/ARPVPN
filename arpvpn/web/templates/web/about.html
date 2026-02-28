@@ -1,13 +1,16 @@
 {% extends "web/web-main.html" %}
 
 {% block content %}
+    {% set revision = version_info['release'] ~ "-" ~ (version_info['commit'][:7] if version_info['commit'] else "unknown") %}
     <main>
         <div class="container-fluid">
-            <div class="my-4">
-                <a href="#" onclick="location.replace(document.referrer)" style="display: inline" class="float-right mt-3">
-                    <i class="fas fa-arrow-left mr-2"></i>Back
-                </a>
+            <div class="page-header my-4">
                 <h1 class="my-4">{{ title }}</h1>
+                <div class="page-header-actions">
+                    <a href="#" onclick="location.replace(document.referrer)" class="btn btn-outline-secondary btn-sm">
+                        <i class="fas fa-arrow-left mr-2"></i>Back
+                    </a>
+                </div>
             </div>
             <div id="global-alerts">
                 {% if success %}
@@ -35,27 +38,120 @@
                 {% endif %}
             </div>
 
-            <!-- Version info -->
-            <form novalidate>
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <i class="fas fa-code-branch mr-1"></i>
-                        Version
-                    </div>
-                    <div class="card-body">
-                        <div class="form-row">
-                            <div class="form-group col-md-4">
-                                <label>Release</label>
-                                <input disabled type="text" class="form-control" value="{{ version_info['release'] }}">
-                            </div>
-                            <div class="form-group col-md-4">
-                                <label>Commit</label>
-                                <input disabled type="text" class="form-control" value="{{ version_info['commit'] }}">
-                            </div>
+            <div class="card mb-4 panel-glass">
+                <div class="card-header">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    {{ app_name }} Platform Overview
+                </div>
+                <div class="card-body">
+                    <p>
+                        {{ app_name }} is an ARPHost-managed WireGuard control platform built for secure client VPN delivery,
+                        site-to-site tunnels, and operational visibility from a single web interface.
+                    </p>
+                    <p class="mb-0">
+                        The application combines VPN orchestration, role-based access, TLS management, telemetry dashboards,
+                        RRD traffic graphs, and statistics APIs so teams can provision, monitor, and support VPN users at scale.
+                    </p>
+                </div>
+            </div>
+
+            <div class="card mb-4 panel-glass">
+                <div class="card-header">
+                    <i class="fas fa-project-diagram mr-1"></i>
+                    Architecture and Capabilities
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-lg-6 mb-3 mb-lg-0">
+                            <h5 class="mb-3">Core Components</h5>
+                            <ul class="mb-0">
+                                <li>Web UI for setup, operations, user management, and observability.</li>
+                                <li>WireGuard interface/peer orchestration and configuration generation.</li>
+                                <li>Traffic collection pipeline with session + stored history support.</li>
+                                <li>RRD graph rendering for interface and peer bandwidth trends.</li>
+                                <li>TLS controls for HTTP, self-signed, Let's Encrypt, and reverse-proxy modes.</li>
+                            </ul>
+                        </div>
+                        <div class="col-lg-6">
+                            <h5 class="mb-3">Operational Focus</h5>
+                            <ul class="mb-0">
+                                <li>Fast provisioning of client and site-to-site WireGuard peers.</li>
+                                <li>Role-aware visibility and scoped operational workflows.</li>
+                                <li>Telemetry APIs for dashboards, exports, and external integrations.</li>
+                                <li>Security-first defaults and hardened runtime/deployment behavior.</li>
+                                <li>Designed for self-hosted production environments.</li>
+                            </ul>
                         </div>
                     </div>
                 </div>
-            </form>
+            </div>
+
+            <div class="card mb-4 panel-glass">
+                <div class="card-header">
+                    <i class="fas fa-building mr-1"></i>
+                    About ARPHost
+                </div>
+                <div class="card-body">
+                    <p>
+                        ARPHost builds and operates infrastructure-first hosting, automation, and managed platform services.
+                        {{ app_name }} is part of that stack, focused on reliable VPN access and production-grade network tooling.
+                    </p>
+                    <p class="mb-0">
+                        This distribution is maintained by ARPHost for internal operations and customer VPN deployments,
+                        with emphasis on uptime, supportability, and secure defaults.
+                    </p>
+                </div>
+            </div>
+
+            <div class="card mb-4 panel-glass">
+                <div class="card-header">
+                    <i class="fas fa-code-branch mr-1"></i>
+                    Revision and Build
+                </div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label>Release</label>
+                            <input disabled type="text" class="form-control" value="{{ version_info['release'] }}">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label>Commit</label>
+                            <input disabled type="text" class="form-control" value="{{ version_info['commit'] }}">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label>Revision</label>
+                            <input disabled type="text" class="form-control" value="{{ revision }}">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4 panel-glass">
+                <div class="card-header">
+                    <i class="fas fa-shield-alt mr-1"></i>
+                    About WireGuard
+                </div>
+                <div class="card-body">
+                    <p>
+                        WireGuard is a modern VPN protocol designed for high performance, strong cryptography, and simple configuration.
+                        It is frequently used for remote-access VPN, site-to-site networking, and private service connectivity.
+                    </p>
+                    <p class="mb-0">
+                        {{ app_name }} manages WireGuard interfaces and peers, generates peer configuration artifacts,
+                        and surfaces live and historical tunnel telemetry to help administrators validate health and bandwidth usage.
+                    </p>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="fas fa-book mr-1"></i>
+                    License
+                </div>
+                <div class="card-body">
+                    ARPVPN is distributed under GPL-3.0 terms. See repository licensing files for full details.
+                </div>
+            </div>
         </div>
     </main>
 {% endblock %}

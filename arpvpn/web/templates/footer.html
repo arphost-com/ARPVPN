@@ -1,24 +1,29 @@
-<div id="{{ footer_id }}">
-    <footer class="py-4 bg-light mt-auto">
+{% set resolved_footer_id = footer_id|default("layoutApp_footer", true) %}
+<div id="{{ resolved_footer_id }}">
+    <footer class="py-3 mt-auto app-footer">
         <div class="container-fluid">
-            <div class="d-flex align-items-center justify-content-between small">
+            <div class="d-flex align-items-center justify-content-between small app-footer-row">
                 {% if version_info["release"] %}
-                    {% if dev_env and version_info["commit"] %}
                     <div class="text-muted">
-                        {{ app_name }} {{ version_info["release"] }} ({{ version_info["commit"][:7] }})
+                        {% if dev_env and version_info["commit"] %}
+                            {{ app_name }} {{ version_info["release"] }} ({{ version_info["commit"][:7] }})
+                        {% else %}
+                            {{ app_name }} {{ version_info["release"] }}
+                        {% endif %}
                     </div>
-                    {% else %}
-                    <div class="text-muted">
-                        {{ app_name }} {{ version_info["release"] }}
-                    </div>
-                    {% endif %}
                 {% else %}
                     <div class="text-muted">Copyleft &#127279; {{ app_name }} {{ year }}</div>
                 {% endif %}
-                <div>
-                    <a href="https://github.com/arphost-com/ARPVPN" rel="noopener noreferrer" target="_blank">Github</a>
-                    &middot;
-                    <a href="https://github.com/arphost-com/ARPVPN/blob/main/LICENSE.md" rel="noopener noreferrer" target="_blank">License</a>
+                <div class="app-footer-brand">
+                    <a href="https://arphost.com" rel="noopener noreferrer" target="_blank" title="Visit ARPHost.com">
+                        <img
+                          class="app-footer-logo"
+                          src="/static/assets/img/arphost-logo-light.png"
+                          alt="ARPHost"
+                          width="168"
+                          height="28"
+                        >
+                    </a>
                 </div>
             </div>
         </div>
