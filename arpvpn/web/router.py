@@ -370,12 +370,22 @@ def build_statistics_rows(
     return rows
 
 
-def get_connection_history_map() -> Dict[str, List[Tuple[int, int, int]]]:
-    history_by_uuid: Dict[str, List[Tuple[int, int, int]]] = {}
+def load_traffic_history_data(include_session: bool = True) -> Dict[datetime, Dict[str, TrafficData]]:
     try:
-        history = traffic_config.driver.load_data()
+        if include_session:
+            if traffic_config.enabled:
+                return traffic_config.driver.get_session_and_stored_data()
+            return {datetime.now(): traffic_config.driver.get_session_data()}
+        return traffic_config.driver.load_data()
     except Exception as e:
         log_exception(e)
+        return {}
+
+
+def get_connection_history_map() -> Dict[str, List[Tuple[int, int, int]]]:
+    history_by_uuid: Dict[str, List[Tuple[int, int, int]]] = {}
+    history = load_traffic_history_data(include_session=True)
+    if not history:
         return history_by_uuid
 
     for timestamp, traffic_data in sorted(history.items(), key=lambda pair: pair[0]):
@@ -879,7 +889,8 @@ def user_can_access_connection(item_type: str, item: Union[Peer, Interface]) -> 
 
 def get_connection_traffic_points(uuid: str) -> List[Tuple[int, int, int]]:
     points = []
-    for timestamp, traffic_data in sorted(traffic_config.driver.load_data().items(), key=lambda pair: pair[0]):
+    history = load_traffic_history_data(include_session=True)
+    for timestamp, traffic_data in sorted(history.items(), key=lambda pair: pair[0]):
         sample = traffic_data.get(uuid, None)
         if not sample:
             continue
@@ -893,10 +904,8 @@ def get_connection_traffic_points(uuid: str) -> List[Tuple[int, int, int]]:
 
 def get_connection_sample_counts() -> Dict[str, int]:
     counts: Dict[str, int] = {}
-    try:
-        history = traffic_config.driver.load_data()
-    except Exception as e:
-        log_exception(e)
+    history = load_traffic_history_data(include_session=True)
+    if not history:
         return counts
     for _, traffic_data in sorted(history.items(), key=lambda pair: pair[0]):
         for device_uuid in traffic_data.keys():
@@ -954,73 +963,79 @@ def generate_rrd_graph_png(uuid: str, window_seconds: int) -> Optional[bytes]:
 
     graph_dir = global_properties.join_workdir("rrd_graphs")
     os.makedirs(graph_dir, exist_ok=True)
-    rrd_file = os.path.join(graph_dir, f"{uuid}.rrd")
-    png_file = os.path.join(graph_dir, f"{uuid}-{window_seconds}.png")
+    token = secrets.token_hex(8)
+    rrd_file = os.path.join(graph_dir, f"{uuid}-{window_seconds}-{token}.rrd")
+    png_file = os.path.join(graph_dir, f"{uuid}-{window_seconds}-{token}.png")
 
-    if os.path.exists(rrd_file):
-        os.remove(rrd_file)
+    try:
+        create_cmd = [
+            "rrdtool",
+            "create",
+            rrd_file,
+            "--step",
+            str(RRD_STEP_SECONDS),
+            "--start",
+            str(max(0, points[0][0] - RRD_STEP_SECONDS)),
+            f"DS:rx:GAUGE:{RRD_STEP_SECONDS * 2}:0:U",
+            f"DS:tx:GAUGE:{RRD_STEP_SECONDS * 2}:0:U",
+            "RRA:AVERAGE:0.5:1:10000",
+        ]
+        created = subprocess.run(create_cmd, capture_output=True, text=True, check=False)
+        if created.returncode != 0:
+            err_detail = (created.stderr or created.stdout or "unknown rrdtool error").strip()
+            raise RuntimeError(f"Unable to create RRD file: {err_detail}")
 
-    create_cmd = [
-        "rrdtool",
-        "create",
-        rrd_file,
-        "--step",
-        str(RRD_STEP_SECONDS),
-        "--start",
-        str(max(0, points[0][0] - RRD_STEP_SECONDS)),
-        f"DS:rx:GAUGE:{RRD_STEP_SECONDS * 2}:0:U",
-        f"DS:tx:GAUGE:{RRD_STEP_SECONDS * 2}:0:U",
-        "RRA:AVERAGE:0.5:1:10000",
-    ]
-    created = subprocess.run(create_cmd, capture_output=True, text=True, check=False)
-    if created.returncode != 0:
-        err_detail = (created.stderr or created.stdout or "unknown rrdtool error").strip()
-        raise RuntimeError(f"Unable to create RRD file: {err_detail}")
+        for unix_ts, rx, tx in points:
+            update = subprocess.run(
+                ["rrdtool", "update", rrd_file, f"{unix_ts}:{rx}:{tx}"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if update.returncode != 0:
+                err_detail = (update.stderr or update.stdout or "unknown rrdtool error").strip()
+                raise RuntimeError(f"Unable to update RRD data: {err_detail}")
 
-    for unix_ts, rx, tx in points:
-        update = subprocess.run(
-            ["rrdtool", "update", rrd_file, f"{unix_ts}:{rx}:{tx}"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if update.returncode != 0:
-            err_detail = (update.stderr or update.stdout or "unknown rrdtool error").strip()
-            raise RuntimeError(f"Unable to update RRD data: {err_detail}")
+        graph_cmd = [
+            "rrdtool",
+            "graph",
+            png_file,
+            "--start",
+            f"end-{window_seconds}",
+            "--end",
+            "now",
+            "--width",
+            "960",
+            "--height",
+            "280",
+            "--title",
+            "Connection traffic history",
+            "--vertical-label",
+            "Bytes",
+            f"DEF:rx={rrd_file}:rx:AVERAGE",
+            f"DEF:tx={rrd_file}:tx:AVERAGE",
+            "LINE2:rx#1f77b4:Received",
+            "LINE2:tx#ff7f0e:Transmitted",
+            r"GPRINT:rx:LAST:Last RX\: %8.2lf%sB",
+            r"GPRINT:tx:LAST:Last TX\: %8.2lf%sB",
+        ]
+        graphed = subprocess.run(graph_cmd, capture_output=True, text=True, check=False)
+        if graphed.returncode != 0:
+            err_detail = (graphed.stderr or graphed.stdout or "unknown rrdtool error").strip()
+            raise RuntimeError(f"Unable to generate RRD graph: {err_detail}")
 
-    graph_cmd = [
-        "rrdtool",
-        "graph",
-        png_file,
-        "--start",
-        f"end-{window_seconds}",
-        "--end",
-        "now",
-        "--width",
-        "960",
-        "--height",
-        "280",
-        "--title",
-        "Connection traffic history",
-        "--vertical-label",
-        "Bytes",
-        f"DEF:rx={rrd_file}:rx:AVERAGE",
-        f"DEF:tx={rrd_file}:tx:AVERAGE",
-        "LINE2:rx#1f77b4:Received",
-        "LINE2:tx#ff7f0e:Transmitted",
-        r"GPRINT:rx:LAST:Last RX\: %8.2lf%sB",
-        r"GPRINT:tx:LAST:Last TX\: %8.2lf%sB",
-    ]
-    graphed = subprocess.run(graph_cmd, capture_output=True, text=True, check=False)
-    if graphed.returncode != 0:
-        err_detail = (graphed.stderr or graphed.stdout or "unknown rrdtool error").strip()
-        raise RuntimeError(f"Unable to generate RRD graph: {err_detail}")
+        if not os.path.exists(png_file):
+            raise RuntimeError("RRD graph generation finished without producing an image.")
 
-    if not os.path.exists(png_file):
-        raise RuntimeError("RRD graph generation finished without producing an image.")
-
-    with open(png_file, "rb") as handle:
-        return handle.read()
+        with open(png_file, "rb") as handle:
+            return handle.read()
+    finally:
+        for file_path in (rrd_file, png_file):
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except OSError:
+                pass
 
 
 def serialize_peer_runtime_row(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -1739,7 +1754,8 @@ def add_wireguard_iface():
 def load_traffic_data(item: Union[Peer, Interface]):
     labels = []
     datasets = {"rx": [], "tx": []}
-    for timestamp, traffic_data in traffic_config.driver.load_data().items():
+    history = load_traffic_history_data(include_session=True)
+    for timestamp, traffic_data in sorted(history.items(), key=lambda pair: pair[0]):
         labels.append(str(timestamp))
         for device, data in traffic_data.items():
             if device == item.uuid:
