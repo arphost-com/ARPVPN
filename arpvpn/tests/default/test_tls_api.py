@@ -15,6 +15,8 @@ def cleanup():
         "redirect_http_to_https": web_config.redirect_http_to_https,
         "tls_cert_file": web_config.tls_cert_file,
         "tls_key_file": web_config.tls_key_file,
+        "http_port": web_config.http_port,
+        "https_port": web_config.https_port,
     }
     yield
     web_config.tls_mode = snapshot["tls_mode"]
@@ -24,6 +26,8 @@ def cleanup():
     web_config.redirect_http_to_https = snapshot["redirect_http_to_https"]
     web_config.tls_cert_file = snapshot["tls_cert_file"]
     web_config.tls_key_file = snapshot["tls_key_file"]
+    web_config.http_port = snapshot["http_port"]
+    web_config.https_port = snapshot["https_port"]
     default_cleanup()
 
 
@@ -58,6 +62,8 @@ def test_tls_status_api_returns_envelope(client):
     body = response.get_json()
     assert body["ok"] is True
     assert body["data"]["mode"] in web_config.TLS_MODES
+    assert body["data"]["http_port"] == web_config.http_port
+    assert body["data"]["https_port"] == web_config.https_port
     assert "certificate" in body["data"]
 
 

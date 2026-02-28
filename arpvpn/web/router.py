@@ -16,7 +16,7 @@ from time import sleep
 from typing import List, Dict, Any, Union, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
-from flask import Blueprint, abort, request, Response, redirect, url_for, jsonify, session, g
+from flask import Blueprint, abort, request, Response, redirect, url_for, jsonify, session, g, current_app
 from flask_login import current_user, login_required, login_user
 
 from arpvpn.common.models.user import users, User
@@ -171,6 +171,11 @@ def is_api_request() -> bool:
 
 def current_scope_label() -> str:
     return "staff" if current_user.has_role(*STAFF_ROLES) else "client"
+
+
+def should_use_secure_cookie() -> bool:
+    configured_secure = bool(current_app.config.get("SESSION_COOKIE_SECURE", False))
+    return configured_secure or bool(web_config.strict_https_mode)
 
 
 def ensure_request_id() -> str:
@@ -1257,6 +1262,9 @@ def build_tls_status_payload() -> Dict[str, Any]:
         "letsencrypt_email": web_config.tls_letsencrypt_email,
         "redirect_http_to_https": web_config.redirect_http_to_https,
         "proxy_incoming_hostname": web_config.proxy_incoming_hostname,
+        "http_port": web_config.http_port,
+        "https_port": web_config.https_port,
+        "strict_https_mode": web_config.strict_https_mode,
         "certificate": cert_metadata,
     }
 
@@ -2029,7 +2037,7 @@ def api_set_theme_choice():
         "choice": choice,
         "choices": list(THEME_CHOICES)
     })
-    secure_cookie = web_config.tls_mode != web_config.TLS_MODE_HTTP
+    secure_cookie = should_use_secure_cookie()
     response.set_cookie(
         THEME_COOKIE_NAME,
         choice,
@@ -2322,8 +2330,11 @@ def setup():
     form = SetupForm()
     wireguard_config.set_default_endpoint()
     form.app_endpoint.data = wireguard_config.endpoint
+    form.web_tls_mode.data = web_config.TLS_MODE_SELF_SIGNED
     form.web_tls_server_name.data = web_config.tls_server_name or wireguard_config.endpoint
     form.web_redirect_http_to_https.data = web_config.redirect_http_to_https
+    form.web_tls_generate_self_signed.data = True
+    form.web_tls_issue_letsencrypt.data = False
     context = {
         "title": "Setup",
         "form": form,
