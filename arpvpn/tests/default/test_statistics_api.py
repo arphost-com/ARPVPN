@@ -4,6 +4,8 @@ from ipaddress import IPv4Address
 import pytest
 
 from arpvpn.common.models.user import User, users
+from arpvpn.core.config.traffic import config as traffic_config
+from arpvpn.core.drivers.traffic_storage_driver import TrafficData
 from arpvpn.core.models import Interface, interfaces, Peer
 from arpvpn.tests.utils import default_cleanup, is_http_success, get_testing_app
 from arpvpn.web.client import Client, clients
@@ -190,3 +192,30 @@ def test_stats_history_and_rrd_api_scoped_access(client):
 
     blocked_history = client.get(f"/api/v1/stats/history/{peers[1].uuid}")
     assert blocked_history.status_code == 403
+
+
+def test_stats_history_uses_session_data_when_stored_history_missing(monkeypatch, client):
+    create_user("admin", "admin", User.ROLE_ADMIN)
+    iface, peers = setup_interface_with_peers(["client01"])
+    login(client, "admin", "admin")
+
+    sample_ts = datetime.now()
+
+    def fake_get_session_and_stored_data():
+        return {
+            sample_ts: {
+                peers[0].uuid: TrafficData(4096, 2048),
+                iface.uuid: TrafficData(2048, 4096),
+            }
+        }
+
+    monkeypatch.setattr(traffic_config.driver, "get_session_and_stored_data", fake_get_session_and_stored_data)
+
+    response = client.get(f"/api/v1/stats/history/{peers[0].uuid}")
+    assert is_http_success(response.status_code)
+    envelope = response.get_json()
+    assert envelope["ok"] is True
+    payload = envelope["data"]
+    assert payload["points_count"] == 1
+    assert payload["points"][0]["rx_bytes"] == 4096
+    assert payload["points"][0]["tx_bytes"] == 2048

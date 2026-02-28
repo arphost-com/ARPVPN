@@ -2,6 +2,12 @@
 
 ## What's new
 
+### 1.2.3
+
+* Fixed production RRD graph support by installing `rrdtool` in the packaged runtime dependencies.
+* Improved traffic history APIs/graphs to include current session data even when hourly persistence has not run yet.
+* Added coverage to ensure history endpoints still return usable points when only session data is available.
+
 ### 1.2.2
 
 * Added scoped statistics APIs for admins/clients including per-connection history and RRD metadata endpoints.

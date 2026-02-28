@@ -45,7 +45,7 @@ info "Installing dependencies..."
 debug "Updating packages list..."
 apt-get -qq update
 
-dependencies="sudo python3 python3-venv wireguard-tools iptables uwsgi uwsgi-plugin-python3 iproute2 openssl"
+dependencies="sudo python3 python3-venv wireguard-tools iptables uwsgi uwsgi-plugin-python3 iproute2 openssl rrdtool"
 
 # Debian package names changed across releases (PCRE1 -> PCRE2). Pick
 # whichever set is available so container builds keep working on current bases.
