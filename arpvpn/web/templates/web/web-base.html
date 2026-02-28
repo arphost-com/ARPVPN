@@ -9,9 +9,10 @@
         <div id="layoutSidenav_content">
             {% block content %}
             {% endblock %}
+            {% set footer_id = "layoutSidenav_footer" %}
+            {% include "footer.html" %}
         </div>
     </div>
-    {% include "footer.html" %}
 {% endblock %}
 
 {% block scripts %}

@@ -7,6 +7,8 @@
 * Fixed production RRD graph support by installing `rrdtool` in the packaged runtime dependencies.
 * Improved traffic history APIs/graphs to include current session data even when hourly persistence has not run yet.
 * Added coverage to ensure history endpoints still return usable points when only session data is available.
+* Reworked application footer to remove GitHub links and use ARPHost branding in light/dark themes.
+* Expanded the About page with platform overview, ARPHost information, revision/build details, and WireGuard background.
 
 ### 1.2.2
 
