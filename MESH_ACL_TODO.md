@@ -3,11 +3,11 @@
 Goal: add first-class site-to-site and multi-site mesh VPN capabilities across ARPVPN servers, plus policy-driven control over which destination IPs/subnets are reachable through the VPN.
 
 ## Phase 1: Data Model and Control Plane
-- [ ] Add `vpn_links` model for server-to-server links (source server, target server, interface, status, key metadata).
-- [ ] Add `topology` model with `point_to_point`, `hub_spoke`, and `full_mesh` presets.
-- [ ] Add `route_advertisements` model for per-server announced subnets.
-- [ ] Add `access_policies` model for source peer/group -> destination CIDR allow/deny rules.
-- [ ] Add conflict detection for overlapping CIDRs and duplicate route ownership.
+- [x] Add `vpn_links` model for server-to-server links (source server, target server, interface, status, key metadata).
+- [x] Add `topology` model with `point_to_point`, `hub_spoke`, and `full_mesh` presets.
+- [x] Add `route_advertisements` model for per-server announced subnets.
+- [x] Add `access_policies` model for source peer/group -> destination CIDR allow/deny rules.
+- [x] Add conflict detection for overlapping CIDRs and duplicate route ownership.
 
 ## Phase 2: UI and API
 - [ ] Add UI wizard: create site-to-site link between two ARPVPN servers.
