@@ -16,7 +16,14 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
 * Display general network information.
 * Encrypted user credentials (AES).
 * Multi-user roles (`admin`, `support`, `client`) with staff impersonation of client sessions for troubleshooting.
+* API v1 with cookie/session and bearer token auth modes, plus mesh control-plane APIs.
 * Easy management through the ``arpvpn`` systemd service.
+
+## API docs
+
+* OpenAPI source: `docs/source/api/openapi.v1.yaml`
+* Versioning policy: `API_VERSIONING.md`
+* API changelog process: `API_CHANGELOG_PROCESS.md`
 
 ## Installation
 

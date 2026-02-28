@@ -12,9 +12,9 @@ Goal: add first-class site-to-site and multi-site mesh VPN capabilities across A
 ## Phase 2: UI and API
 - [ ] Add UI wizard: create site-to-site link between two ARPVPN servers.
 - [ ] Add UI wizard: create 3+ server mesh from a server list and subnet map.
-- [ ] Add API endpoints for links/topologies/routes/policies (`/api/v1/mesh/*`).
-- [ ] Add dry-run API for topology validation before apply.
-- [ ] Add export/import for topology JSON.
+- [x] Add API endpoints for links/topologies/routes/policies (`/api/v1/mesh/*`).
+- [x] Add dry-run API for topology validation before apply.
+- [x] Add export/import for topology JSON.
 
 ## Phase 3: WireGuard Rendering and Apply Logic
 - [ ] Generate inter-server peer entries with deterministic naming and key rotation support.

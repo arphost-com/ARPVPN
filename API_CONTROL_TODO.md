@@ -5,19 +5,19 @@ Goal: provide secure API control for all ARPVPN features (users, tenants, WireGu
 See also: `MESH_ACL_TODO.md` for dedicated site-to-site mesh and IP access-control roadmap.
 
 ## Phase 0: API Foundation
-- [ ] Define API versioning strategy (`/api/v1`, deprecation policy, compatibility guarantees).
+- [x] Define API versioning strategy (`/api/v1`, deprecation policy, compatibility guarantees).
 - [x] Standardize response envelope (success/error shape, request IDs, pagination metadata).
 - [x] Define error model (`code`, `message`, `details`, HTTP mapping).
-- [ ] Add OpenAPI source of truth and CI validation.
-- [ ] Add API changelog process per release line (`main` and `codex/multitenant-v2`).
+- [x] Add OpenAPI source of truth and CI validation.
+- [x] Add API changelog process per release line (`main` and `codex/multitenant-v2`).
 
 ## Phase 1: AuthN/AuthZ and Session Control
-- [ ] Add token-based auth (access + refresh tokens) for API clients.
-- [ ] Keep secure cookie/session auth for UI; document both auth modes.
-- [ ] Implement RBAC matrix for `super_admin`, `support_admin`, `tenant_admin`, `client`.
-- [ ] Add impersonation API endpoints with strict audit logging.
-- [ ] Add API rate limiting and lockout controls.
-- [ ] Add token revocation and forced logout endpoints.
+- [x] Add token-based auth (access + refresh tokens) for API clients.
+- [x] Keep secure cookie/session auth for UI; document both auth modes.
+- [x] Implement RBAC matrix for `super_admin`, `support_admin`, `tenant_admin`, `client`.
+- [x] Add impersonation API endpoints with strict audit logging.
+- [x] Add API rate limiting and lockout controls.
+- [x] Add token revocation and forced logout endpoints.
 
 ## Phase 2: Tenant and User Management APIs
 - [ ] CRUD APIs for tenants (name, domain/IP metadata, status).

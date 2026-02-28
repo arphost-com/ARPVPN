@@ -31,6 +31,7 @@ from arpvpn.core.config.web import config as web_config
 from arpvpn.core.config.wireguard import config as wireguard_config
 from arpvpn.core.drivers.traffic_storage_driver import TrafficData
 from arpvpn.core.exceptions import WireguardError
+from arpvpn.core.mesh import MeshTopology, VPNLink, RouteAdvertisement, AccessPolicy
 from arpvpn.core.managers.config import config_manager
 from arpvpn.core.managers.tls import tls_manager
 from arpvpn.core.models import interfaces, Interface, get_all_peers, Peer
@@ -38,6 +39,7 @@ from arpvpn.core.utils.wireguard import is_wg_iface_up
 from arpvpn.web.client import clients, Client
 from arpvpn.web.controllers.RestController import RestController
 from arpvpn.web.controllers.ViewController import ViewController
+from arpvpn.web.security_api import ApiTokenStore, SlidingWindowRateLimiter, AuthLockoutManager
 from arpvpn.web.static.assets.resources import EMPTY_FIELD, APP_NAME
 
 ACTIVE_PEER_MAX_AGE_SECONDS = 180
@@ -81,11 +83,29 @@ TRAFFIC_ROLLUP_WINDOWS_SECONDS = {
     "week": 7 * 24 * 60 * 60,
     "month": 30 * 24 * 60 * 60,
 }
-RRD_STEP_SECONDS = 60 * 60
+RRD_STEP_SECONDS = 60
 THEME_CHOICES = ("auto", "light", "dark")
 THEME_COOKIE_NAME = "arpvpn_theme"
 THEME_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365
 MAX_HISTORY_POINTS = 5000
+API_AUTH_ACCESS_TTL_SECONDS = get_env_int("ARPVPN_API_ACCESS_TTL_SECONDS", 15 * 60)
+API_AUTH_REFRESH_TTL_SECONDS = get_env_int("ARPVPN_API_REFRESH_TTL_SECONDS", 24 * 60 * 60)
+API_AUTH_RATE_WINDOW_SECONDS = get_env_int("ARPVPN_API_AUTH_WINDOW_SECONDS", 60)
+API_AUTH_MAX_ATTEMPTS = get_env_int("ARPVPN_API_AUTH_MAX_ATTEMPTS", 8)
+API_AUTH_LOCKOUT_SECONDS = get_env_int("ARPVPN_API_AUTH_LOCKOUT_SECONDS", 300)
+API_RATE_LIMIT_WINDOW_SECONDS = get_env_int("ARPVPN_API_RATE_LIMIT_WINDOW_SECONDS", 60)
+API_RATE_LIMIT_MAX_REQUESTS = get_env_int("ARPVPN_API_RATE_LIMIT_MAX_REQUESTS", 120)
+API_AUTH_SCOPE_ALL = "all"
+API_AUTH_SCOPE_STAFF = "staff"
+API_AUTH_SCOPE_CLIENT = "client"
+API_AUTH_SCOPES = (API_AUTH_SCOPE_ALL, API_AUTH_SCOPE_STAFF, API_AUTH_SCOPE_CLIENT)
+API_AUTH_PUBLIC_ENDPOINTS = {
+    "router.api_auth_issue_token",
+    "router.api_auth_refresh_token",
+}
+api_token_store = ApiTokenStore(web_config.secret_key)
+api_rate_limiter = SlidingWindowRateLimiter()
+api_auth_lockouts = AuthLockoutManager()
 
 
 def is_safe_redirect_url(url: str) -> bool:
@@ -202,6 +222,244 @@ def assign_request_id():
 def apply_request_id_header(response: Response):
     response.headers["X-Request-ID"] = get_request_id()
     return response
+
+
+def get_request_ip() -> str:
+    return str(request.remote_addr or "unknown")
+
+
+def get_request_user_agent() -> str:
+    user_agent = request.headers.get("User-Agent", "")
+    return str(user_agent or "").strip()
+
+
+def extract_bearer_token() -> Optional[str]:
+    auth_header = str(request.headers.get("Authorization", "") or "").strip()
+    if not auth_header:
+        return None
+    if not auth_header.lower().startswith("bearer "):
+        return None
+    token = auth_header.split(" ", 1)[1].strip()
+    return token or None
+
+
+def current_actor() -> Optional[User]:
+    actor = getattr(g, "api_actor_user", None)
+    if actor:
+        return actor
+    if current_user and current_user.is_authenticated:
+        return current_user
+    return None
+
+
+def current_actor_role() -> Optional[str]:
+    actor = current_actor()
+    if not actor:
+        return None
+    return getattr(actor, "role", None)
+
+
+def normalize_auth_scope(value: Any) -> str:
+    scope = str(value or "").strip().lower()
+    if scope not in API_AUTH_SCOPES:
+        return API_AUTH_SCOPE_ALL
+    return scope
+
+
+def role_allowed_in_scope(role: str, scope: str) -> bool:
+    if scope == API_AUTH_SCOPE_ALL:
+        return True
+    if scope == API_AUTH_SCOPE_STAFF:
+        return role in STAFF_ROLES
+    if scope == API_AUTH_SCOPE_CLIENT:
+        return role == User.ROLE_CLIENT
+    return False
+
+
+def build_rbac_matrix() -> Dict[str, Dict[str, bool]]:
+    return {
+        "super_admin": {
+            "maps_to_role": User.ROLE_ADMIN,
+            "impersonate_clients": True,
+            "manage_users": True,
+            "manage_tls": True,
+            "manage_mesh": True,
+        },
+        "support_admin": {
+            "maps_to_role": User.ROLE_SUPPORT,
+            "impersonate_clients": True,
+            "manage_users": True,
+            "manage_tls": True,
+            "manage_mesh": True,
+        },
+        "tenant_admin": {
+            "maps_to_role": User.ROLE_SUPPORT,
+            "impersonate_clients": True,
+            "manage_users": True,
+            "manage_tls": True,
+            "manage_mesh": True,
+        },
+        "client": {
+            "maps_to_role": User.ROLE_CLIENT,
+            "impersonate_clients": False,
+            "manage_users": False,
+            "manage_tls": False,
+            "manage_mesh": False,
+        },
+    }
+
+
+def log_audit_event(action: str, status: str = "success", details: Optional[Dict[str, Any]] = None):
+    actor = current_actor()
+    payload: Dict[str, Any] = {
+        "request_id": get_request_id(),
+        "action": action,
+        "status": status,
+        "actor_id": actor.id if actor else None,
+        "actor_name": actor.name if actor else None,
+        "actor_role": actor.role if actor else None,
+        "ip": get_request_ip(),
+        "path": request.path,
+    }
+    if details:
+        payload["details"] = details
+    info(f"[AUDIT] {json.dumps(payload, sort_keys=True)}")
+
+
+def apply_api_rate_limit_or_abort(bucket: str, max_requests: int, window_seconds: int):
+    key = f"{bucket}:{get_request_ip()}"
+    allowed, retry_after = api_rate_limiter.allow(key, max_requests=max_requests, window_seconds=window_seconds)
+    if allowed:
+        return
+    abort(429, f"Rate limit exceeded. Retry in {retry_after} second(s).")
+
+
+def parse_auth_token_payload() -> Dict[str, Any]:
+    payload = parse_json_payload()
+    username = str(payload.get("username", "") or "").strip()
+    password = str(payload.get("password", "") or "")
+    scope = normalize_auth_scope(payload.get("scope"))
+    if not username:
+        abort(BAD_REQUEST, "username is required.")
+    if not password:
+        abort(BAD_REQUEST, "password is required.")
+    return {
+        "username": username,
+        "password": password,
+        "scope": scope,
+    }
+
+
+def build_token_response_payload(token_pair: Dict[str, Any], scope: str) -> Dict[str, Any]:
+    access = token_pair["access"]
+    refresh = token_pair["refresh"]
+    return {
+        "token_type": "Bearer",
+        "scope": scope,
+        "access_token": access["raw_token"],
+        "access_token_id": access["token_id"],
+        "access_expires_at": access["expires_at"].isoformat().replace("+00:00", "Z"),
+        "access_expires_in": access["expires_in"],
+        "refresh_token": refresh["raw_token"],
+        "refresh_token_id": refresh["token_id"],
+        "refresh_expires_at": refresh["expires_at"].isoformat().replace("+00:00", "Z"),
+        "refresh_expires_in": refresh["expires_in"],
+    }
+
+
+def get_refresh_token_from_request() -> str:
+    payload = request.get_json(silent=True)
+    if isinstance(payload, dict):
+        raw = payload.get("refresh_token", "")
+        candidate = str(raw or "").strip()
+        if candidate:
+            return candidate
+    bearer = extract_bearer_token()
+    if bearer:
+        return bearer
+    abort(BAD_REQUEST, "refresh_token is required.")
+
+
+def get_revoke_token_from_request() -> Optional[str]:
+    payload = request.get_json(silent=True)
+    if isinstance(payload, dict):
+        raw = payload.get("token", "")
+        candidate = str(raw or "").strip()
+        if candidate:
+            return candidate
+    return extract_bearer_token()
+
+
+def resolve_api_actor_user() -> Optional[User]:
+    if current_user and current_user.is_authenticated:
+        return current_user
+    token_value = extract_bearer_token()
+    if not token_value:
+        return None
+    token_record = api_token_store.validate_access_token(token_value)
+    if not token_record:
+        return None
+    user = users.get(token_record.user_id, None)
+    if not user:
+        return None
+    user.set_authenticated(True)
+    g.api_token_id = token_record.token_id
+    g.api_actor_user = user
+    login_user(user, remember=False, force=True)
+    return user
+
+
+@router.before_request
+def refresh_api_token_signing_key():
+    api_token_store.set_signing_key(web_config.secret_key)
+
+
+@router.before_request
+def enforce_forced_logout_state():
+    actor = current_actor()
+    if not actor:
+        return None
+    revoked_after = api_token_store.get_user_revocation_cutoff(actor.id)
+    if not revoked_after:
+        return None
+    login_date = getattr(actor, "login_date", None)
+    if login_date is not None:
+        if login_date.tzinfo is None:
+            login_date = login_date.replace(tzinfo=timezone.utc)
+        if login_date > revoked_after:
+            return None
+    if request.endpoint in API_AUTH_PUBLIC_ENDPOINTS:
+        return None
+    log_audit_event(
+        "auth.forced_logout.enforced",
+        status="success",
+        details={
+            "target_user_id": actor.id,
+            "revoked_after": revoked_after.isoformat().replace("+00:00", "Z"),
+        }
+    )
+    session.pop(IMPERSONATOR_SESSION_KEY, None)
+    actor.logout()
+    if is_api_request():
+        return api_error(UNAUTHORIZED, "forced_logout", "User session has been revoked by an administrator.")
+    return redirect(url_for("router.login"))
+
+
+@router.before_request
+def authenticate_api_bearer_token():
+    if not is_api_request():
+        return None
+    if request.endpoint in API_AUTH_PUBLIC_ENDPOINTS:
+        return None
+    if current_user and current_user.is_authenticated:
+        g.api_actor_user = current_user
+        return None
+    actor = resolve_api_actor_user()
+    if actor:
+        return None
+    if extract_bearer_token():
+        return api_error(UNAUTHORIZED, "invalid_token", "Invalid or expired access token.")
+    return None
 
 
 def api_success(
@@ -981,9 +1239,9 @@ def generate_rrd_graph_png(uuid: str, window_seconds: int) -> Optional[bytes]:
             str(RRD_STEP_SECONDS),
             "--start",
             str(max(0, points[0][0] - RRD_STEP_SECONDS)),
-            f"DS:rx:GAUGE:{RRD_STEP_SECONDS * 2}:0:U",
-            f"DS:tx:GAUGE:{RRD_STEP_SECONDS * 2}:0:U",
-            "RRA:AVERAGE:0.5:1:10000",
+            f"DS:rx:COUNTER:{RRD_STEP_SECONDS * 2}:0:U",
+            f"DS:tx:COUNTER:{RRD_STEP_SECONDS * 2}:0:U",
+            "RRA:AVERAGE:0.5:1:100000",
         ]
         created = subprocess.run(create_cmd, capture_output=True, text=True, check=False)
         if created.returncode != 0:
@@ -1014,15 +1272,19 @@ def generate_rrd_graph_png(uuid: str, window_seconds: int) -> Optional[bytes]:
             "--height",
             "280",
             "--title",
-            "Connection traffic history",
+            "Connection traffic rate",
             "--vertical-label",
-            "Bytes",
+            "Bytes/s",
+            "--lower-limit",
+            "0",
             f"DEF:rx={rrd_file}:rx:AVERAGE",
             f"DEF:tx={rrd_file}:tx:AVERAGE",
-            "LINE2:rx#1f77b4:Received",
-            "LINE2:tx#ff7f0e:Transmitted",
-            r"GPRINT:rx:LAST:Last RX\: %8.2lf%sB",
-            r"GPRINT:tx:LAST:Last TX\: %8.2lf%sB",
+            "LINE2:rx#1f77b4:Received rate",
+            "LINE2:tx#ff7f0e:Transmitted rate",
+            r"GPRINT:rx:LAST:Last RX/s\: %8.2lf%sB/s",
+            r"GPRINT:tx:LAST:Last TX/s\: %8.2lf%sB/s",
+            r"GPRINT:rx:MAX:Max RX/s\: %8.2lf%sB/s",
+            r"GPRINT:tx:MAX:Max TX/s\: %8.2lf%sB/s",
         ]
         graphed = subprocess.run(graph_cmd, capture_output=True, text=True, check=False)
         if graphed.returncode != 0:
@@ -1302,6 +1564,161 @@ def parse_json_bool(payload: Dict[str, Any], key: str, default: bool = False) ->
     abort(BAD_REQUEST, f"Invalid boolean value for '{key}'.")
 
 
+def parse_mesh_uuid(value: Any, field_name: str = "uuid") -> str:
+    uuid = str(value or "").strip()
+    if not uuid:
+        abort(BAD_REQUEST, f"{field_name} is required.")
+    return uuid
+
+
+def parse_mesh_str(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def sort_and_persist_mesh():
+    wireguard_config.mesh.topologies.sort()
+    wireguard_config.mesh.vpn_links.sort()
+    wireguard_config.mesh.route_advertisements.sort()
+    wireguard_config.mesh.access_policies.sort()
+    config_manager.save(apply=False)
+
+
+def mesh_control_plane_payload() -> Dict[str, Any]:
+    mesh = wireguard_config.mesh
+    return {
+        "topologies": [topology.__to_yaml_dict__() for topology in mesh.topologies.values()],
+        "vpn_links": [link.__to_yaml_dict__() for link in mesh.vpn_links.values()],
+        "route_advertisements": [route.__to_yaml_dict__() for route in mesh.route_advertisements.values()],
+        "access_policies": [policy.__to_yaml_dict__() for policy in mesh.access_policies.values()],
+        "route_conflicts": mesh.validate_route_advertisements(),
+    }
+
+
+def validate_mesh_references(mesh_data) -> List[Dict[str, Any]]:
+    issues: List[Dict[str, Any]] = []
+    topology_ids = {item.uuid for item in mesh_data.topologies.values()}
+    link_ids = {item.uuid for item in mesh_data.vpn_links.values()}
+
+    for link in mesh_data.vpn_links.values():
+        if link.topology_uuid and link.topology_uuid not in topology_ids:
+            issues.append({
+                "code": "missing_topology_reference",
+                "message": f"vpn_link '{link.uuid}' references unknown topology '{link.topology_uuid}'.",
+                "entity_uuid": link.uuid,
+            })
+        if not link.source_server or not link.target_server:
+            issues.append({
+                "code": "invalid_link_servers",
+                "message": f"vpn_link '{link.uuid}' must include source_server and target_server.",
+                "entity_uuid": link.uuid,
+            })
+
+    for route in mesh_data.route_advertisements.values():
+        if route.via_link_uuid and route.via_link_uuid not in link_ids:
+            issues.append({
+                "code": "missing_link_reference",
+                "message": f"route_advertisement '{route.uuid}' references unknown link '{route.via_link_uuid}'.",
+                "entity_uuid": route.uuid,
+            })
+        if not route.owner_server:
+            issues.append({
+                "code": "missing_owner_server",
+                "message": f"route_advertisement '{route.uuid}' is missing owner_server.",
+                "entity_uuid": route.uuid,
+            })
+
+    for policy in mesh_data.access_policies.values():
+        if not policy.destinations:
+            issues.append({
+                "code": "empty_policy_destinations",
+                "message": f"access_policy '{policy.uuid}' has no destinations.",
+                "entity_uuid": policy.uuid,
+            })
+
+    return issues
+
+
+def build_mesh_from_payload(payload: Dict[str, Any]):
+    topologies = payload.get("topologies", [])
+    links = payload.get("vpn_links", [])
+    routes = payload.get("route_advertisements", [])
+    policies = payload.get("access_policies", [])
+    if not isinstance(topologies, list):
+        abort(BAD_REQUEST, "topologies must be a list.")
+    if not isinstance(links, list):
+        abort(BAD_REQUEST, "vpn_links must be a list.")
+    if not isinstance(routes, list):
+        abort(BAD_REQUEST, "route_advertisements must be a list.")
+    if not isinstance(policies, list):
+        abort(BAD_REQUEST, "access_policies must be a list.")
+
+    mesh = wireguard_config.mesh.__class__()
+
+    for item in topologies:
+        if not isinstance(item, dict):
+            abort(BAD_REQUEST, "Invalid topology entry.")
+        topology = MeshTopology(
+            uuid=parse_mesh_str(item.get("uuid")),
+            name=parse_mesh_str(item.get("name")),
+            preset=parse_mesh_str(item.get("preset")) or MeshTopology.PRESET_POINT_TO_POINT,
+            server_ids=item.get("server_ids", []),
+            hub_server_id=parse_mesh_str(item.get("hub_server_id")),
+            description=parse_mesh_str(item.get("description")),
+        )
+        mesh.topologies[topology.uuid] = topology
+
+    for item in links:
+        if not isinstance(item, dict):
+            abort(BAD_REQUEST, "Invalid vpn_link entry.")
+        link = VPNLink(
+            uuid=parse_mesh_str(item.get("uuid")),
+            source_server=parse_mesh_str(item.get("source_server")),
+            target_server=parse_mesh_str(item.get("target_server")),
+            interface_uuid=parse_mesh_str(item.get("interface_uuid")),
+            status=parse_mesh_str(item.get("status")) or VPNLink.STATUS_PENDING,
+            key_metadata=item.get("key_metadata", {}),
+            topology_uuid=parse_mesh_str(item.get("topology_uuid")),
+            description=parse_mesh_str(item.get("description")),
+            enabled=bool(item.get("enabled", True)),
+        )
+        mesh.vpn_links[link.uuid] = link
+
+    for item in routes:
+        if not isinstance(item, dict):
+            abort(BAD_REQUEST, "Invalid route_advertisement entry.")
+        route = RouteAdvertisement(
+            uuid=parse_mesh_str(item.get("uuid")),
+            owner_server=parse_mesh_str(item.get("owner_server")),
+            cidr=parse_mesh_str(item.get("cidr")),
+            via_link_uuid=parse_mesh_str(item.get("via_link_uuid")),
+            description=parse_mesh_str(item.get("description")),
+            enabled=bool(item.get("enabled", True)),
+        )
+        mesh.route_advertisements[route.uuid] = route
+
+    for item in policies:
+        if not isinstance(item, dict):
+            abort(BAD_REQUEST, "Invalid access_policy entry.")
+        policy = AccessPolicy(
+            uuid=parse_mesh_str(item.get("uuid")),
+            name=parse_mesh_str(item.get("name")),
+            source_kind=parse_mesh_str(item.get("source_kind")) or AccessPolicy.SOURCE_PEER,
+            source_id=parse_mesh_str(item.get("source_id")),
+            destinations=item.get("destinations", []),
+            action=parse_mesh_str(item.get("action")) or AccessPolicy.ACTION_ALLOW,
+            priority=item.get("priority", AccessPolicy.DEFAULT_PRIORITY),
+            description=parse_mesh_str(item.get("description")),
+            enabled=bool(item.get("enabled", True)),
+        )
+        mesh.access_policies[policy.uuid] = policy
+
+    mesh.topologies.sort()
+    mesh.vpn_links.sort()
+    mesh.route_advertisements.sort()
+    mesh.access_policies.sort()
+    return mesh
+
+
 @router.route("/logout")
 @login_required
 @setup_required
@@ -1492,6 +1909,744 @@ def wireguard():
         "EMPTY_FIELD": EMPTY_FIELD
     }
     return ViewController("web/wireguard.html", **context).load()
+
+
+@router.route("/api/v1/auth/modes", methods=["GET"])
+@setup_required
+def api_auth_modes():
+    return api_success({
+        "cookie_session_auth": {
+            "enabled": True,
+            "description": "Browser session/cookie auth for UI and API calls from same-origin pages.",
+        },
+        "bearer_token_auth": {
+            "enabled": True,
+            "description": "Access/refresh token auth for API clients.",
+            "access_ttl_seconds": API_AUTH_ACCESS_TTL_SECONDS,
+            "refresh_ttl_seconds": API_AUTH_REFRESH_TTL_SECONDS,
+        },
+    })
+
+
+@router.route("/api/v1/auth/rbac", methods=["GET"])
+@login_required
+@setup_required
+def api_auth_rbac():
+    return api_success({
+        "scope": current_scope_label(),
+        "matrix": build_rbac_matrix(),
+    })
+
+
+@router.route("/api/v1/auth/token", methods=["POST"])
+@setup_required
+def api_auth_issue_token():
+    apply_api_rate_limit_or_abort(
+        "api-auth-token",
+        max_requests=API_RATE_LIMIT_MAX_REQUESTS,
+        window_seconds=API_RATE_LIMIT_WINDOW_SECONDS,
+    )
+    payload = parse_auth_token_payload()
+    username = payload["username"]
+    scope = payload["scope"]
+    lockout_key = f"{get_request_ip()}:{username.lower()}"
+    locked, retry_after = api_auth_lockouts.is_locked(lockout_key)
+    if locked:
+        log_audit_event(
+            "auth.token.issue",
+            status="locked",
+            details={"username": username, "retry_after_seconds": retry_after},
+        )
+        return api_error(
+            429,
+            "auth_locked",
+            "Too many failed authentication attempts.",
+            details={"retry_after_seconds": retry_after},
+        )
+
+    user = users.get_value_by_attr("name", username)
+    if not user or not user.check_password(payload["password"]):
+        remaining_attempts = api_auth_lockouts.register_failure(
+            lockout_key,
+            max_attempts=API_AUTH_MAX_ATTEMPTS,
+            window_seconds=API_AUTH_RATE_WINDOW_SECONDS,
+            lockout_seconds=API_AUTH_LOCKOUT_SECONDS,
+        )
+        log_audit_event(
+            "auth.token.issue",
+            status="failed",
+            details={"username": username, "remaining_attempts": remaining_attempts},
+        )
+        return api_error(
+            UNAUTHORIZED,
+            "invalid_credentials",
+            "Invalid username or password.",
+            details={"remaining_attempts": remaining_attempts},
+        )
+
+    if not role_allowed_in_scope(user.role, scope):
+        log_audit_event(
+            "auth.token.issue",
+            status="forbidden_scope",
+            details={"username": username, "user_role": user.role, "requested_scope": scope},
+        )
+        return api_error(
+            FORBIDDEN,
+            "invalid_scope",
+            f"Role '{user.role}' cannot request scope '{scope}'.",
+        )
+
+    api_auth_lockouts.clear_failures(lockout_key)
+    token_pair = api_token_store.issue_pair(
+        user_id=user.id,
+        access_ttl_seconds=API_AUTH_ACCESS_TTL_SECONDS,
+        refresh_ttl_seconds=API_AUTH_REFRESH_TTL_SECONDS,
+        issued_ip=get_request_ip(),
+        issued_user_agent=get_request_user_agent(),
+    )
+    log_audit_event(
+        "auth.token.issue",
+        status="success",
+        details={
+            "target_user_id": user.id,
+            "target_user_name": user.name,
+            "target_user_role": user.role,
+            "scope": scope,
+        },
+    )
+    return api_success(build_token_response_payload(token_pair, scope), status_code=201)
+
+
+@router.route("/api/v1/auth/refresh", methods=["POST"])
+@setup_required
+def api_auth_refresh_token():
+    apply_api_rate_limit_or_abort(
+        "api-auth-refresh",
+        max_requests=API_RATE_LIMIT_MAX_REQUESTS,
+        window_seconds=API_RATE_LIMIT_WINDOW_SECONDS,
+    )
+    refresh_token = get_refresh_token_from_request()
+    record = api_token_store.validate_refresh_token(refresh_token)
+    if not record:
+        log_audit_event("auth.token.refresh", status="failed")
+        return api_error(UNAUTHORIZED, "invalid_refresh_token", "Invalid or expired refresh token.")
+
+    user = users.get(record.user_id, None)
+    if not user:
+        return api_error(UNAUTHORIZED, "user_not_found", "Refresh token user no longer exists.")
+
+    api_token_store.revoke_token(refresh_token)
+    scope = API_AUTH_SCOPE_STAFF if user.has_role(*STAFF_ROLES) else API_AUTH_SCOPE_CLIENT
+    token_pair = api_token_store.issue_pair(
+        user_id=user.id,
+        access_ttl_seconds=API_AUTH_ACCESS_TTL_SECONDS,
+        refresh_ttl_seconds=API_AUTH_REFRESH_TTL_SECONDS,
+        issued_ip=get_request_ip(),
+        issued_user_agent=get_request_user_agent(),
+    )
+    log_audit_event(
+        "auth.token.refresh",
+        status="success",
+        details={"target_user_id": user.id, "scope": scope},
+    )
+    return api_success(build_token_response_payload(token_pair, scope))
+
+
+@router.route("/api/v1/auth/revoke", methods=["POST"])
+@login_required
+@setup_required
+def api_auth_revoke_token():
+    target_token = get_revoke_token_from_request()
+    if not target_token:
+        return api_error(BAD_REQUEST, "token_required", "No token was provided for revocation.")
+
+    record = api_token_store.inspect_token(target_token)
+    if not record:
+        return api_error(NOT_FOUND, "token_not_found", "Token was not found or already revoked.")
+    actor = current_actor()
+    if not actor:
+        abort(UNAUTHORIZED)
+    if record.user_id != actor.id and not actor.has_role(*STAFF_ROLES):
+        abort(FORBIDDEN, "Insufficient permissions.")
+
+    if not api_token_store.revoke_token(target_token):
+        return api_error(NOT_FOUND, "token_not_found", "Token was not found or already revoked.")
+
+    log_audit_event(
+        "auth.token.revoke",
+        status="success",
+        details={"revoked_token_id": record.token_id, "target_user_id": record.user_id},
+    )
+    return api_success({"revoked": True})
+
+
+@router.route("/api/v1/auth/revoke-all", methods=["POST"])
+@login_required
+@setup_required
+def api_auth_revoke_all_tokens():
+    payload = request.get_json(silent=True) or {}
+    target_user_id = str(payload.get("user_id", "") or "").strip()
+    actor = current_actor()
+    if not actor:
+        abort(UNAUTHORIZED)
+    if target_user_id and target_user_id != actor.id and not actor.has_role(*STAFF_ROLES):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    if not target_user_id:
+        target_user_id = actor.id
+    revoked = api_token_store.revoke_user_tokens(target_user_id)
+    log_audit_event(
+        "auth.token.revoke_all",
+        status="success",
+        details={"target_user_id": target_user_id, "revoked_tokens": revoked},
+    )
+    return api_success({
+        "target_user_id": target_user_id,
+        "revoked_tokens": revoked,
+    })
+
+
+@router.route("/api/v1/auth/force-logout/<user_id>", methods=["POST"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_auth_force_logout(user_id: str):
+    target_user = users.get(user_id, None)
+    if not target_user:
+        abort(NOT_FOUND, "User not found.")
+    revoked_tokens = api_token_store.revoke_user_tokens(target_user.id)
+    api_token_store.mark_user_forced_logout(target_user.id)
+    target_user.set_authenticated(False)
+    log_audit_event(
+        "auth.force_logout",
+        status="success",
+        details={"target_user_id": target_user.id, "revoked_tokens": revoked_tokens},
+    )
+    return api_success({
+        "target_user_id": target_user.id,
+        "revoked_tokens": revoked_tokens,
+        "forced_logout": True,
+    })
+
+
+@router.route("/api/v1/impersonation/start/<user_id>", methods=["POST"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_start_impersonation(user_id: str):
+    if is_impersonating():
+        abort(BAD_REQUEST, "Already impersonating a user.")
+    target_user = users.get(user_id, None)
+    if not target_user:
+        abort(NOT_FOUND, "User not found.")
+    if target_user.role != User.ROLE_CLIENT:
+        abort(BAD_REQUEST, "Only client users can be impersonated.")
+    actor = current_actor()
+    if actor and target_user.id == actor.id:
+        abort(BAD_REQUEST, "Cannot impersonate your own account.")
+    session[IMPERSONATOR_SESSION_KEY] = actor.id if actor else ""
+    target_user.set_authenticated(True)
+    if not login_user(target_user, remember=False):
+        abort(INTERNAL_SERVER_ERROR, "Unable to impersonate target user.")
+    g.api_actor_user = target_user
+    log_audit_event(
+        "impersonation.start",
+        status="success",
+        details={"target_user_id": target_user.id, "target_user_name": target_user.name},
+    )
+    return api_success({
+        "impersonating": True,
+        "target_user_id": target_user.id,
+        "target_user_name": target_user.name,
+    })
+
+
+@router.route("/api/v1/impersonation/stop", methods=["POST"])
+@login_required
+@setup_required
+def api_stop_impersonation():
+    impersonator = get_impersonator_user()
+    if not impersonator:
+        abort(BAD_REQUEST, "No active impersonation session.")
+    session.pop(IMPERSONATOR_SESSION_KEY, None)
+    impersonator.set_authenticated(True)
+    if not login_user(impersonator, remember=False):
+        abort(INTERNAL_SERVER_ERROR, "Unable to restore original user.")
+    g.api_actor_user = impersonator
+    log_audit_event(
+        "impersonation.stop",
+        status="success",
+        details={"restored_user_id": impersonator.id, "restored_user_name": impersonator.name},
+    )
+    return api_success({
+        "impersonating": False,
+        "restored_user_id": impersonator.id,
+        "restored_user_name": impersonator.name,
+    })
+
+
+@router.route("/api/v1/mesh/overview", methods=["GET"])
+@login_required
+@setup_required
+def api_mesh_overview():
+    mesh_payload = mesh_control_plane_payload()
+    data: Dict[str, Any] = {
+        "scope": current_scope_label(),
+        "counts": {
+            "topologies": len(mesh_payload["topologies"]),
+            "vpn_links": len(mesh_payload["vpn_links"]),
+            "route_advertisements": len(mesh_payload["route_advertisements"]),
+            "access_policies": len(mesh_payload["access_policies"]),
+        },
+        "route_conflicts": mesh_payload["route_conflicts"],
+    }
+    if current_user.has_role(*STAFF_ROLES):
+        data["mesh"] = mesh_payload
+    return api_success(data)
+
+
+@router.route("/api/v1/mesh/topologies", methods=["GET"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_topologies():
+    return api_success({
+        "scope": current_scope_label(),
+        "items": [item.__to_yaml_dict__() for item in wireguard_config.mesh.topologies.values()],
+    })
+
+
+@router.route("/api/v1/mesh/topologies", methods=["POST"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_create_topology():
+    payload = parse_json_payload()
+    topology = MeshTopology(
+        name=parse_mesh_str(payload.get("name")),
+        preset=parse_mesh_str(payload.get("preset")) or MeshTopology.PRESET_POINT_TO_POINT,
+        server_ids=payload.get("server_ids", []),
+        hub_server_id=parse_mesh_str(payload.get("hub_server_id")),
+        description=parse_mesh_str(payload.get("description")),
+    )
+    wireguard_config.mesh.topologies[topology.uuid] = topology
+    sort_and_persist_mesh()
+    log_audit_event("mesh.topology.create", details={"topology_uuid": topology.uuid, "topology_name": topology.name})
+    return api_success(topology.__to_yaml_dict__(), status_code=201)
+
+
+@router.route("/api/v1/mesh/topologies/<uuid>", methods=["GET"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_get_topology(uuid: str):
+    topology = wireguard_config.mesh.topologies.get(uuid, None)
+    if not topology:
+        abort(NOT_FOUND, "Topology not found.")
+    return api_success(topology.__to_yaml_dict__())
+
+
+@router.route("/api/v1/mesh/topologies/<uuid>", methods=["PUT"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_update_topology(uuid: str):
+    topology = wireguard_config.mesh.topologies.get(uuid, None)
+    if not topology:
+        abort(NOT_FOUND, "Topology not found.")
+    payload = parse_json_payload()
+    updated = MeshTopology(
+        uuid=topology.uuid,
+        name=parse_mesh_str(payload.get("name", topology.name)),
+        preset=parse_mesh_str(payload.get("preset", topology.preset)) or topology.preset,
+        server_ids=payload.get("server_ids", topology.server_ids),
+        hub_server_id=parse_mesh_str(payload.get("hub_server_id", topology.hub_server_id)),
+        description=parse_mesh_str(payload.get("description", topology.description)),
+    )
+    wireguard_config.mesh.topologies[updated.uuid] = updated
+    sort_and_persist_mesh()
+    log_audit_event("mesh.topology.update", details={"topology_uuid": updated.uuid, "topology_name": updated.name})
+    return api_success(updated.__to_yaml_dict__())
+
+
+@router.route("/api/v1/mesh/topologies/<uuid>", methods=["DELETE"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_delete_topology(uuid: str):
+    topology = wireguard_config.mesh.topologies.get(uuid, None)
+    if not topology:
+        abort(NOT_FOUND, "Topology not found.")
+    del wireguard_config.mesh.topologies[uuid]
+    deleted_links = []
+    for link in list(wireguard_config.mesh.vpn_links.values()):
+        if link.topology_uuid == uuid:
+            deleted_links.append(link.uuid)
+            del wireguard_config.mesh.vpn_links[link.uuid]
+    for route in wireguard_config.mesh.route_advertisements.values():
+        if route.via_link_uuid in deleted_links:
+            route.via_link_uuid = ""
+    sort_and_persist_mesh()
+    log_audit_event(
+        "mesh.topology.delete",
+        details={"topology_uuid": uuid, "deleted_links": len(deleted_links)},
+    )
+    return api_success({"deleted": True, "topology_uuid": uuid, "deleted_links": deleted_links})
+
+
+@router.route("/api/v1/mesh/links", methods=["GET"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_links():
+    return api_success({
+        "scope": current_scope_label(),
+        "items": [item.__to_yaml_dict__() for item in wireguard_config.mesh.vpn_links.values()],
+    })
+
+
+@router.route("/api/v1/mesh/links", methods=["POST"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_create_link():
+    payload = parse_json_payload()
+    link = VPNLink(
+        source_server=parse_mesh_str(payload.get("source_server")),
+        target_server=parse_mesh_str(payload.get("target_server")),
+        interface_uuid=parse_mesh_str(payload.get("interface_uuid")),
+        status=parse_mesh_str(payload.get("status")) or VPNLink.STATUS_PENDING,
+        key_metadata=payload.get("key_metadata", {}),
+        topology_uuid=parse_mesh_str(payload.get("topology_uuid")),
+        description=parse_mesh_str(payload.get("description")),
+        enabled=parse_json_bool(payload, "enabled", True),
+    )
+    wireguard_config.mesh.vpn_links[link.uuid] = link
+    sort_and_persist_mesh()
+    log_audit_event("mesh.link.create", details={"link_uuid": link.uuid})
+    return api_success(link.__to_yaml_dict__(), status_code=201)
+
+
+@router.route("/api/v1/mesh/links/<uuid>", methods=["GET"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_get_link(uuid: str):
+    link = wireguard_config.mesh.vpn_links.get(uuid, None)
+    if not link:
+        abort(NOT_FOUND, "VPN link not found.")
+    return api_success(link.__to_yaml_dict__())
+
+
+@router.route("/api/v1/mesh/links/<uuid>", methods=["PUT"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_update_link(uuid: str):
+    link = wireguard_config.mesh.vpn_links.get(uuid, None)
+    if not link:
+        abort(NOT_FOUND, "VPN link not found.")
+    payload = parse_json_payload()
+    updated = VPNLink(
+        uuid=link.uuid,
+        source_server=parse_mesh_str(payload.get("source_server", link.source_server)),
+        target_server=parse_mesh_str(payload.get("target_server", link.target_server)),
+        interface_uuid=parse_mesh_str(payload.get("interface_uuid", link.interface_uuid)),
+        status=parse_mesh_str(payload.get("status", link.status)) or link.status,
+        key_metadata=payload.get("key_metadata", link.key_metadata),
+        topology_uuid=parse_mesh_str(payload.get("topology_uuid", link.topology_uuid)),
+        description=parse_mesh_str(payload.get("description", link.description)),
+        enabled=parse_json_bool(payload, "enabled", link.enabled),
+    )
+    wireguard_config.mesh.vpn_links[updated.uuid] = updated
+    sort_and_persist_mesh()
+    log_audit_event("mesh.link.update", details={"link_uuid": updated.uuid})
+    return api_success(updated.__to_yaml_dict__())
+
+
+@router.route("/api/v1/mesh/links/<uuid>", methods=["DELETE"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_delete_link(uuid: str):
+    link = wireguard_config.mesh.vpn_links.get(uuid, None)
+    if not link:
+        abort(NOT_FOUND, "VPN link not found.")
+    del wireguard_config.mesh.vpn_links[uuid]
+    for route in wireguard_config.mesh.route_advertisements.values():
+        if route.via_link_uuid == uuid:
+            route.via_link_uuid = ""
+    sort_and_persist_mesh()
+    log_audit_event("mesh.link.delete", details={"link_uuid": uuid})
+    return api_success({"deleted": True, "link_uuid": uuid})
+
+
+@router.route("/api/v1/mesh/routes", methods=["GET"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_routes():
+    return api_success({
+        "scope": current_scope_label(),
+        "items": [item.__to_yaml_dict__() for item in wireguard_config.mesh.route_advertisements.values()],
+    })
+
+
+@router.route("/api/v1/mesh/routes", methods=["POST"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_create_route():
+    payload = parse_json_payload()
+    try:
+        route = RouteAdvertisement(
+            owner_server=parse_mesh_str(payload.get("owner_server")),
+            cidr=parse_mesh_str(payload.get("cidr")),
+            via_link_uuid=parse_mesh_str(payload.get("via_link_uuid")),
+            description=parse_mesh_str(payload.get("description")),
+            enabled=parse_json_bool(payload, "enabled", True),
+        )
+    except Exception as e:
+        abort(BAD_REQUEST, f"Invalid route payload: {e}")
+    wireguard_config.mesh.route_advertisements[route.uuid] = route
+    sort_and_persist_mesh()
+    log_audit_event("mesh.route.create", details={"route_uuid": route.uuid, "cidr": route.cidr})
+    return api_success(route.__to_yaml_dict__(), status_code=201)
+
+
+@router.route("/api/v1/mesh/routes/<uuid>", methods=["GET"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_get_route(uuid: str):
+    route = wireguard_config.mesh.route_advertisements.get(uuid, None)
+    if not route:
+        abort(NOT_FOUND, "Route advertisement not found.")
+    return api_success(route.__to_yaml_dict__())
+
+
+@router.route("/api/v1/mesh/routes/<uuid>", methods=["PUT"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_update_route(uuid: str):
+    route = wireguard_config.mesh.route_advertisements.get(uuid, None)
+    if not route:
+        abort(NOT_FOUND, "Route advertisement not found.")
+    payload = parse_json_payload()
+    try:
+        updated = RouteAdvertisement(
+            uuid=route.uuid,
+            owner_server=parse_mesh_str(payload.get("owner_server", route.owner_server)),
+            cidr=parse_mesh_str(payload.get("cidr", route.cidr)),
+            via_link_uuid=parse_mesh_str(payload.get("via_link_uuid", route.via_link_uuid)),
+            description=parse_mesh_str(payload.get("description", route.description)),
+            enabled=parse_json_bool(payload, "enabled", route.enabled),
+        )
+    except Exception as e:
+        abort(BAD_REQUEST, f"Invalid route payload: {e}")
+    wireguard_config.mesh.route_advertisements[updated.uuid] = updated
+    sort_and_persist_mesh()
+    log_audit_event("mesh.route.update", details={"route_uuid": updated.uuid, "cidr": updated.cidr})
+    return api_success(updated.__to_yaml_dict__())
+
+
+@router.route("/api/v1/mesh/routes/<uuid>", methods=["DELETE"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_delete_route(uuid: str):
+    route = wireguard_config.mesh.route_advertisements.get(uuid, None)
+    if not route:
+        abort(NOT_FOUND, "Route advertisement not found.")
+    del wireguard_config.mesh.route_advertisements[uuid]
+    sort_and_persist_mesh()
+    log_audit_event("mesh.route.delete", details={"route_uuid": uuid})
+    return api_success({"deleted": True, "route_uuid": uuid})
+
+
+@router.route("/api/v1/mesh/policies", methods=["GET"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_policies():
+    return api_success({
+        "scope": current_scope_label(),
+        "items": [item.__to_yaml_dict__() for item in wireguard_config.mesh.access_policies.values()],
+    })
+
+
+@router.route("/api/v1/mesh/policies", methods=["POST"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_create_policy():
+    payload = parse_json_payload()
+    policy = AccessPolicy(
+        name=parse_mesh_str(payload.get("name")),
+        source_kind=parse_mesh_str(payload.get("source_kind")) or AccessPolicy.SOURCE_PEER,
+        source_id=parse_mesh_str(payload.get("source_id")),
+        destinations=payload.get("destinations", []),
+        action=parse_mesh_str(payload.get("action")) or AccessPolicy.ACTION_ALLOW,
+        priority=payload.get("priority", AccessPolicy.DEFAULT_PRIORITY),
+        description=parse_mesh_str(payload.get("description")),
+        enabled=parse_json_bool(payload, "enabled", True),
+    )
+    wireguard_config.mesh.access_policies[policy.uuid] = policy
+    sort_and_persist_mesh()
+    log_audit_event("mesh.policy.create", details={"policy_uuid": policy.uuid, "policy_name": policy.name})
+    return api_success(policy.__to_yaml_dict__(), status_code=201)
+
+
+@router.route("/api/v1/mesh/policies/<uuid>", methods=["GET"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_get_policy(uuid: str):
+    policy = wireguard_config.mesh.access_policies.get(uuid, None)
+    if not policy:
+        abort(NOT_FOUND, "Access policy not found.")
+    return api_success(policy.__to_yaml_dict__())
+
+
+@router.route("/api/v1/mesh/policies/<uuid>", methods=["PUT"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_update_policy(uuid: str):
+    policy = wireguard_config.mesh.access_policies.get(uuid, None)
+    if not policy:
+        abort(NOT_FOUND, "Access policy not found.")
+    payload = parse_json_payload()
+    updated = AccessPolicy(
+        uuid=policy.uuid,
+        name=parse_mesh_str(payload.get("name", policy.name)),
+        source_kind=parse_mesh_str(payload.get("source_kind", policy.source_kind)) or policy.source_kind,
+        source_id=parse_mesh_str(payload.get("source_id", policy.source_id)),
+        destinations=payload.get("destinations", policy.destinations),
+        action=parse_mesh_str(payload.get("action", policy.action)) or policy.action,
+        priority=payload.get("priority", policy.priority),
+        description=parse_mesh_str(payload.get("description", policy.description)),
+        enabled=parse_json_bool(payload, "enabled", policy.enabled),
+    )
+    wireguard_config.mesh.access_policies[updated.uuid] = updated
+    sort_and_persist_mesh()
+    log_audit_event("mesh.policy.update", details={"policy_uuid": updated.uuid, "policy_name": updated.name})
+    return api_success(updated.__to_yaml_dict__())
+
+
+@router.route("/api/v1/mesh/policies/<uuid>", methods=["DELETE"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_delete_policy(uuid: str):
+    policy = wireguard_config.mesh.access_policies.get(uuid, None)
+    if not policy:
+        abort(NOT_FOUND, "Access policy not found.")
+    del wireguard_config.mesh.access_policies[uuid]
+    sort_and_persist_mesh()
+    log_audit_event("mesh.policy.delete", details={"policy_uuid": uuid})
+    return api_success({"deleted": True, "policy_uuid": uuid})
+
+
+@router.route("/api/v1/mesh/dry-run", methods=["POST"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_dry_run():
+    payload = parse_json_payload()
+    mesh_payload = payload.get("mesh", None)
+    if mesh_payload is None:
+        mesh_payload = mesh_control_plane_payload()
+    if not isinstance(mesh_payload, dict):
+        abort(BAD_REQUEST, "mesh must be an object.")
+    try:
+        mesh_candidate = build_mesh_from_payload(mesh_payload)
+    except Exception as e:
+        abort(BAD_REQUEST, f"Invalid mesh payload: {e}")
+
+    route_conflicts = mesh_candidate.validate_route_advertisements()
+    reference_issues = validate_mesh_references(mesh_candidate)
+    valid = (
+        len(reference_issues) < 1 and
+        len(route_conflicts["duplicate_ownership"]) < 1 and
+        len(route_conflicts["overlapping_cidrs"]) < 1
+    )
+    return api_success({
+        "valid": valid,
+        "reference_issues": reference_issues,
+        "route_conflicts": route_conflicts,
+        "counts": {
+            "topologies": len(mesh_candidate.topologies),
+            "vpn_links": len(mesh_candidate.vpn_links),
+            "route_advertisements": len(mesh_candidate.route_advertisements),
+            "access_policies": len(mesh_candidate.access_policies),
+        },
+    })
+
+
+@router.route("/api/v1/mesh/export", methods=["GET"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_export():
+    return api_success({
+        "exported_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "mesh": mesh_control_plane_payload(),
+    })
+
+
+@router.route("/api/v1/mesh/import", methods=["POST"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_import():
+    payload = parse_json_payload()
+    mesh_payload = payload.get("mesh", None)
+    if not isinstance(mesh_payload, dict):
+        abort(BAD_REQUEST, "mesh is required.")
+    allow_conflicts = parse_json_bool(payload, "allow_conflicts", False)
+    try:
+        mesh_candidate = build_mesh_from_payload(mesh_payload)
+    except Exception as e:
+        abort(BAD_REQUEST, f"Invalid mesh payload: {e}")
+
+    route_conflicts = mesh_candidate.validate_route_advertisements()
+    reference_issues = validate_mesh_references(mesh_candidate)
+    has_conflicts = bool(
+        reference_issues or
+        route_conflicts["duplicate_ownership"] or
+        route_conflicts["overlapping_cidrs"]
+    )
+    if has_conflicts and not allow_conflicts:
+        return api_error(
+            BAD_REQUEST,
+            "mesh_validation_failed",
+            "Mesh import has validation errors/conflicts.",
+            details={
+                "reference_issues": reference_issues,
+                "route_conflicts": route_conflicts,
+            },
+        )
+
+    wireguard_config.mesh = mesh_candidate
+    sort_and_persist_mesh()
+    log_audit_event(
+        "mesh.import",
+        status="success",
+        details={
+            "allow_conflicts": allow_conflicts,
+            "reference_issues": len(reference_issues),
+            "duplicate_conflicts": len(route_conflicts["duplicate_ownership"]),
+            "overlap_conflicts": len(route_conflicts["overlapping_cidrs"]),
+        },
+    )
+    return api_success({
+        "imported": True,
+        "allow_conflicts": allow_conflicts,
+        "reference_issues": reference_issues,
+        "route_conflicts": route_conflicts,
+        "mesh": mesh_control_plane_payload(),
+    })
 
 
 @router.route("/api/v1/stats/overview", methods=["GET"])
@@ -2474,6 +3629,11 @@ def start_impersonation(user_id: str):
     target_user.set_authenticated(True)
     if not login_user(target_user, remember=False):
         abort(INTERNAL_SERVER_ERROR, "Unable to impersonate target user.")
+    log_audit_event(
+        "impersonation.start",
+        status="success",
+        details={"target_user_id": target_user.id, "target_user_name": target_user.name},
+    )
     return redirect(url_for("router.index"))
 
 
@@ -2492,6 +3652,11 @@ def stop_impersonation():
     impersonator.set_authenticated(True)
     if not login_user(impersonator, remember=False):
         abort(INTERNAL_SERVER_ERROR, "Unable to restore original user.")
+    log_audit_event(
+        "impersonation.stop",
+        status="success",
+        details={"restored_user_id": impersonator.id, "restored_user_name": impersonator.name},
+    )
     return redirect(url_for("router.manage_users"))
 
 
@@ -2710,6 +3875,20 @@ def not_found(err):
         "image": "/static/assets/img/error-404-monochrome.svg"
     }
     return ViewController("error/error-img.html", **context).load(), error_code
+
+
+@router.app_errorhandler(429)
+def too_many_requests(err):
+    error_code = 429
+    error_msg = get_error_message(err, "Too many requests.")
+    if is_api_request():
+        return api_error(error_code, "too_many_requests", error_msg.strip())
+    context = {
+        "title": error_code,
+        "error_code": error_code,
+        "error_msg": error_msg
+    }
+    return ViewController("error/error-main.html", **context).load(), error_code
 
 
 @router.app_errorhandler(INTERNAL_SERVER_ERROR)
