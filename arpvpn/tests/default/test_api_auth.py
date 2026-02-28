@@ -43,17 +43,17 @@ def issue_token(client, username: str, password: str, scope: str = "all"):
     return body["data"]
 
 
-def call_with_token(path: str, token: str):
-    app = get_testing_app()
-    with app.test_client() as token_client:
-        return token_client.get(path, headers={"Authorization": f"Bearer {token}"})
+def clear_client_session(client):
+    with client.session_transaction() as session_data:
+        session_data.clear()
 
 
 def test_api_token_can_access_protected_stats_endpoint(client):
     create_user("admin", "admin", User.ROLE_ADMIN)
     token_data = issue_token(client, "admin", "admin", scope="staff")
 
-    response = call_with_token("/api/v1/stats/overview", token_data["access_token"])
+    clear_client_session(client)
+    response = client.get("/api/v1/stats/overview", headers={"Authorization": f"Bearer {token_data['access_token']}"})
     assert is_http_success(response.status_code)
     body = response.get_json()
     assert body["ok"] is True
@@ -96,7 +96,8 @@ def test_api_revoke_invalidates_access_token(client):
     assert revoke_body["ok"] is True
     assert revoke_body["data"]["revoked"] is True
 
-    response = call_with_token("/api/v1/stats/overview", token_data["access_token"])
+    clear_client_session(client)
+    response = client.get("/api/v1/stats/overview", headers={"Authorization": f"Bearer {token_data['access_token']}"})
     assert response.status_code == 401
 
 
@@ -112,11 +113,19 @@ def test_api_force_logout_revokes_existing_tokens_only(client):
     assert force_body["ok"] is True
     assert force_body["data"]["target_user_id"] == target.id
 
-    old_token_response = call_with_token("/api/v1/stats/overview", token_data["access_token"])
+    clear_client_session(client)
+    old_token_response = client.get(
+        "/api/v1/stats/overview",
+        headers={"Authorization": f"Bearer {token_data['access_token']}"},
+    )
     assert old_token_response.status_code == 401
 
     fresh_token_data = issue_token(client, "client01", "clientpass", scope="client")
-    fresh_token_response = call_with_token("/api/v1/stats/overview", fresh_token_data["access_token"])
+    clear_client_session(client)
+    fresh_token_response = client.get(
+        "/api/v1/stats/overview",
+        headers={"Authorization": f"Bearer {fresh_token_data['access_token']}"},
+    )
     assert is_http_success(fresh_token_response.status_code)
 
     # Keep admin referenced so role remains explicit in this test.
