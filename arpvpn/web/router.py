@@ -390,10 +390,7 @@ def get_revoke_token_from_request() -> Optional[str]:
     return extract_bearer_token()
 
 
-def resolve_api_actor_user() -> Optional[User]:
-    if current_user and current_user.is_authenticated:
-        return current_user
-    token_value = extract_bearer_token()
+def resolve_api_actor_user_from_token(token_value: str) -> Optional[User]:
     if not token_value:
         return None
     token_record = api_token_store.validate_access_token(token_value)
@@ -451,14 +448,15 @@ def authenticate_api_bearer_token():
         return None
     if request.endpoint in API_AUTH_PUBLIC_ENDPOINTS:
         return None
+    token_value = extract_bearer_token()
+    if token_value:
+        actor = resolve_api_actor_user_from_token(token_value)
+        if actor:
+            return None
+        return api_error(UNAUTHORIZED, "invalid_token", "Invalid or expired access token.")
     if current_user and current_user.is_authenticated:
         g.api_actor_user = current_user
         return None
-    actor = resolve_api_actor_user()
-    if actor:
-        return None
-    if extract_bearer_token():
-        return api_error(UNAUTHORIZED, "invalid_token", "Invalid or expired access token.")
     return None
 
 
