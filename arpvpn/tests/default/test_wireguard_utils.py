@@ -83,3 +83,33 @@ def test_generate_privkey_raises_wireguard_error_on_exec_exception(monkeypatch):
 
     with pytest.raises(WireguardError, match="wg missing"):
         wireguard.generate_privkey()
+
+
+def test_is_wg_iface_up_returns_true_on_success(monkeypatch):
+    def fake_run(*args, **kwargs):
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(config, "wg_bin", "/usr/bin/wg")
+    monkeypatch.setattr(wireguard, "run", fake_run)
+
+    assert wireguard.is_wg_iface_up("wg0") is True
+
+
+def test_is_wg_iface_up_returns_false_on_missing_interface(monkeypatch):
+    def fake_run(*args, **kwargs):
+        return SimpleNamespace(returncode=1, stdout="", stderr="Unable to access interface: No such device")
+
+    monkeypatch.setattr(config, "wg_bin", "/usr/bin/wg")
+    monkeypatch.setattr(wireguard, "run", fake_run)
+
+    assert wireguard.is_wg_iface_up("wg0") is False
+
+
+def test_is_wg_iface_up_returns_false_if_wg_missing(monkeypatch):
+    def fake_run(*args, **kwargs):
+        raise FileNotFoundError("wg not found")
+
+    monkeypatch.setattr(config, "wg_bin", "/usr/bin/wg")
+    monkeypatch.setattr(wireguard, "run", fake_run)
+
+    assert wireguard.is_wg_iface_up("wg0") is False

@@ -1,12 +1,23 @@
 from subprocess import PIPE, run
 
-from arpvpn.common.utils.system import Command
 from arpvpn.core.exceptions import WireguardError
 
 
 def is_wg_iface_up(iface_name: str) -> bool:
     from arpvpn.core.config.wireguard import config
-    return Command(f"{config.wg_bin} show {iface_name}").run_as_root().successful
+    if not config.wg_bin:
+        return False
+    try:
+        result = run(
+            [config.wg_bin, "show", iface_name],
+            stdout=PIPE,
+            stderr=PIPE,
+            text=True,
+            check=False,
+        )
+    except Exception:
+        return False
+    return result.returncode == 0
 
 
 def _run_wg_command(args: list[str], stdin_data: str = "") -> str:

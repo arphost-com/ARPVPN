@@ -32,6 +32,7 @@ unit_tests:
         arpvpn/tests/default/test_tls_api.py \
         arpvpn/tests/default/test_https_redirect.py \
         arpvpn/tests/default/test_traffic_driver.py \
+        arpvpn/tests/default/test_interface_state.py \
         arpvpn/tests/default/test_wireguard_utils.py \
         arpvpn/tests/default/test_mesh_phase1.py \
         arpvpn/tests/default/test_users_roles.py::test_admin_can_create_client_user \

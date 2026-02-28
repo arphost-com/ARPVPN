@@ -4,6 +4,7 @@ import os
 import re
 from logging import info, warning, error, debug
 from secrets import randbelow
+from subprocess import PIPE, run
 from time import sleep
 from typing import Dict, Any, Type, List, Mapping
 from uuid import uuid4 as gen_uuid
@@ -127,7 +128,18 @@ class Interface(YamlAble):
 
     @property
     def is_up(self):
-        return Command(f"ip a | grep -w {self.name}").run().successful
+        try:
+            result = run(
+                ["ip", "link", "show", "dev", self.name],
+                stdout=PIPE,
+                stderr=PIPE,
+                text=True,
+                check=False,
+            )
+        except FileNotFoundError:
+            # If `ip` is unavailable in the current runtime, treat interface as down.
+            return False
+        return result.returncode == 0
 
     @property
     def is_down(self):

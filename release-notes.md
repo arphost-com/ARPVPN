@@ -2,6 +2,12 @@
 
 ## What's new
 
+### 1.2.6
+
+* Reduced interface-state log noise by replacing `ip | grep` checks with direct, non-noisy interface probes.
+* Hardened WireGuard interface status probing to treat execution failures as `down` for observability views.
+* Added regression tests for interface-up checks and WireGuard status behavior under missing/invalid binaries.
+
 ### 1.2.5
 
 * Started Phase 1 of mesh/site-to-site expansion with persisted control-plane models:
