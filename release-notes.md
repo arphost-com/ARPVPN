@@ -2,6 +2,17 @@
 
 ## What's new
 
+### 1.2.8
+
+* API Added: token auth endpoints (`/api/v1/auth/token`, `/api/v1/auth/refresh`) with access/refresh rotation.
+* API Added: token/session control endpoints for revoke, revoke-all, and staff forced logout.
+* API Added: impersonation API endpoints with structured audit logging for start/stop events.
+* API Added: mesh control-plane endpoints (`/api/v1/mesh/*`) for topology/link/route/policy CRUD.
+* API Added: mesh dry-run validation and mesh export/import JSON workflows.
+* API Changed: API auth now includes rate-limiting and lockout controls for token issuance.
+* Docs: added OpenAPI source (`docs/source/api/openapi.v1.yaml`), versioning/changelog process docs, and CI OpenAPI validation.
+* Tests: added API auth and mesh API coverage to the CI hard-gate subset.
+
 ### 1.2.7
 
 * Added full user account management in UI for staff roles:

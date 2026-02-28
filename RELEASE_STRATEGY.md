@@ -9,6 +9,14 @@ This repository uses two release trains to keep the current product stable while
 
 Do not merge `codex/multitenant-v2` into `main`.
 
+## API Docs and Changelog Discipline
+
+- Keep OpenAPI as source of truth:
+  - v1 line: `docs/source/api/openapi.v1.yaml`
+  - v2 line: maintain matching v2 OpenAPI file in the v2 branch.
+- Validate OpenAPI in CI using `scripts/validate_openapi.py`.
+- Follow `API_CHANGELOG_PROCESS.md` for every API change on both lines.
+
 ## Version and Tag Policy
 
 - `v1` line tags: `v1.2.1`, `v1.2.2`, ...

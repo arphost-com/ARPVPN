@@ -17,6 +17,8 @@ unit_tests:
     - poetry install --with dev --no-interaction --no-ansi
   script:
     - |
+      python3 scripts/validate_openapi.py
+    - |
       # Run deterministic unit tests on generic CI runners.
       # Integration-style tests that require host WireGuard/network tooling run separately on ops hosts.
       pytest -q \
@@ -35,6 +37,8 @@ unit_tests:
         arpvpn/tests/default/test_interface_state.py \
         arpvpn/tests/default/test_wireguard_utils.py \
         arpvpn/tests/default/test_mesh_phase1.py \
+        arpvpn/tests/default/test_mesh_api.py \
+        arpvpn/tests/default/test_api_auth.py \
         arpvpn/tests/default/test_users_roles.py::test_admin_can_create_client_user \
         arpvpn/tests/default/test_users_roles.py::test_admin_can_edit_user_name_role_and_password \
         arpvpn/tests/default/test_users_roles.py::test_admin_can_delete_client_user \

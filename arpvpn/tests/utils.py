@@ -9,6 +9,7 @@ from arpvpn.common.models.user import users, User
 from arpvpn.common.properties import global_properties
 from arpvpn.common.utils.network import get_system_interfaces
 from arpvpn.core.managers.cron import cron_manager
+from arpvpn.core.mesh import MeshControlPlane
 from arpvpn.core.models import interfaces, Interface
 from arpvpn.web.client import clients
 
@@ -47,7 +48,19 @@ def default_cleanup():
     users.clear()
     clients.clear()
     interfaces.clear()
+    try:
+        from arpvpn.core.config.wireguard import config as wireguard_config
+        wireguard_config.mesh = MeshControlPlane()
+    except Exception:
+        pass
     cron_manager.stop()
+    try:
+        from arpvpn.web.router import api_token_store, api_rate_limiter, api_auth_lockouts
+        api_token_store.reset_for_tests()
+        api_rate_limiter.reset_for_tests()
+        api_auth_lockouts.reset_for_tests()
+    except Exception:
+        pass
     if current_user:
         current_user.logout()
 

@@ -1,0 +1,303 @@
+openapi: 3.0.3
+info:
+  title: ARPVPN API
+  version: "1.2.8"
+  description: >
+    Source-of-truth OpenAPI document for ARPVPN v1 API endpoints.
+servers:
+  - url: /api/v1
+    description: ARPVPN v1 API
+tags:
+  - name: Auth
+  - name: Mesh
+  - name: Stats
+paths:
+  /api/v1/auth/token:
+    post:
+      tags: [Auth]
+      operationId: issueApiToken
+      summary: Issue bearer access/refresh tokens.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                scope:
+                  type: string
+                  enum: [all, staff, client]
+      responses:
+        "201":
+          description: Token pair issued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSuccessEnvelope"
+        "401":
+          description: Invalid credentials.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+        "429":
+          description: Auth lockout/rate limit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshApiToken
+      summary: Rotate refresh token and issue a new token pair.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: Token pair refreshed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSuccessEnvelope"
+        "401":
+          description: Invalid refresh token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+  /api/v1/auth/revoke:
+    post:
+      tags: [Auth]
+      operationId: revokeApiToken
+      summary: Revoke a single token.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        "200":
+          description: Token revoked.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSuccessEnvelope"
+  /api/v1/auth/revoke-all:
+    post:
+      tags: [Auth]
+      operationId: revokeAllApiTokens
+      summary: Revoke all active tokens for the current user (or a specified user if staff).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: string
+      responses:
+        "200":
+          description: Tokens revoked.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSuccessEnvelope"
+  /api/v1/auth/force-logout/{user_id}:
+    post:
+      tags: [Auth]
+      operationId: forceLogoutUser
+      summary: Force logout and token revocation for a user (staff only).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: user_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User forced out.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSuccessEnvelope"
+        "403":
+          description: Insufficient permissions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+  /api/v1/mesh/overview:
+    get:
+      tags: [Mesh]
+      operationId: getMeshOverview
+      summary: Get mesh overview and conflict summary.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Mesh overview.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSuccessEnvelope"
+  /api/v1/mesh/topologies:
+    get:
+      tags: [Mesh]
+      operationId: listMeshTopologies
+      summary: List mesh topologies (staff).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Topology list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSuccessEnvelope"
+    post:
+      tags: [Mesh]
+      operationId: createMeshTopology
+      summary: Create a mesh topology (staff).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                preset:
+                  type: string
+                  enum: [point_to_point, hub_spoke, full_mesh]
+                server_ids:
+                  type: array
+                  items:
+                    type: string
+                hub_server_id:
+                  type: string
+                description:
+                  type: string
+      responses:
+        "201":
+          description: Topology created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSuccessEnvelope"
+  /api/v1/mesh/dry-run:
+    post:
+      tags: [Mesh]
+      operationId: dryRunMeshPlan
+      summary: Validate mesh payload before apply/import.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mesh:
+                  type: object
+      responses:
+        "200":
+          description: Validation summary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSuccessEnvelope"
+  /api/v1/stats/overview:
+    get:
+      tags: [Stats]
+      operationId: getStatsOverview
+      summary: Read live WireGuard overview data.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Stats overview.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSuccessEnvelope"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Opaque
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: session
+  schemas:
+    ApiSuccessEnvelope:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        request_id:
+          type: string
+        generated_at:
+          type: string
+          format: date-time
+        data:
+          type: object
+          additionalProperties: true
+    ApiErrorEnvelope:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: false
+        request_id:
+          type: string
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+              additionalProperties: true

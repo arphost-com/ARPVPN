@@ -48,6 +48,7 @@ Contents
     installation
     screenshots
     in-depth
+    api
     gitlab-deployment
     contributing
     changelog
