@@ -2,7 +2,7 @@
 
 ## Release Line Status
 
-- `main` (v1 stable line): `1.2.3`
+- `main` (v1 stable line): `1.2.4`
 - `codex/multitenant-v2` (v2 line): `2.x` in-progress
 
 ## Image Tags

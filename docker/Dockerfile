@@ -34,12 +34,12 @@ COPY --chown=arpvpn:arpvpn --chmod=755 docker/entrypoint.sh /entrypoint.sh
 # Switch to non-root user
 USER arpvpn
 
-EXPOSE 8080
+EXPOSE 8085 8086
 
 # Add healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python3 -c "import os, urllib.request; p = os.environ.get('ARPVPN_HTTP_PORT', '8080'); urllib.request.urlopen(f'http://localhost:{p}', timeout=5).read()" \
-    || python3 -c "import os, ssl, urllib.request; p = os.environ.get('ARPVPN_HTTP_PORT', '8080'); ctx = ssl._create_unverified_context(); urllib.request.urlopen(f'https://localhost:{p}', context=ctx, timeout=5).read()" \
+    CMD python3 -c "import os, urllib.request; p = os.environ.get('ARPVPN_HTTP_PORT', '8085'); urllib.request.urlopen(f'http://localhost:{p}', timeout=5).read()" \
+    || python3 -c "import os, ssl, urllib.request; p = os.environ.get('ARPVPN_HTTPS_PORT', '8086'); ctx = ssl._create_unverified_context(); urllib.request.urlopen(f'https://localhost:{p}', context=ctx, timeout=5).read()" \
     || exit 1
 
 CMD /bin/bash /entrypoint.sh

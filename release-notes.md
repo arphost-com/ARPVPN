@@ -2,6 +2,14 @@
 
 ## What's new
 
+### 1.2.4
+
+* Fixed TLS listener behavior to keep HTTP (`8085`) and HTTPS (`8086`) available together in self-signed/Let's Encrypt modes.
+* Fixed HTTP access when HTTPS is enabled without redirect by only forcing secure cookies in strict-HTTPS mode.
+* Updated HTTP-to-HTTPS redirect targets to include the configured HTTPS port when it is not `443`.
+* Updated setup defaults to start with self-signed TLS and automatic certificate generation.
+* Added TLS status metadata for web listener ports and strict-HTTPS mode to the API.
+
 ### 1.2.3
 
 * Fixed production RRD graph support by installing `rrdtool` in the packaged runtime dependencies.

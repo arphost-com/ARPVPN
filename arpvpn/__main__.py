@@ -100,11 +100,7 @@ if log_config.overwrite:
     log_config.reset_logfile()
 
 secure_cookies_env = os.environ.get("ARPVPN_SECURE_COOKIES", "0").lower() not in ("0", "false", "no")
-secure_transport_by_config = web_config.tls_mode in (
-    web_config.TLS_MODE_SELF_SIGNED,
-    web_config.TLS_MODE_LETS_ENCRYPT,
-    web_config.TLS_MODE_REVERSE_PROXY,
-)
+secure_transport_by_config = web_config.strict_https_mode
 secure_cookies_enabled = secure_cookies_env or secure_transport_by_config
 
 app.config['SECRET_KEY'] = web_config.secret_key
@@ -147,6 +143,27 @@ def _https_redirect_host() -> str:
     return (web_config.tls_server_name or "").strip()
 
 
+def _https_redirect_port() -> int:
+    if web_config.tls_mode == web_config.TLS_MODE_REVERSE_PROXY:
+        return 443
+    return int(getattr(web_config, "https_port", 443) or 443)
+
+
+def _format_https_authority(host: str, port: int) -> str:
+    candidate = (host or "").strip()
+    if not candidate:
+        return ""
+    if candidate.startswith("[") and "]:" in candidate:
+        return candidate
+    if not candidate.startswith("[") and ":" in candidate:
+        maybe_port = candidate.rsplit(":", 1)[1]
+        if maybe_port.isdigit():
+            return candidate
+    if port == 443:
+        return candidate
+    return f"{candidate}:{port}"
+
+
 @app.before_request
 def maybe_redirect_http_to_https():
     if not _https_redirect_mode_enabled():
@@ -161,10 +178,14 @@ def maybe_redirect_http_to_https():
     if not host:
         warning("HTTP->HTTPS redirect enabled but no trusted hostname configured; skipping redirect.")
         return None
+    authority = _format_https_authority(host, _https_redirect_port())
+    if not authority:
+        warning("HTTP->HTTPS redirect enabled but no trusted hostname configured; skipping redirect.")
+        return None
 
     path = request.path or "/"
     query = request.query_string.decode("utf-8", errors="ignore")
-    location = f"https://{host}{path}"
+    location = f"https://{authority}{path}"
     if query:
         location = f"{location}?{query}"
     return redirect(location, code=307)

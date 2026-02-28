@@ -2,6 +2,8 @@
 
 Goal: provide secure API control for all ARPVPN features (users, tenants, WireGuard, traffic, TLS, monitoring, and operations).
 
+See also: `MESH_ACL_TODO.md` for dedicated site-to-site mesh and IP access-control roadmap.
+
 ## Phase 0: API Foundation
 - [ ] Define API versioning strategy (`/api/v1`, deprecation policy, compatibility guarantees).
 - [x] Standardize response envelope (success/error shape, request IDs, pagination metadata).

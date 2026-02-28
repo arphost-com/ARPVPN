@@ -44,8 +44,9 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
    Important variables in `.env`:
    * `ARPVPN_IMAGE` (image/tag to run)
    * `ARPVPN_RUNTIME_USER` (runtime user inside the container, default `arpvpn`)
-   * `ARPVPN_SECURE_COOKIES` (`0` for HTTP, `1` behind HTTPS)
-   * `ARPVPN_HTTP_PORT` (HTTP bind port, defaults to `8080`)
+   * `ARPVPN_SECURE_COOKIES` (`0` for mixed HTTP/HTTPS access, `1` for strict HTTPS)
+   * `ARPVPN_HTTP_PORT` (HTTP bind port, defaults to `8085`)
+   * `ARPVPN_HTTPS_PORT` (HTTPS bind port, defaults to `8086`)
    * `DATA_FOLDER` (host path mounted to `/data`)
 3. Create/validate the data folder as your current host user:
    ```bash
@@ -65,10 +66,10 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
 
 TLS can be configured from the UI (`Settings -> Web`):
 * `Direct HTTP` for plain HTTP.
-* `Self-signed certificate` to generate and apply a local certificate.
+* `Self-signed certificate` to generate and apply a local certificate. HTTP (`8085`) and HTTPS (`8086`) both stay available by default.
 * `Let's Encrypt certificate` to issue/renew with `certbot` and apply it to ARPVPN.
 * `Behind reverse proxy` to keep ARPVPN on HTTP and define the proxy incoming hostname.
-* `Redirect HTTP to HTTPS` can be enabled when TLS mode is active.
+* `Redirect HTTP to HTTPS` can be enabled when TLS mode is active to force strict HTTPS behavior.
 
 For Let's Encrypt issuance, your hostname must resolve publicly to the host and inbound port `80/tcp` must be reachable.
 NOTE: Check available tags in your GitLab project's Container Registry and pin if needed.

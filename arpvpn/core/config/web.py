@@ -18,12 +18,26 @@ def parse_bool(value: Any, default: bool = False) -> bool:
     return bool(value)
 
 
+def parse_port(value: Any, default: int, minimum: int, maximum: int) -> int:
+    if value is None:
+        return default
+    try:
+        port = int(value)
+    except (TypeError, ValueError):
+        return default
+    if port < minimum or port > maximum:
+        return default
+    return port
+
+
 @yaml_info(yaml_tag='web')
 class WebConfig(BaseConfig):
     MAX_PORT = 65535
     MIN_PORT = 1
     DEFAULT_LOGIN_ATTEMPTS = 0
     DEFAULT_BAN_SECONDS = 120
+    DEFAULT_HTTP_PORT = 8085
+    DEFAULT_HTTPS_PORT = 8086
     CREDENTIALS_FILENAME = ".credentials"
     TLS_MODE_HTTP = "http"
     TLS_MODE_SELF_SIGNED = "self_signed"
@@ -46,6 +60,8 @@ class WebConfig(BaseConfig):
     redirect_http_to_https: bool
     tls_cert_file: str
     tls_key_file: str
+    http_port: int
+    https_port: int
 
     @property
     def secret_key(self):
@@ -63,6 +79,14 @@ class WebConfig(BaseConfig):
         super().__init__()
         self.load_defaults()
 
+    @property
+    def strict_https_mode(self) -> bool:
+        if self.tls_mode == self.TLS_MODE_REVERSE_PROXY:
+            return True
+        if self.tls_mode in (self.TLS_MODE_SELF_SIGNED, self.TLS_MODE_LETS_ENCRYPT):
+            return bool(self.redirect_http_to_https)
+        return False
+
     def load_defaults(self):
         self.login_attempts = self.DEFAULT_LOGIN_ATTEMPTS
         self.login_ban_time = self.DEFAULT_BAN_SECONDS
@@ -74,6 +98,8 @@ class WebConfig(BaseConfig):
         self.redirect_http_to_https = False
         self.tls_cert_file = ""
         self.tls_key_file = ""
+        self.http_port = self.DEFAULT_HTTP_PORT
+        self.https_port = self.DEFAULT_HTTPS_PORT
 
     def load(self, config: "WebConfig"):
         self.login_attempts = config.login_attempts or self.login_attempts
@@ -88,6 +114,18 @@ class WebConfig(BaseConfig):
         self.redirect_http_to_https = parse_bool(getattr(config, "redirect_http_to_https", False), False)
         self.tls_cert_file = config.tls_cert_file or self.tls_cert_file
         self.tls_key_file = config.tls_key_file or self.tls_key_file
+        self.http_port = parse_port(
+            getattr(config, "http_port", self.http_port),
+            self.DEFAULT_HTTP_PORT,
+            self.MIN_PORT,
+            self.MAX_PORT,
+        )
+        self.https_port = parse_port(
+            getattr(config, "https_port", self.https_port),
+            self.DEFAULT_HTTPS_PORT,
+            self.MIN_PORT,
+            self.MAX_PORT,
+        )
 
     def __to_yaml_dict__(self):  # type: (...) -> Dict[str, Any]
         return {
@@ -101,6 +139,8 @@ class WebConfig(BaseConfig):
             "redirect_http_to_https": self.redirect_http_to_https,
             "tls_cert_file": self.tls_cert_file,
             "tls_key_file": self.tls_key_file,
+            "http_port": self.http_port,
+            "https_port": self.https_port,
         }
 
     @classmethod
@@ -121,6 +161,18 @@ class WebConfig(BaseConfig):
         config.redirect_http_to_https = parse_bool(dct.get("redirect_http_to_https", False), False)
         config.tls_cert_file = dct.get("tls_cert_file", None) or config.tls_cert_file
         config.tls_key_file = dct.get("tls_key_file", None) or config.tls_key_file
+        config.http_port = parse_port(
+            dct.get("http_port", config.DEFAULT_HTTP_PORT),
+            config.DEFAULT_HTTP_PORT,
+            config.MIN_PORT,
+            config.MAX_PORT,
+        )
+        config.https_port = parse_port(
+            dct.get("https_port", config.DEFAULT_HTTPS_PORT),
+            config.DEFAULT_HTTPS_PORT,
+            config.MIN_PORT,
+            config.MAX_PORT,
+        )
         return config
 
     def apply(self):

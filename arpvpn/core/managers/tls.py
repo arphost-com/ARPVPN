@@ -48,26 +48,57 @@ class TLSManager:
             yaml.safe_dump(data, handle, sort_keys=False)
 
     @staticmethod
-    def _extract_bind(socket_value: Optional[str]) -> str:
+    def _extract_bind(socket_value: Optional[str], default_port: int) -> str:
         if socket_value and isinstance(socket_value, str):
-            return socket_value.split(",", 1)[0].strip()
-        return "0.0.0.0:8080"
+            bind = socket_value.split(",", 1)[0].strip()
+            if bind:
+                return bind
+        return f"0.0.0.0:{default_port}"
+
+    @staticmethod
+    def _split_bind(bind: str) -> tuple[str, str]:
+        value = (bind or "").strip()
+        if not value:
+            return "0.0.0.0", ""
+        if value.startswith("["):
+            index = value.rfind("]:")
+            if index > -1:
+                return value[:index + 1], value[index + 2:]
+            return value, ""
+        if ":" not in value:
+            return value, ""
+        host, port = value.rsplit(":", 1)
+        return host or "0.0.0.0", port
 
     @classmethod
-    def _ensure_bind_http(cls, uwsgi_settings: Dict[str, Any]):
-        bind = cls._extract_bind(uwsgi_settings.get("https-socket"))
-        if "http-socket" in uwsgi_settings:
-            bind = cls._extract_bind(uwsgi_settings.get("http-socket"))
-        uwsgi_settings["http-socket"] = bind
+    def _resolve_bind_host(cls, uwsgi_settings: Dict[str, Any], web_config: WebConfig) -> str:
+        http_bind = cls._extract_bind(uwsgi_settings.get("http-socket"), web_config.http_port)
+        https_bind = cls._extract_bind(uwsgi_settings.get("https-socket"), web_config.https_port)
+        http_host, _ = cls._split_bind(http_bind)
+        if http_host:
+            return http_host
+        https_host, _ = cls._split_bind(https_bind)
+        if https_host:
+            return https_host
+        return "0.0.0.0"
+
+    @classmethod
+    def _ensure_bind_http_only(cls, uwsgi_settings: Dict[str, Any], web_config: WebConfig):
+        bind_host = cls._resolve_bind_host(uwsgi_settings, web_config)
+        uwsgi_settings["http-socket"] = f"{bind_host}:{web_config.http_port}"
         uwsgi_settings.pop("https-socket", None)
 
     @classmethod
-    def _ensure_bind_https(cls, uwsgi_settings: Dict[str, Any], cert_file: str, key_file: str):
-        bind = cls._extract_bind(uwsgi_settings.get("http-socket"))
-        if "https-socket" in uwsgi_settings:
-            bind = cls._extract_bind(uwsgi_settings.get("https-socket"))
-        uwsgi_settings["https-socket"] = f"{bind},{cert_file},{key_file}"
-        uwsgi_settings.pop("http-socket", None)
+    def _ensure_bind_http_and_https(
+        cls,
+        uwsgi_settings: Dict[str, Any],
+        web_config: WebConfig,
+        cert_file: str,
+        key_file: str,
+    ):
+        bind_host = cls._resolve_bind_host(uwsgi_settings, web_config)
+        uwsgi_settings["http-socket"] = f"{bind_host}:{web_config.http_port}"
+        uwsgi_settings["https-socket"] = f"{bind_host}:{web_config.https_port},{cert_file},{key_file}"
 
     @classmethod
     def _selfsigned_paths(cls) -> tuple[str, str]:
@@ -161,7 +192,7 @@ class TLSManager:
         uwsgi_settings = config_data["uwsgi"]
 
         if mode == WebConfig.TLS_MODE_HTTP or mode == WebConfig.TLS_MODE_REVERSE_PROXY:
-            cls._ensure_bind_http(uwsgi_settings)
+            cls._ensure_bind_http_only(uwsgi_settings, web_config)
             cls._save_uwsgi(config_data)
             return
 
@@ -194,7 +225,7 @@ class TLSManager:
         if not os.path.exists(key_file):
             raise RuntimeError(f"Private key file not found: {key_file}")
 
-        cls._ensure_bind_https(uwsgi_settings, cert_file, key_file)
+        cls._ensure_bind_http_and_https(uwsgi_settings, web_config, cert_file, key_file)
         cls._save_uwsgi(config_data)
 
 

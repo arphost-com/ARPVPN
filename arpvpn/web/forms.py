@@ -257,7 +257,7 @@ class SetupForm(FlaskForm):
             (web_config.TLS_MODE_LETS_ENCRYPT, "Let's Encrypt certificate"),
             (web_config.TLS_MODE_REVERSE_PROXY, "Behind reverse proxy"),
         ],
-        default=web_config.tls_mode,
+        default=web_config.TLS_MODE_SELF_SIGNED,
     )
     web_tls_server_name = StringField(
         "TLS / External hostname",
@@ -281,7 +281,7 @@ class SetupForm(FlaskForm):
         "Redirect HTTP requests to HTTPS",
         default=web_config.redirect_http_to_https,
     )
-    web_tls_generate_self_signed = BooleanField("Generate self-signed certificate now", default=False)
+    web_tls_generate_self_signed = BooleanField("Generate self-signed certificate now", default=True)
     web_tls_issue_letsencrypt = BooleanField("Issue Let's Encrypt certificate now", default=False)
 
     log_overwrite = BooleanField("Overwrite", default=logger_config.overwrite)
@@ -303,6 +303,10 @@ class SetupForm(FlaskForm):
             web_config.TLS_MODE_SELF_SIGNED,
             web_config.TLS_MODE_LETS_ENCRYPT,
         )
+        if requires_hostname and not (self.web_tls_server_name.data or "").strip():
+            fallback_server_name = (self.app_endpoint.data or "").strip()
+            if fallback_server_name:
+                self.web_tls_server_name.data = fallback_server_name
         if requires_hostname and not (self.web_tls_server_name.data or "").strip():
             self.web_tls_server_name.errors.append(
                 "is required when TLS mode is self-signed or Let's Encrypt."

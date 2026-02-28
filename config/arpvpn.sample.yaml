@@ -51,3 +51,5 @@ web: !yamlable/web
   redirect_http_to_https: false
   tls_cert_file: ''
   tls_key_file: ''
+  http_port: 8085
+  https_port: 8086

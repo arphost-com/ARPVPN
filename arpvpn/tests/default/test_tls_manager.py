@@ -35,7 +35,7 @@ def test_apply_http_mode_replaces_https_socket(tmp_path):
 
     tls_manager.apply_web_tls_config(cfg)
     loaded = read_uwsgi(uwsgi_path)["uwsgi"]
-    assert loaded["http-socket"] == "0.0.0.0:8080"
+    assert loaded["http-socket"] == "0.0.0.0:8085"
     assert "https-socket" not in loaded
 
 
@@ -49,7 +49,8 @@ def test_apply_self_signed_mode_sets_https_socket(tmp_path, monkeypatch):
     open(cert_file, "w", encoding="utf-8").close()
     open(key_file, "w", encoding="utf-8").close()
 
-    monkeypatch.setattr(tls_manager, "generate_self_signed", lambda server_name: (cert_file, key_file))
+    monkeypatch.setattr("arpvpn.core.managers.tls.TLSManager.generate_self_signed",
+                        lambda server_name: (cert_file, key_file))
 
     cfg = WebConfig()
     cfg.tls_mode = cfg.TLS_MODE_SELF_SIGNED
@@ -57,8 +58,8 @@ def test_apply_self_signed_mode_sets_https_socket(tmp_path, monkeypatch):
 
     tls_manager.apply_web_tls_config(cfg, generate_self_signed=True)
     loaded = read_uwsgi(uwsgi_path)["uwsgi"]
-    assert loaded["https-socket"] == f"0.0.0.0:8080,{cert_file},{key_file}"
-    assert "http-socket" not in loaded
+    assert loaded["http-socket"] == "0.0.0.0:8085"
+    assert loaded["https-socket"] == f"0.0.0.0:8086,{cert_file},{key_file}"
     assert cfg.tls_cert_file == cert_file
     assert cfg.tls_key_file == key_file
 
@@ -80,7 +81,8 @@ def test_apply_letsencrypt_mode_uses_default_paths(tmp_path, monkeypatch):
     open(cert_file, "w", encoding="utf-8").close()
     open(key_file, "w", encoding="utf-8").close()
 
-    monkeypatch.setattr(tls_manager, "default_letsencrypt_paths", lambda server_name: (cert_file, key_file))
+    monkeypatch.setattr("arpvpn.core.managers.tls.TLSManager.default_letsencrypt_paths",
+                        lambda server_name: (cert_file, key_file))
 
     cfg = WebConfig()
     cfg.tls_mode = cfg.TLS_MODE_LETS_ENCRYPT
@@ -88,6 +90,32 @@ def test_apply_letsencrypt_mode_uses_default_paths(tmp_path, monkeypatch):
 
     tls_manager.apply_web_tls_config(cfg)
     loaded = read_uwsgi(uwsgi_path)["uwsgi"]
-    assert loaded["https-socket"] == f"0.0.0.0:8080,{cert_file},{key_file}"
+    assert loaded["http-socket"] == "0.0.0.0:8085"
+    assert loaded["https-socket"] == f"0.0.0.0:8086,{cert_file},{key_file}"
     assert cfg.tls_cert_file == cert_file
     assert cfg.tls_key_file == key_file
+
+
+def test_apply_self_signed_mode_respects_custom_ports(tmp_path, monkeypatch):
+    global_properties.workdir = str(tmp_path)
+    uwsgi_path = os.path.join(str(tmp_path), "uwsgi.yaml")
+    write_uwsgi(uwsgi_path, {"http-socket": "0.0.0.0:8080"})
+
+    cert_file = os.path.join(str(tmp_path), "cert.pem")
+    key_file = os.path.join(str(tmp_path), "key.pem")
+    open(cert_file, "w", encoding="utf-8").close()
+    open(key_file, "w", encoding="utf-8").close()
+
+    monkeypatch.setattr("arpvpn.core.managers.tls.TLSManager.generate_self_signed",
+                        lambda server_name: (cert_file, key_file))
+
+    cfg = WebConfig()
+    cfg.tls_mode = cfg.TLS_MODE_SELF_SIGNED
+    cfg.tls_server_name = "vpn.example.com"
+    cfg.http_port = 9085
+    cfg.https_port = 9443
+
+    tls_manager.apply_web_tls_config(cfg, generate_self_signed=True)
+    loaded = read_uwsgi(uwsgi_path)["uwsgi"]
+    assert loaded["http-socket"] == "0.0.0.0:9085"
+    assert loaded["https-socket"] == f"0.0.0.0:9443,{cert_file},{key_file}"
