@@ -2,6 +2,15 @@
 
 ## What's new
 
+### 1.2.7
+
+* Added full user account management in UI for staff roles:
+  create, edit, and delete user workflows.
+* Added role-safe permission enforcement for user management actions
+  (support users limited to client accounts, self-delete blocked, and safety checks for admin accounts).
+* Added dedicated edit-user page and expanded users page actions.
+* Added/expanded user-management tests and included them in the CI hard-gate subset.
+
 ### 1.2.6
 
 * Reduced interface-state log noise by replacing `ip | grep` checks with direct, non-noisy interface probes.

@@ -66,6 +66,43 @@ class CreateUserForm(FlaskForm):
     submit = SubmitField('Create user')
 
 
+class EditUserForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired()],
+                           render_kw={"placeholder": "Enter username"})
+    role = SelectField(
+        "Role",
+        choices=[
+            (User.ROLE_CLIENT, "Client"),
+            (User.ROLE_SUPPORT, "Support"),
+            (User.ROLE_ADMIN, "Admin"),
+        ],
+        default=User.ROLE_CLIENT,
+    )
+    new_password = PasswordField('New password', render_kw={"placeholder": "Leave blank to keep current password"})
+    confirm = PasswordField('Confirm new password', render_kw={"placeholder": "Confirm new password"})
+    submit = SubmitField('Save user')
+
+    def validate(self, extra_validators=None):
+        valid = super().validate(extra_validators)
+        username = (self.username.data or "").strip()
+        if not username:
+            self.username.errors.append("is required.")
+            valid = False
+
+        if self.new_password.data or self.confirm.data:
+            if not self.new_password.data:
+                self.new_password.errors.append("is required when changing the password.")
+                valid = False
+            if self.new_password.data != self.confirm.data:
+                self.confirm.errors.append("must match the new password.")
+                valid = False
+        return valid
+
+
+class DeleteUserForm(FlaskForm):
+    submit = SubmitField("Delete")
+
+
 class ImpersonationStopForm(FlaskForm):
     submit = SubmitField("Stop impersonating")
 
