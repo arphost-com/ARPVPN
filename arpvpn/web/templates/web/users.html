@@ -104,12 +104,23 @@
                                     <td>{{ user_item.name }}</td>
                                     <td><span class="badge badge-secondary">{{ user_item.role }}</span></td>
                                     <td>
-                                        {% if user_item.role == "client" and user_item.id != current_user.id and not is_impersonating %}
+                                        {% if user_actions[user_item.id].can_impersonate %}
                                             <form action="/users/{{ user_item.id }}/impersonate" method="post" class="d-inline">
                                                 {{ impersonate_form.hidden_tag() }}
                                                 {{ impersonate_form.submit(class="btn btn-sm btn-outline-primary") }}
                                             </form>
-                                        {% else %}
+                                        {% endif %}
+                                        {% if user_actions[user_item.id].can_edit %}
+                                            <a href="/users/{{ user_item.id }}/edit" class="btn btn-sm btn-outline-secondary">Edit</a>
+                                        {% endif %}
+                                        {% if user_actions[user_item.id].can_delete %}
+                                            <form action="/users/{{ user_item.id }}/delete" method="post" class="d-inline"
+                                                  onsubmit="return confirm('Delete user {{ user_item.name }}?');">
+                                                {{ delete_form.hidden_tag() }}
+                                                {{ delete_form.submit(class="btn btn-sm btn-outline-danger") }}
+                                            </form>
+                                        {% endif %}
+                                        {% if not user_actions[user_item.id].can_impersonate and not user_actions[user_item.id].can_edit and not user_actions[user_item.id].can_delete %}
                                             <span class="text-muted small">No action</span>
                                         {% endif %}
                                     </td>

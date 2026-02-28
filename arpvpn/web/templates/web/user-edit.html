@@ -1,0 +1,92 @@
+{% extends "web/web-main.html" %}
+
+{% block content %}
+    <main>
+        <div class="container-fluid">
+            <div class="my-4">
+                <a href="/users" class="float-right mt-3">
+                    <i class="fas fa-arrow-left mr-2"></i>Back to users
+                </a>
+                <h1 class="my-4">{{ title }}</h1>
+                <ol class="breadcrumb mb-4">
+                    <li class="breadcrumb-item active">Update account details for {{ target_user.name }}.</li>
+                </ol>
+            </div>
+
+            <div id="global-alerts">
+                {% if success %}
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <strong>Done!</strong> {{ success_details }}
+                        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                {% elif error %}
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                      <strong>Unexpected error:</strong> {{ error_details }}
+                      <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                      </button>
+                    </div>
+                {% endif %}
+            </div>
+
+            <form action="{{ request.url }}" method="post" novalidate>
+                {{ form.hidden_tag() }}
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="fas fa-user-edit mr-1"></i>
+                        Edit user
+                    </div>
+                    <div class="card-body">
+                        <div id="alerts">
+                            {% for error in form.username.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ form.username.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in form.role.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ form.role.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in form.new_password.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ form.new_password.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in form.confirm.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ form.confirm.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-4">
+                                {{ form.username.label() }}
+                                {{ form.username(class="form-control") }}
+                            </div>
+                            <div class="form-group col-md-4">
+                                {{ form.role.label() }}
+                                {{ form.role(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-4">
+                                {{ form.new_password.label() }}
+                                {{ form.new_password(class="form-control") }}
+                            </div>
+                            <div class="form-group col-md-4">
+                                {{ form.confirm.label() }}
+                                {{ form.confirm(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="form-group mb-0">
+                            {{ form.submit(class="btn btn-warning") }}
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </main>
+{% endblock %}

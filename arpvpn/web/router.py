@@ -2217,22 +2217,61 @@ def save_settings():
     return ViewController(view, **context).load()
 
 
-def get_users_management_context(create_form=None, impersonate_form=None, stop_form=None) -> Dict[str, Any]:
-    from arpvpn.web.forms import CreateUserForm, ImpersonateClientForm, ImpersonationStopForm
+def count_users_by_role(role: str) -> int:
+    return len([user_item for user_item in users.values() if user_item.role == role])
+
+
+def can_manage_user_account(target_user: User) -> bool:
+    if current_user.has_role(User.ROLE_ADMIN):
+        return True
+    if current_user.has_role(User.ROLE_SUPPORT):
+        return target_user.role == User.ROLE_CLIENT
+    return False
+
+
+def build_user_actions(users_list: List[User]) -> Dict[str, Dict[str, bool]]:
+    actions: Dict[str, Dict[str, bool]] = {}
+    admin_count = count_users_by_role(User.ROLE_ADMIN)
+    for user_item in users_list:
+        can_manage = can_manage_user_account(user_item)
+        can_delete = can_manage and user_item.id != current_user.id
+        if user_item.role == User.ROLE_ADMIN and admin_count <= 1:
+            can_delete = False
+        actions[user_item.id] = {
+            "can_edit": can_manage,
+            "can_delete": can_delete,
+            "can_impersonate": (
+                user_item.role == User.ROLE_CLIENT and
+                user_item.id != current_user.id and
+                not is_impersonating()
+            ),
+        }
+    return actions
+
+
+def get_users_management_context(create_form=None, edit_form=None, delete_form=None,
+                                 impersonate_form=None, stop_form=None) -> Dict[str, Any]:
+    from arpvpn.web.forms import CreateUserForm, EditUserForm, DeleteUserForm, ImpersonateClientForm, ImpersonationStopForm
     create_form = create_form or CreateUserForm()
+    edit_form = edit_form or EditUserForm()
+    delete_form = delete_form or DeleteUserForm()
     if current_user.has_role(User.ROLE_SUPPORT):
         create_form.role.choices = [(User.ROLE_CLIENT, "Client")]
         if request.method == "GET":
             create_form.role.data = User.ROLE_CLIENT
+        edit_form.role.choices = [(User.ROLE_CLIENT, "Client")]
     impersonate_form = impersonate_form or ImpersonateClientForm()
     stop_form = stop_form or ImpersonationStopForm()
     users_list = sorted(users.values(), key=lambda u: (u.role, u.name.lower()))
     return {
         "title": "Users",
         "create_form": create_form,
+        "edit_form": edit_form,
+        "delete_form": delete_form,
         "impersonate_form": impersonate_form,
         "stop_impersonation_form": stop_form,
         "users_list": users_list,
+        "user_actions": build_user_actions(users_list),
         "is_impersonating": is_impersonating(),
     }
 
@@ -2251,10 +2290,12 @@ def manage_users():
 @role_required(*STAFF_ROLES)
 @setup_required
 def create_user():
-    from arpvpn.web.forms import CreateUserForm, ImpersonateClientForm, ImpersonationStopForm
+    from arpvpn.web.forms import CreateUserForm, EditUserForm, DeleteUserForm, ImpersonateClientForm, ImpersonationStopForm
     form = CreateUserForm(request.form)
     context = get_users_management_context(
         create_form=form,
+        edit_form=EditUserForm(),
+        delete_form=DeleteUserForm(),
         impersonate_form=ImpersonateClientForm(),
         stop_form=ImpersonationStopForm(),
     )
@@ -2275,6 +2316,140 @@ def create_user():
         context["error"] = True
         context["error_details"] = e
     return ViewController("web/users.html", **context).load()
+
+
+@router.route("/users/<user_id>/edit", methods=["GET"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def edit_user(user_id: str):
+    from arpvpn.web.forms import EditUserForm
+    target_user = users.get(user_id, None)
+    if not target_user:
+        abort(NOT_FOUND, "User not found.")
+    if not can_manage_user_account(target_user):
+        abort(FORBIDDEN, "Insufficient permissions.")
+
+    form = EditUserForm()
+    if current_user.has_role(User.ROLE_SUPPORT):
+        form.role.choices = [(User.ROLE_CLIENT, "Client")]
+    form.username.data = target_user.name
+    form.role.data = target_user.role
+
+    context = {
+        "title": "Edit user",
+        "form": form,
+        "target_user": target_user,
+    }
+    return ViewController("web/user-edit.html", **context).load()
+
+
+@router.route("/users/<user_id>/edit", methods=["POST"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def save_user(user_id: str):
+    from arpvpn.web.forms import EditUserForm
+    target_user = users.get(user_id, None)
+    if not target_user:
+        abort(NOT_FOUND, "User not found.")
+    if not can_manage_user_account(target_user):
+        abort(FORBIDDEN, "Insufficient permissions.")
+
+    form = EditUserForm(request.form)
+    if current_user.has_role(User.ROLE_SUPPORT):
+        form.role.choices = [(User.ROLE_CLIENT, "Client")]
+
+    view = "web/user-edit.html"
+    context = {
+        "title": "Edit user",
+        "form": form,
+        "target_user": target_user,
+    }
+
+    if not form.validate():
+        error("Unable to validate edit-user form")
+        return ViewController(view, **context).load()
+
+    requested_username = (form.username.data or "").strip()
+    requested_role = form.role.data or target_user.role
+
+    existing_user = users.get_value_by_attr("name", requested_username)
+    if existing_user and existing_user.id != target_user.id:
+        form.username.errors.append("Username already in use")
+        return ViewController(view, **context).load()
+
+    if current_user.has_role(User.ROLE_SUPPORT) and requested_role != User.ROLE_CLIENT:
+        form.role.errors.append("Support users can only assign the client role.")
+        return ViewController(view, **context).load()
+
+    if target_user.id == current_user.id and requested_role != target_user.role:
+        form.role.errors.append("You cannot change your own role from this page.")
+        return ViewController(view, **context).load()
+
+    if target_user.role == User.ROLE_ADMIN and requested_role != User.ROLE_ADMIN:
+        if count_users_by_role(User.ROLE_ADMIN) <= 1:
+            form.role.errors.append("Cannot demote the last admin user.")
+            return ViewController(view, **context).load()
+
+    try:
+        target_user.name = requested_username
+        target_user.role = requested_role
+        if form.new_password.data:
+            target_user.password = form.new_password.data
+        users.sort()
+        users.save(web_config.credentials_file, web_config.secret_key)
+
+        context = get_users_management_context()
+        context["success"] = True
+        context["success_details"] = "User updated successfully."
+        return ViewController("web/users.html", **context).load()
+    except Exception as e:
+        log_exception(e)
+        context["error"] = True
+        context["error_details"] = e
+        return ViewController(view, **context).load()
+
+
+@router.route("/users/<user_id>/delete", methods=["POST"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def delete_user(user_id: str):
+    from arpvpn.web.forms import DeleteUserForm
+    form = DeleteUserForm(request.form)
+    if not form.validate():
+        abort(BAD_REQUEST, "Invalid delete-user request.")
+
+    target_user = users.get(user_id, None)
+    if not target_user:
+        abort(NOT_FOUND, "User not found.")
+    if not can_manage_user_account(target_user):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    if target_user.id == current_user.id:
+        context = get_users_management_context()
+        context["error"] = True
+        context["error_details"] = "You cannot delete your own account."
+        return ViewController("web/users.html", **context).load()
+    if target_user.role == User.ROLE_ADMIN and count_users_by_role(User.ROLE_ADMIN) <= 1:
+        context = get_users_management_context()
+        context["error"] = True
+        context["error_details"] = "Cannot delete the last admin user."
+        return ViewController("web/users.html", **context).load()
+
+    try:
+        del users[target_user.id]
+        users.save(web_config.credentials_file, web_config.secret_key)
+        context = get_users_management_context()
+        context["success"] = True
+        context["success_details"] = "User deleted successfully."
+        return ViewController("web/users.html", **context).load()
+    except Exception as e:
+        log_exception(e)
+        context = get_users_management_context()
+        context["error"] = True
+        context["error_details"] = e
+        return ViewController("web/users.html", **context).load()
 
 
 @router.route("/users/<user_id>/impersonate", methods=["POST"])

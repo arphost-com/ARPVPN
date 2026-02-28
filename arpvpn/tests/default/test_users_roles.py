@@ -145,3 +145,90 @@ def test_client_dashboard_hides_staff_controls_and_other_clients(client):
     assert is_http_success(response.status_code)
     assert b"client01" in response.data
     assert b"client02" not in response.data
+
+
+def test_admin_can_edit_user_name_role_and_password(client):
+    create_user("admin", "admin", User.ROLE_ADMIN)
+    client_user = create_user("client01", "clientpass", User.ROLE_CLIENT)
+    login(client, "admin", "admin")
+
+    response = client.post(
+        f"/users/{client_user.id}/edit",
+        data={
+            "username": "client01-renamed",
+            "role": User.ROLE_SUPPORT,
+            "new_password": "newpass123",
+            "confirm": "newpass123",
+        },
+        follow_redirects=True,
+    )
+    assert is_http_success(response.status_code)
+    updated = users.get(client_user.id)
+    assert updated is not None
+    assert updated.name == "client01-renamed"
+    assert updated.role == User.ROLE_SUPPORT
+    assert updated.check_password("newpass123")
+
+
+def test_support_can_edit_client_but_cannot_promote_role(client):
+    create_user("support", "support", User.ROLE_SUPPORT)
+    client_user = create_user("client01", "clientpass", User.ROLE_CLIENT)
+    login(client, "support", "support")
+
+    response = client.post(
+        f"/users/{client_user.id}/edit",
+        data={
+            "username": "client01",
+            "role": User.ROLE_ADMIN,
+            "new_password": "",
+            "confirm": "",
+        },
+        follow_redirects=True,
+    )
+    assert is_http_success(response.status_code)
+    preserved = users.get(client_user.id)
+    assert preserved.role == User.ROLE_CLIENT
+
+    response = client.post(
+        f"/users/{client_user.id}/edit",
+        data={
+            "username": "client01-updated",
+            "role": User.ROLE_CLIENT,
+            "new_password": "",
+            "confirm": "",
+        },
+        follow_redirects=True,
+    )
+    assert is_http_success(response.status_code)
+    updated = users.get(client_user.id)
+    assert updated.name == "client01-updated"
+    assert updated.role == User.ROLE_CLIENT
+
+
+def test_admin_can_delete_client_user(client):
+    create_user("admin", "admin", User.ROLE_ADMIN)
+    client_user = create_user("client01", "clientpass", User.ROLE_CLIENT)
+    login(client, "admin", "admin")
+
+    response = client.post(f"/users/{client_user.id}/delete", data={}, follow_redirects=True)
+    assert is_http_success(response.status_code)
+    assert users.get(client_user.id) is None
+
+
+def test_admin_cannot_delete_own_account(client):
+    admin = create_user("admin", "admin", User.ROLE_ADMIN)
+    login(client, "admin", "admin")
+
+    response = client.post(f"/users/{admin.id}/delete", data={}, follow_redirects=True)
+    assert is_http_success(response.status_code)
+    assert users.get(admin.id) is not None
+
+
+def test_support_cannot_delete_admin_user(client):
+    create_user("support", "support", User.ROLE_SUPPORT)
+    admin_user = create_user("admin2", "adminpass", User.ROLE_ADMIN)
+    login(client, "support", "support")
+
+    response = client.post(f"/users/{admin_user.id}/delete", data={}, follow_redirects=True)
+    assert response.status_code == 403
+    assert users.get(admin_user.id) is not None

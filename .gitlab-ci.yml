@@ -36,7 +36,12 @@ unit_tests:
         arpvpn/tests/default/test_wireguard_utils.py \
         arpvpn/tests/default/test_mesh_phase1.py \
         arpvpn/tests/default/test_users_roles.py::test_admin_can_create_client_user \
+        arpvpn/tests/default/test_users_roles.py::test_admin_can_edit_user_name_role_and_password \
+        arpvpn/tests/default/test_users_roles.py::test_admin_can_delete_client_user \
+        arpvpn/tests/default/test_users_roles.py::test_admin_cannot_delete_own_account \
         arpvpn/tests/default/test_users_roles.py::test_support_can_impersonate_client_and_return \
+        arpvpn/tests/default/test_users_roles.py::test_support_can_edit_client_but_cannot_promote_role \
+        arpvpn/tests/default/test_users_roles.py::test_support_cannot_delete_admin_user \
         arpvpn/tests/default/test_users_roles.py::test_client_forbidden_on_staff_routes \
         arpvpn/tests/default/test_users_roles.py::test_support_cannot_create_admin_or_support
 
