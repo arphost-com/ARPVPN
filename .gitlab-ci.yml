@@ -33,6 +33,7 @@ unit_tests:
         arpvpn/tests/default/test_https_redirect.py \
         arpvpn/tests/default/test_traffic_driver.py \
         arpvpn/tests/default/test_wireguard_utils.py \
+        arpvpn/tests/default/test_mesh_phase1.py \
         arpvpn/tests/default/test_users_roles.py::test_admin_can_create_client_user \
         arpvpn/tests/default/test_users_roles.py::test_support_can_impersonate_client_and_return \
         arpvpn/tests/default/test_users_roles.py::test_client_forbidden_on_staff_routes \

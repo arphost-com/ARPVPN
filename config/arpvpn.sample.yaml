@@ -30,6 +30,11 @@ wireguard: !yamlable/wireguard
       private_key: 4Ob32NhyhwIXbj7od6L5ASWle3vbOjn9g80at/dxPm0=
       public_key: 7NTAVIucHQJsS9Z8eT3lUV8VUoTSFrB6J272F9ox5RQ=
       uuid: 39a855187c4c4ca694d8c3f215e76cdc
+  mesh: !yamlable/mesh_control_plane
+    topologies: !yamlable/mesh_topologies {}
+    vpn_links: !yamlable/mesh_vpn_links {}
+    route_advertisements: !yamlable/mesh_route_advertisements {}
+    access_policies: !yamlable/mesh_access_policies {}
   iptables_bin: /usr/sbin/iptables
   wg_bin: /usr/bin/wg
   wg_quick_bin: /usr/bin/wg-quick

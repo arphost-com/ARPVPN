@@ -9,6 +9,7 @@ from arpvpn.common.properties import global_properties
 from arpvpn.common.utils.network import get_default_gateway
 from arpvpn.common.utils.system import Command
 from arpvpn.core.config.base import BaseConfig
+from arpvpn.core.mesh import MeshControlPlane
 
 
 @yaml_info(yaml_tag='wireguard')
@@ -20,6 +21,7 @@ class WireguardConfig(BaseConfig):
     wg_bin: str
     wg_quick_bin: str
     iptables_bin: str
+    mesh: MeshControlPlane
 
     @property
     def interfaces_folder(self):
@@ -44,6 +46,7 @@ class WireguardConfig(BaseConfig):
             self.iptables_bin = result.output
         from arpvpn.core.models import interfaces
         self.interfaces = interfaces
+        self.mesh = MeshControlPlane()
 
     def load(self, config: "WireguardConfig"):
         self.endpoint = config.endpoint or self.endpoint
@@ -55,6 +58,15 @@ class WireguardConfig(BaseConfig):
         self.iptables_bin = config.iptables_bin or self.iptables_bin
         if config.interfaces:
             self.interfaces.set_contents(config.interfaces)
+        self.mesh = config.mesh or MeshControlPlane()
+        route_conflicts = self.mesh.validate_route_advertisements()
+        duplicate_conflicts = len(route_conflicts["duplicate_ownership"])
+        overlap_conflicts = len(route_conflicts["overlapping_cidrs"])
+        if duplicate_conflicts or overlap_conflicts:
+            warning(
+                f"Mesh route conflicts detected: "
+                f"duplicate_ownership={duplicate_conflicts}, overlapping_cidrs={overlap_conflicts}"
+            )
         for iface in self.interfaces.values():
             iface.conf_file = os.path.join(self.interfaces_folder, iface.name) + ".conf"
             iface.save()
@@ -89,6 +101,7 @@ class WireguardConfig(BaseConfig):
         config.wg_quick_bin = dct.get("wg_quick_bin", None) or config.wg_quick_bin
         config.iptables_bin = dct.get("iptables_bin", None) or config.iptables_bin
         config.interfaces = dct.get("interfaces", None) or config.interfaces
+        config.mesh = dct.get("mesh", None) or MeshControlPlane()
         for iface in config.interfaces.values():
             iface.conf_file = os.path.join(config.interfaces_folder, iface.name) + ".conf"
             iface.save()
@@ -100,7 +113,8 @@ class WireguardConfig(BaseConfig):
             "wg_bin": self.wg_bin,
             "wg_quick_bin": self.wg_quick_bin,
             "iptables_bin": self.iptables_bin,
-            "interfaces": self.interfaces
+            "interfaces": self.interfaces,
+            "mesh": self.mesh,
         }
 
     def apply(self):

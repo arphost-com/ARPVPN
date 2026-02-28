@@ -2,6 +2,14 @@
 
 ## What's new
 
+### 1.2.5
+
+* Started Phase 1 of mesh/site-to-site expansion with persisted control-plane models:
+  `topologies`, `vpn_links`, `route_advertisements`, and `access_policies`.
+* Added route conflict detection for duplicate ownership and overlapping CIDRs.
+* Extended WireGuard configuration serialization to include mesh control-plane state.
+* Added Phase 1 model tests and included them in the CI hard-gate unit subset.
+
 ### 1.2.4
 
 * Fixed TLS listener behavior to keep HTTP (`8085`) and HTTPS (`8086`) available together in self-signed/Let's Encrypt modes.
