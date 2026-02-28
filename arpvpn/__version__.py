@@ -1,2 +1,2 @@
-release = '1.2.5'
+release = '1.2.6'
 commit = 'local'
