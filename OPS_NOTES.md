@@ -15,3 +15,18 @@
 
 - Runtime host for current ARPVPN deployment: `docker03` (`10.10.10.100`)
 - GitLab host / registry origin: `docker01` (`10.10.10.96`)
+
+## Local Service Endpoints (Always Use)
+
+- GitLab (local): `http://10.10.10.96:8929/`
+- Registry (local insecure HTTP): `http://10.10.10.93:5353`
+
+## Private Access Policy (All Repos)
+
+- All repositories are private on local GitLab.
+- Pull/push for all repos requires authenticated Git access (SSH key or token).
+- Container pulls for all private repo images require registry login on each host:
+  - `docker login http://10.10.10.96:5050 -u <gitlab-username>`
+- For scripted/non-interactive login:
+  - `echo "$CI_REGISTRY_PASSWORD" | docker login "http://$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin`
+- If image pull fails with auth errors (`unauthorized` / `denied`), re-run `docker login` first.
