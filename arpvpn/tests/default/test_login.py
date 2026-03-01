@@ -59,6 +59,8 @@ def test_post_ko(client):
     assert is_http_success(response.status_code)
     assert not current_user.is_authenticated
     assert b"Dashboard" not in response.data
+    assert len(clients) == 1
+    assert not list(clients.values())[0].is_banned()
 
 
 def test_ban_time(client):
@@ -114,3 +116,25 @@ def test_ban_by_ip(client):
     assert is_http_success(response.status_code)
     assert current_user.is_authenticated
     assert b"Dashboard" in response.data
+
+
+def test_csrf_validation_error_does_not_trigger_lockout(client):
+    config.login_attempts = 1
+    config.login_ban_time = 120
+    app = client.application
+    previous_csrf = app.config.get("WTF_CSRF_ENABLED", False)
+    app.config["WTF_CSRF_ENABLED"] = True
+    try:
+        response = client.post(
+            url,
+            data={"username": username, "password": password, "remember_me": False},
+            follow_redirects=True,
+        )
+        assert is_http_success(response.status_code)
+        assert not current_user.is_authenticated
+        assert len(clients) == 1
+        stored_client = list(clients.values())[0]
+        assert stored_client.login_attempts == 0
+        assert not stored_client.is_banned()
+    finally:
+        app.config["WTF_CSRF_ENABLED"] = previous_csrf
