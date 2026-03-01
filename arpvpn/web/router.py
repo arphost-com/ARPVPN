@@ -1777,6 +1777,19 @@ def get_client() -> Client:
     return clients[client_ip]
 
 
+def is_csrf_only_login_failure(form: Any) -> bool:
+    csrf_field = getattr(form, "csrf_token", None)
+    csrf_errors = list(getattr(csrf_field, "errors", []) or [])
+    if not csrf_errors:
+        return False
+    for field_name, errors in getattr(form, "errors", {}).items():
+        if field_name == "csrf_token":
+            continue
+        if errors:
+            return False
+    return True
+
+
 @router.route("/login", methods=["POST"])
 def login_post():
     from arpvpn.web.forms import LoginForm
@@ -1791,10 +1804,15 @@ def login_post():
             "title": "Login",
             "form": form
         }
-        client.login_attempts += 1
-        if client.login_attempts > int(web_config.login_attempts):
-            client.ban()
-            context["banned_for"] = (client.banned_until - datetime.now()).seconds
+        if is_csrf_only_login_failure(form):
+            warning("CSRF validation failed on login; not counting toward lockout.")
+            return ViewController("web/login.html", **context).load()
+        max_attempts = int(web_config.login_attempts)
+        if max_attempts > 0:
+            client.login_attempts += 1
+            if client.login_attempts > max_attempts:
+                client.ban()
+                context["banned_for"] = (client.banned_until - datetime.now()).seconds
         return ViewController("web/login.html", **context).load()
     del clients[client.ip]
     session.pop(IMPERSONATOR_SESSION_KEY, None)
