@@ -91,3 +91,7 @@ def test_sample_server():
     wireguard_manager.start()
     sleep(1)
     wireguard_manager.stop()
+
+
+def test_try_makedir_empty_path_is_noop():
+    try_makedir("")

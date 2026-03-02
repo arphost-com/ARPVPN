@@ -133,6 +133,8 @@ class Command:
 
 
 def try_makedir(path: str):
+    if not path:
+        return
     try:
         os.makedirs(path)
         debug(f"Created folder ({path})...")
