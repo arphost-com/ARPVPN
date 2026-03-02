@@ -353,6 +353,42 @@ body {
   box-shadow: 0 0 0 0.2rem rgba(47, 125, 246, 0.2);
 }
 
+[data-theme="dark"] .auth-card input[type="password"].form-control,
+[data-theme="dark"] .auth-card input[type="password"].form-control:focus,
+[data-theme="dark"] .auth-card input[type="password"].form-control:hover {
+  background-color: var(--theme-input-bg) !important;
+  color: var(--theme-input-text) !important;
+  -webkit-text-fill-color: var(--theme-input-text) !important;
+  caret-color: var(--theme-input-text);
+}
+
+[data-theme="dark"] .auth-card input[type="password"].form-control::placeholder {
+  color: var(--theme-input-placeholder) !important;
+}
+
+[data-theme="dark"] .auth-card input[type="password"].form-control:-webkit-autofill,
+[data-theme="dark"] .auth-card input[type="password"].form-control:-webkit-autofill:hover,
+[data-theme="dark"] .auth-card input[type="password"].form-control:-webkit-autofill:focus,
+[data-theme="dark"] .auth-card input[type="password"].form-control:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--theme-input-text) !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--theme-input-bg) inset !important;
+  box-shadow: 0 0 0 1000px var(--theme-input-bg) inset !important;
+  border: 1px solid var(--theme-border) !important;
+  transition: background-color 99999s ease-in-out 0s;
+}
+
+[data-theme="dark"] .auth-card input[type="password"].form-control:-moz-autofill,
+[data-theme="dark"] .auth-card input[type="password"].form-control:-moz-autofill:hover,
+[data-theme="dark"] .auth-card input[type="password"].form-control:-moz-autofill:focus {
+  color: var(--theme-input-text) !important;
+  box-shadow: 0 0 0 1000px var(--theme-input-bg) inset !important;
+}
+
+[data-theme="dark"] .auth-card input[type="password"]::-ms-reveal,
+[data-theme="dark"] .auth-card input[type="password"]::-ms-clear {
+  filter: invert(1) brightness(1.2);
+}
+
 .page-header {
   display: flex;
   align-items: center;
