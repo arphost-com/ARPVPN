@@ -7,7 +7,7 @@
 
 ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireGuard server, and it's powered by Flask.
 
-**[Read the docs](https://github.com/arphost-com/ARPVPN/tree/main/docs) for further information!**
+**[Read the docs](https://github.com/arphost-com/ARPVPN/tree/codex/multitenant-v2/docs) for further information!**
 
 ## Key features
 
@@ -44,9 +44,14 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
    Important variables in `.env`:
    * `ARPVPN_IMAGE` (image/tag to run)
    * `ARPVPN_RUNTIME_USER` (runtime user inside the container, default `arpvpn`)
-   * `ARPVPN_SECURE_COOKIES` (`0` for HTTP, `1` behind HTTPS)
-   * `ARPVPN_HTTP_PORT` (HTTP bind port, defaults to `8080`)
+   * `ARPVPN_SECURE_COOKIES` (`0` for mixed HTTP/HTTPS access, `1` for strict HTTPS)
+   * `ARPVPN_HTTP_PORT` (HTTP bind port, defaults to `8085`)
+   * `ARPVPN_HTTPS_PORT` (HTTPS bind port, defaults to `8086`)
    * `DATA_FOLDER` (host path mounted to `/data`)
+   Suggested image tags by release line:
+   * v1 (`main`): `10.10.10.96:5050/arphost/arpvpn:stable`
+   * v2 (`codex/multitenant-v2`): `10.10.10.96:5050/arphost/arpvpn:v2-latest`
+   For side-by-side testing, use separate `DATA_FOLDER` and host ports for each line.
 3. Create/validate the data folder as your current host user:
    ```bash
    ./up.sh pull
@@ -65,9 +70,10 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
 
 TLS can be configured from the UI (`Settings -> Web`):
 * `Direct HTTP` for plain HTTP.
-* `Self-signed certificate` to generate and apply a local certificate.
+* `Self-signed certificate` to generate and apply a local certificate. HTTP (`8085`) and HTTPS (`8086`) both stay available by default.
 * `Let's Encrypt certificate` to issue/renew with `certbot` and apply it to ARPVPN.
 * `Behind reverse proxy` to keep ARPVPN on HTTP and define the proxy incoming hostname.
+* `Redirect HTTP to HTTPS` can be enabled when TLS mode is active to force strict HTTPS behavior.
 
 For Let's Encrypt issuance, your hostname must resolve publicly to the host and inbound port `80/tcp` must be reachable.
 NOTE: Check available tags in your GitLab project's Container Registry and pin if needed.
@@ -78,9 +84,9 @@ Project CI builds and publishes ``arpvpn`` image to GitLab Container Registry.
 
 1. Ensure project runner is Docker executor with ``privileged = true``.
 2. Ensure Container Registry is enabled in GitLab.
-3. Push to default branch to publish:
-   * ``$CI_REGISTRY_IMAGE:stable``
-   * ``$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA``
+3. Push by release line to publish:
+   * ``main`` + ``v1.*`` tags publish ``stable``/``1.2.x`` and commit/tag images.
+   * ``codex/multitenant-v2`` + ``v2.*`` tags publish ``v2-latest`` and commit/tag images.
 
 For full setup details, see ``docs/source/gitlab-deployment.rst``.
 

@@ -41,14 +41,21 @@ If your registry is configured as insecure HTTP (not recommended), configure din
 CI publish behavior
 -------------------
 
-On push to default branch (or tags), pipeline will:
+GitLab publish jobs are split by release line.
 
 1. Build package artifact via ``build.sh``.
 2. Build Docker image.
-3. Push:
+3. Push branch/tag-specific image tags:
 
-   * ``$CI_REGISTRY_IMAGE:stable``
-   * ``$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA``
+   * ``main`` + ``v1.*`` tags:
+      * ``$CI_REGISTRY_IMAGE:stable``
+      * ``$CI_REGISTRY_IMAGE:1.2.x``
+      * ``$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA`` (branch builds)
+      * ``$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG`` (tag builds)
+   * ``codex/multitenant-v2`` + ``v2.*`` tags:
+      * ``$CI_REGISTRY_IMAGE:v2-latest``
+      * ``$CI_REGISTRY_IMAGE:v2-$CI_COMMIT_SHORT_SHA`` (branch builds)
+      * ``$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG`` (tag builds)
 
 Deploying ARPVPN with compose
 -----------------------------

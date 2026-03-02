@@ -204,8 +204,8 @@ Apache reverse proxy
         SSLProtocol -all +TLSv1.2 +TLSv1.3
 
         ProxyPreserveHost On
-        ProxyPass / http://10.0.0.1:8080/
-        ProxyPassReverse / http://10.0.0.1:8080/
+        ProxyPass / http://10.0.0.1:8085/
+        ProxyPassReverse / http://10.0.0.1:8085/
     </VirtualHost>
 
 Nginx reverse proxy
@@ -224,6 +224,6 @@ Nginx reverse proxy
         location / {
             proxy*set*header Host $host;
             proxy*set*header X-Real-IP $remote_addr;
-            proxy_pass http://10.0.0.1:8080;
+            proxy_pass http://10.0.0.1:8085;
         }
     }

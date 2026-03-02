@@ -1,16 +1,18 @@
 services:
   arpvpn:
-    image: "${ARPVPN_IMAGE:-10.10.10.96:5050/arphost/arpvpn:stable}"
+    image: "${ARPVPN_IMAGE:-10.10.10.96:5050/arphost/arpvpn:v2-latest}"
     container_name: "arpvpn"
     # Run as the image's application user by default (preserves sudo policy
     # needed by WireGuard commands invoked by the UI).
     user: "${ARPVPN_RUNTIME_USER:-arpvpn}"
     environment:
-      # Use 0 for plain HTTP deployments (e.g. direct host access on :8080).
-      # Set to 1 when ARPVPN is served over HTTPS.
+      # Use 0 to allow HTTP + HTTPS mixed access when redirect is disabled.
+      # Set to 1 to force secure cookies in strict HTTPS environments.
       ARPVPN_SECURE_COOKIES: "${ARPVPN_SECURE_COOKIES:-0}"
       # HTTP bind port inside the container (host network mode uses this directly).
-      ARPVPN_HTTP_PORT: "${ARPVPN_HTTP_PORT:-8080}"
+      ARPVPN_HTTP_PORT: "${ARPVPN_HTTP_PORT:-8085}"
+      # HTTPS bind port inside the container (when TLS mode is enabled).
+      ARPVPN_HTTPS_PORT: "${ARPVPN_HTTPS_PORT:-8086}"
     # Compatibility startup path: works with both old and new images by avoiding legacy
     # entrypoint chown/sudo behavior and forcing runtime data path to /data.
     command:
@@ -40,7 +42,7 @@ services:
         if [ -f /data/uwsgi.yaml ]; then
           sed -i -E 's|^([[:space:]]*pyargv:)[[:space:]]*data[[:space:]]*$|\1 /data|' /data/uwsgi.yaml || true
           sed -i -E "s|^([[:space:]]*http-socket:)[[:space:]]*0\\.0\\.0\\.0:[0-9]+[[:space:]]*$|\\1 0.0.0.0:$${ARPVPN_HTTP_PORT}|" /data/uwsgi.yaml || true
-          sed -i -E "s|^([[:space:]]*https-socket:)[[:space:]]*0\\.0\\.0\\.0:[0-9]+(,.*)$|\\1 0.0.0.0:$${ARPVPN_HTTP_PORT}\\2|" /data/uwsgi.yaml || true
+          sed -i -E "s|^([[:space:]]*https-socket:)[[:space:]]*0\\.0\\.0\\.0:[0-9]+(,.*)$|\\1 0.0.0.0:$${ARPVPN_HTTPS_PORT}\\2|" /data/uwsgi.yaml || true
         fi
         exec /usr/bin/uwsgi --yaml /data/uwsgi.yaml
     cap_add:
@@ -48,7 +50,7 @@ services:
       - NET_RAW
     volumes:
       - type: bind
-        source: "${DATA_FOLDER:-/srv/arpvpn/data}"  # Optional, provides a way to see and edit the configuration files directly from the host.
+        source: "${DATA_FOLDER:-/srv/arpvpn-v2/data}"  # Optional, provides a way to see and edit the configuration files directly from the host.
         target: /data
         bind:
           create_host_path: false
