@@ -16,6 +16,13 @@
 - Runtime host for current ARPVPN deployment: `docker03` (`10.10.10.100`)
 - GitLab host / registry origin: `docker01` (`10.10.10.96`)
 
+## docker02 ARPVPN Paths
+
+- Multitenant working clone used for validation: `/home/debian/ARPVPN-v2test`
+- Historical clone used in prior runs: `/home/debian/ARPVPN`
+- Docker workspace clones present: `/home/debian/docker/arpvpn-git` and `/home/debian/docker/arpvpn-clean-test`
+- Note: user-reported path was `/home/debian/docker/ARPVPN` (uppercase), but current host path is lowercase `arpvpn-*`.
+
 ## Local Service Endpoints (Always Use)
 
 - GitLab (local): `http://10.10.10.96:8929/`
