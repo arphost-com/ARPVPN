@@ -1227,6 +1227,16 @@ def generate_rrd_graph_png(uuid: str, window_seconds: int) -> Optional[bytes]:
     token = secrets.token_hex(8)
     rrd_file = os.path.join(graph_dir, f"{uuid}-{window_seconds}-{token}.rrd")
     png_file = os.path.join(graph_dir, f"{uuid}-{window_seconds}-{token}.png")
+    heartbeat = RRD_STEP_SECONDS * 2
+    if len(points) > 1:
+        deltas = [
+            points[index][0] - points[index - 1][0]
+            for index in range(1, len(points))
+            if points[index][0] > points[index - 1][0]
+        ]
+        if deltas:
+            max_gap_seconds = max(deltas)
+            heartbeat = max(heartbeat, min(max_gap_seconds * 2, 24 * 60 * 60))
 
     try:
         create_cmd = [
@@ -1237,8 +1247,8 @@ def generate_rrd_graph_png(uuid: str, window_seconds: int) -> Optional[bytes]:
             str(RRD_STEP_SECONDS),
             "--start",
             str(max(0, points[0][0] - RRD_STEP_SECONDS)),
-            f"DS:rx:COUNTER:{RRD_STEP_SECONDS * 2}:0:U",
-            f"DS:tx:COUNTER:{RRD_STEP_SECONDS * 2}:0:U",
+            f"DS:rx:COUNTER:{heartbeat}:0:U",
+            f"DS:tx:COUNTER:{heartbeat}:0:U",
             "RRA:AVERAGE:0.5:1:100000",
         ]
         created = subprocess.run(create_cmd, capture_output=True, text=True, check=False)
@@ -1277,12 +1287,14 @@ def generate_rrd_graph_png(uuid: str, window_seconds: int) -> Optional[bytes]:
             "0",
             f"DEF:rx={rrd_file}:rx:AVERAGE",
             f"DEF:tx={rrd_file}:tx:AVERAGE",
-            "LINE2:rx#1f77b4:Received rate",
-            "LINE2:tx#ff7f0e:Transmitted rate",
-            r"GPRINT:rx:LAST:Last RX/s\: %8.2lf%sB/s",
-            r"GPRINT:tx:LAST:Last TX/s\: %8.2lf%sB/s",
-            r"GPRINT:rx:MAX:Max RX/s\: %8.2lf%sB/s",
-            r"GPRINT:tx:MAX:Max TX/s\: %8.2lf%sB/s",
+            "CDEF:rxs=rx,UN,0,rx,IF",
+            "CDEF:txs=tx,UN,0,tx,IF",
+            "LINE2:rxs#1f77b4:Received rate",
+            "LINE2:txs#ff7f0e:Transmitted rate",
+            r"GPRINT:rxs:LAST:Last RX/s\: %8.2lf%sB/s",
+            r"GPRINT:txs:LAST:Last TX/s\: %8.2lf%sB/s",
+            r"GPRINT:rxs:MAX:Max RX/s\: %8.2lf%sB/s",
+            r"GPRINT:txs:MAX:Max TX/s\: %8.2lf%sB/s",
         ]
         graphed = subprocess.run(graph_cmd, capture_output=True, text=True, check=False)
         if graphed.returncode != 0:

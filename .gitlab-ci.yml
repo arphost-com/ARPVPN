@@ -36,6 +36,7 @@ unit_tests:
         arpvpn/tests/default/test_traffic_driver.py \
         arpvpn/tests/default/test_interface_state.py \
         arpvpn/tests/default/test_wireguard_utils.py \
+        arpvpn/tests/default/test_rrd_graph_generation.py \
         arpvpn/tests/default/test_mesh_phase1.py \
         arpvpn/tests/default/test_mesh_api.py \
         arpvpn/tests/default/test_api_auth.py \
