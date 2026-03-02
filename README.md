@@ -55,6 +55,10 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
    * `ARPVPN_HTTP_PORT` (HTTP bind port, defaults to `8085`)
    * `ARPVPN_HTTPS_PORT` (HTTPS bind port, defaults to `8086`)
    * `DATA_FOLDER` (host path mounted to `/data`)
+   Suggested image tags by release line:
+   * v1 (`main`): `10.10.10.96:5050/arphost/arpvpn:stable`
+   * v2 (`codex/multitenant-v2`): `10.10.10.96:5050/arphost/arpvpn:v2-latest`
+   For side-by-side testing, use separate `DATA_FOLDER` and host ports for each line.
 3. Create/validate the data folder as your current host user:
    ```bash
    ./up.sh pull
