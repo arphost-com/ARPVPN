@@ -3,7 +3,7 @@ import json
 import os
 import sqlite3
 from datetime import datetime, timezone
-from logging import debug, info
+from logging import debug, info, warning
 from typing import Any, Mapping
 from uuid import uuid4 as gen_uuid
 
@@ -466,7 +466,8 @@ class TenancyManager:
         wireguard_config: Any = None,
     ):
         if not global_properties.workdir:
-            raise RuntimeError("Unable to initialize tenancy store: workdir is not configured.")
+            warning("Tenancy store initialization skipped: workdir is not configured yet.")
+            return
         try_makedir(os.path.dirname(self.db_path))
         with self._connect() as connection:
             self._create_schema(connection)

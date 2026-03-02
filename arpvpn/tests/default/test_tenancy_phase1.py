@@ -131,3 +131,8 @@ def test_tenancy_phase1_bootstrap_imports_legacy_data():
             (tenancy_manager.PHASE1_MIGRATION_NAME,),
         ).fetchone()[0]
         assert migration_count == 1
+
+
+def test_tenancy_initialize_skips_without_workdir():
+    global_properties.workdir = ""
+    tenancy_manager.initialize(legacy_users={}, legacy_interfaces={})
