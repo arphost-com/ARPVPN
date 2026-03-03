@@ -2,6 +2,7 @@ import os
 from ipaddress import IPv4Address
 from logging import debug, warning, error
 from typing import Dict, Type, Any
+from urllib.request import Request, urlopen
 
 from yamlable import yaml_info, Y
 
@@ -73,12 +74,10 @@ class WireguardConfig(BaseConfig):
 
     def set_default_endpoint(self):
         try:
-            result = Command("curl -fsSL --max-time 10 https://api.ipify.org").run()
-            if not result.successful:
-                raise RuntimeError(result.err or result.output or "Unable to retrieve public IP address")
-            self.endpoint = result.output.strip()
+            request = Request(self.__IP_RETRIEVER_URL, headers={"User-Agent": "ARPVPN/2"})
+            with urlopen(request, timeout=10) as response:
+                self.endpoint = response.read(64).decode("utf-8", errors="ignore").strip()
             IPv4Address(self.endpoint)
-
             debug(f"Public IP address is {self.endpoint}. This will be used as default endpoint.")
         except Exception as e:
             error(f"Unable to obtain server's public IP address: {e}")

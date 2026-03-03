@@ -6,6 +6,9 @@ services:
     # needed by WireGuard commands invoked by the UI).
     user: "${ARPVPN_RUNTIME_USER:-arpvpn}"
     environment:
+      # Cookie suffix and runtime diagnostics.
+      ARPVPN_CONTAINER_NAME: "${ARPVPN_CONTAINER_NAME:-arpvpn}"
+      ARPVPN_COOKIE_SUFFIX: "${ARPVPN_COOKIE_SUFFIX:-}"
       # Use 0 to allow HTTP + HTTPS mixed access when redirect is disabled.
       # Set to 1 to force secure cookies in strict HTTPS environments.
       ARPVPN_SECURE_COOKIES: "${ARPVPN_SECURE_COOKIES:-0}"
@@ -53,6 +56,6 @@ services:
         source: "${DATA_FOLDER:-/srv/arpvpn/data}"  # Optional, provides a way to see and edit the configuration files directly from the host.
         target: /data
         bind:
-          create_host_path: false
+          create_host_path: true
     network_mode: host
     restart: unless-stopped

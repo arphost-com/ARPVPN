@@ -41,6 +41,7 @@ from arpvpn.web.controllers.RestController import RestController
 from arpvpn.web.controllers.ViewController import ViewController
 from arpvpn.web.security_api import ApiTokenStore, SlidingWindowRateLimiter, AuthLockoutManager
 from arpvpn.web.static.assets.resources import EMPTY_FIELD, APP_NAME
+from arpvpn.web.validators import is_valid_tls_server_name
 
 ACTIVE_PEER_MAX_AGE_SECONDS = 180
 STALE_PEER_MAX_AGE_SECONDS = 1800
@@ -103,6 +104,11 @@ API_AUTH_PUBLIC_ENDPOINTS = {
     "router.api_auth_issue_token",
     "router.api_auth_refresh_token",
 }
+BENIGN_LOG_ISSUE_PATTERNS = (
+    "failed to run 'ip a | grep -w",
+    "already down.",
+    "csrf validation failed on login; not counting toward lockout.",
+)
 api_token_store = ApiTokenStore(web_config.secret_key)
 api_rate_limiter = SlidingWindowRateLimiter()
 api_auth_lockouts = AuthLockoutManager()
@@ -1183,6 +1189,7 @@ def get_log_summary(max_tail_lines: int = 5000, include_recent_issues: bool = Fa
         "tail_lines": 0,
         "warning_lines": 0,
         "error_lines": 0,
+        "suppressed_issue_lines": 0,
         "recent_issues": [],
         "read_error": None,
     }
@@ -1202,17 +1209,26 @@ def get_log_summary(max_tail_lines: int = 5000, include_recent_issues: bool = Fa
         summary["read_error"] = str(e)
         return summary
 
+    issue_entries: List[str] = []
     for entry in tail:
-        if "[ERROR]" in entry or "[FATAL]" in entry:
+        is_error = "[ERROR]" in entry or "[FATAL]" in entry
+        is_warning = "[WARNING]" in entry
+        if not is_error and not is_warning:
+            continue
+
+        lowered_entry = entry.lower()
+        if any(pattern in lowered_entry for pattern in BENIGN_LOG_ISSUE_PATTERNS):
+            summary["suppressed_issue_lines"] += 1
+            continue
+
+        if is_error:
             summary["error_lines"] += 1
-        elif "[WARNING]" in entry:
+        elif is_warning:
             summary["warning_lines"] += 1
+        issue_entries.append(entry)
     summary["tail_lines"] = len(tail)
     if include_recent_issues:
-        summary["recent_issues"] = [
-            entry for entry in reversed(tail)
-            if "[ERROR]" in entry or "[FATAL]" in entry or "[WARNING]" in entry
-        ][:8]
+        summary["recent_issues"] = list(reversed(issue_entries))[:8]
     summary["available"] = True
     return summary
 
@@ -1555,6 +1571,27 @@ def parse_tls_mode(mode_value: Any) -> str:
     if mode not in web_config.TLS_MODES:
         abort(BAD_REQUEST, "Unknown TLS mode.")
     return mode
+
+
+def parse_tls_server_name(
+    value: Any,
+    *,
+    allow_ipv4: bool,
+    allow_localhost: bool,
+    field_name: str = "server_name",
+) -> str:
+    server_name = str(value or "").strip()
+    if not server_name:
+        abort(BAD_REQUEST, f"{field_name} is required.")
+    if not is_valid_tls_server_name(server_name, allow_ipv4=allow_ipv4, allow_localhost=allow_localhost):
+        if allow_ipv4:
+            abort(
+                BAD_REQUEST,
+                f"{field_name} must be a valid IPv4 address or fully-qualified hostname "
+                "(example: vpn.example.com).",
+            )
+        abort(BAD_REQUEST, f"{field_name} must be a fully-qualified hostname (example: vpn.example.com).")
+    return server_name
 
 
 def parse_json_bool(payload: Dict[str, Any], key: str, default: bool = False) -> bool:
@@ -3267,8 +3304,20 @@ def api_tls_mode_update():
     redirect_http_to_https = parse_json_bool(payload, "redirect_http_to_https", web_config.redirect_http_to_https)
 
     requires_hostname = mode in (web_config.TLS_MODE_SELF_SIGNED, web_config.TLS_MODE_LETS_ENCRYPT)
-    if requires_hostname and not server_name:
-        abort(BAD_REQUEST, "server_name is required for selected TLS mode.")
+    if requires_hostname:
+        server_name = parse_tls_server_name(
+            server_name,
+            allow_ipv4=mode == web_config.TLS_MODE_SELF_SIGNED,
+            allow_localhost=mode == web_config.TLS_MODE_SELF_SIGNED,
+            field_name="server_name",
+        )
+    if mode == web_config.TLS_MODE_REVERSE_PROXY:
+        proxy_incoming_hostname = parse_tls_server_name(
+            proxy_incoming_hostname,
+            allow_ipv4=False,
+            allow_localhost=True,
+            field_name="proxy_incoming_hostname",
+        )
     if mode == web_config.TLS_MODE_LETS_ENCRYPT and not letsencrypt_email:
         warning("TLS mode switched to letsencrypt without explicit email; certbot may require follow-up.")
 
@@ -3289,11 +3338,14 @@ def api_tls_mode_update():
 @setup_required
 def api_tls_generate_self_signed():
     payload = parse_json_payload()
-    server_name = str(payload.get("server_name", web_config.tls_server_name) or "").strip()
+    server_name = parse_tls_server_name(
+        payload.get("server_name", web_config.tls_server_name),
+        allow_ipv4=True,
+        allow_localhost=True,
+        field_name="server_name",
+    )
     regenerate = parse_json_bool(payload, "regenerate", True)
     redirect_http_to_https = parse_json_bool(payload, "redirect_http_to_https", web_config.redirect_http_to_https)
-    if not server_name:
-        abort(BAD_REQUEST, "server_name is required for self-signed certificates.")
 
     web_config.tls_mode = web_config.TLS_MODE_SELF_SIGNED
     web_config.tls_server_name = server_name
@@ -3309,12 +3361,15 @@ def api_tls_generate_self_signed():
 @setup_required
 def api_tls_issue_letsencrypt():
     payload = parse_json_payload()
-    server_name = str(payload.get("server_name", web_config.tls_server_name) or "").strip()
+    server_name = parse_tls_server_name(
+        payload.get("server_name", web_config.tls_server_name),
+        allow_ipv4=False,
+        allow_localhost=False,
+        field_name="server_name",
+    )
     email = str(payload.get("email", web_config.tls_letsencrypt_email) or "").strip()
     issue_now = parse_json_bool(payload, "issue_now", True)
     redirect_http_to_https = parse_json_bool(payload, "redirect_http_to_https", web_config.redirect_http_to_https)
-    if not server_name:
-        abort(BAD_REQUEST, "server_name is required for Let's Encrypt.")
 
     web_config.tls_mode = web_config.TLS_MODE_LETS_ENCRYPT
     web_config.tls_server_name = server_name
@@ -3459,6 +3514,16 @@ def get_users_management_context(create_form=None, edit_form=None, delete_form=N
     }
 
 
+def summarize_form_errors(form: Any) -> str:
+    issues: List[str] = []
+    for field_name, errors in getattr(form, "errors", {}).items():
+        if not errors:
+            continue
+        for issue in errors:
+            issues.append(f"{field_name}: {issue}")
+    return "; ".join(issues)
+
+
 @router.route("/users", methods=["GET"])
 @login_required
 @role_required(*STAFF_ROLES)
@@ -3483,7 +3548,10 @@ def create_user():
         stop_form=ImpersonationStopForm(),
     )
     if not form.validate():
-        error("Unable to validate create-user form")
+        details = summarize_form_errors(form) or "unknown validation error"
+        error(f"Unable to validate create-user form: {details}")
+        context["error"] = True
+        context["error_details"] = f"Unable to create user: {details}"
         return ViewController("web/users.html", **context).load()
     if current_user.has_role(User.ROLE_SUPPORT) and form.role.data != User.ROLE_CLIENT:
         context["error"] = True

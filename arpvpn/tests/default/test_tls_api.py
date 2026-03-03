@@ -106,6 +106,35 @@ def test_tls_mode_update_api_calls_apply(monkeypatch, client):
     assert body["data"]["redirect_http_to_https"] is False
 
 
+def test_tls_mode_update_rejects_single_label_self_signed_hostname(client):
+    create_user("admin", "admin", User.ROLE_ADMIN)
+    login(client, "admin", "admin")
+
+    response = client.post(
+        "/api/v1/tls/mode",
+        json={
+            "mode": "self_signed",
+            "server_name": "arpvpn",
+            "redirect_http_to_https": False,
+        },
+    )
+    assert response.status_code == 400
+
+
+def test_tls_mode_update_rejects_single_label_reverse_proxy_hostname(client):
+    create_user("admin", "admin", User.ROLE_ADMIN)
+    login(client, "admin", "admin")
+
+    response = client.post(
+        "/api/v1/tls/mode",
+        json={
+            "mode": "reverse_proxy",
+            "proxy_incoming_hostname": "arpvpn",
+        },
+    )
+    assert response.status_code == 400
+
+
 def test_tls_self_signed_api_calls_apply(monkeypatch, client):
     create_user("admin", "admin", User.ROLE_ADMIN)
     login(client, "admin", "admin")

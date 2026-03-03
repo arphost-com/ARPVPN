@@ -225,6 +225,32 @@ def _validate_hostname_or_ipv4(value: str, allow_ipv4: bool = True) -> bool:
         return HOSTNAME_REGEX.match(value) is not None
 
 
+def is_valid_tls_server_name(
+    value: str,
+    allow_ipv4: bool,
+    allow_localhost: bool = True,
+) -> bool:
+    candidate = str(value or "").strip()
+    if not candidate:
+        return False
+
+    if allow_localhost and candidate.lower() == "localhost":
+        return True
+
+    try:
+        ipaddress.IPv4Address(candidate)
+        return allow_ipv4
+    except ValueError:
+        pass
+
+    if HOSTNAME_REGEX.match(candidate) is None:
+        return False
+
+    # Reject single-label hostnames for TLS redirect targets to avoid
+    # host fallback behavior and ambiguous browser resolution.
+    return "." in candidate
+
+
 class EndpointValidator:
     def __call__(self, form, field):
         try:

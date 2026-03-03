@@ -52,6 +52,19 @@ def test_post_ok(client):
     assert b"Error" not in response.data
 
 
+def test_post_rejects_single_label_tls_hostname(client):
+    login(client)
+    response = client.post(url, data={
+        "app_endpoint": "vpn.example.com", "app_iptables_bin": "/usr/sbin/iptables", "app_wg_bin": "/usr/bin/wg",
+        "app_wg_quick_bin": "/usr/bin/wg-quick", "web_login_attempts": 0, "web_login_ban_time": config.login_ban_time,
+        "web_secret_key": CryptoUtils.generate_key(), "web_tls_mode": "self_signed", "web_tls_server_name": "arpvpn",
+        "log_overwrite": False, "log_level": "debug", "traffic_enabled": True, "traffic_driver": "JSON",
+        "traffic_driver_options": "{}"
+    })
+    assert is_http_success(response.status_code)
+    assert b"fully-qualified hostname" in response.data
+
+
 def test_post_ko(client):
     login(client)
     response = client.post(url, data={

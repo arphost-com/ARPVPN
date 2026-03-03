@@ -52,6 +52,7 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
    * `ARPVPN_IMAGE` (image/tag to run)
    * `ARPVPN_RUNTIME_USER` (runtime user inside the container, default `arpvpn`)
    * `ARPVPN_CONTAINER_NAME` (container name; set unique value when running multiple stacks)
+   * `ARPVPN_COOKIE_SUFFIX` (optional cookie namespace suffix; defaults to container name)
    * `ARPVPN_SESSION_COOKIE_NAME` / `ARPVPN_REMEMBER_COOKIE_NAME` (optional explicit cookie names; auto-derived from container name if omitted)
    * `ARPVPN_SECURE_COOKIES` (`0` for mixed HTTP/HTTPS access, `1` for strict HTTPS)
    * `ARPVPN_HTTP_PORT` (HTTP bind port, defaults to `8085`)
@@ -61,12 +62,12 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
    * v1 (`main`): `10.10.10.96:5050/arphost/arpvpn:stable`
    * v2 (`codex/multitenant-v2`): `10.10.10.96:5050/arphost/arpvpn:v2-latest`
    For side-by-side testing, use separate `DATA_FOLDER` and host ports for each line.
-3. Create/validate the data folder as your current host user:
+3. Pull and start:
    ```bash
    ./up.sh pull
    ./up.sh up -d --force-recreate arpvpn
    ```
-   `up.sh` creates `DATA_FOLDER` if missing and refuses to continue if ownership/permissions are wrong.
+   `up.sh` and compose create `DATA_FOLDER` automatically if missing and refuse to continue if ownership/permissions are wrong.
 4. If `DATA_FOLDER` already exists as `root:root` from a previous deployment, fix it once:
    ```bash
    sudo chown -R "$(id -u):$(id -g)" ./data
@@ -127,6 +128,7 @@ Important behavior:
 Running multiple multitenant stacks on one host:
 * Give each stack unique values for:
   * `ARPVPN_CONTAINER_NAME`
+  * `ARPVPN_COOKIE_SUFFIX` (or explicit cookie names)
   * `DATA_FOLDER`
   * `ARPVPN_HTTP_PORT`
   * `ARPVPN_HTTPS_PORT`

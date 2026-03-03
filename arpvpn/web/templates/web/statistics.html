@@ -102,6 +102,11 @@
                             <div class="col-md-4 mb-2"><strong>Warnings (tail):</strong> {{ log_summary["warning_lines"] }}</div>
                             <div class="col-md-4 mb-2"><strong>Errors/Fatal (tail):</strong> {{ log_summary["error_lines"] }}</div>
                         </div>
+                        {% if log_summary.get("suppressed_issue_lines", 0) > 0 %}
+                            <div class="small text-muted mb-2">
+                                Filtered known-benign startup/runtime lines: {{ log_summary["suppressed_issue_lines"] }}
+                            </div>
+                        {% endif %}
                         {% if log_summary["recent_issues"] %}
                             <div class="table-responsive mt-3">
                                 <table class="table table-bordered table-sm mb-0">
