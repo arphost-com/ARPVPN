@@ -1,7 +1,7 @@
 import os
 from logging import info
 from subprocess import PIPE, run
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 import yaml
 
@@ -48,38 +48,8 @@ class TLSManager:
             yaml.safe_dump(data, handle, sort_keys=False)
 
     @staticmethod
-    def _extract_bind(socket_value: Optional[str], default_port: int) -> str:
-        if socket_value and isinstance(socket_value, str):
-            bind = socket_value.split(",", 1)[0].strip()
-            if bind:
-                return bind
-        return f"0.0.0.0:{default_port}"
-
-    @staticmethod
-    def _split_bind(bind: str) -> tuple[str, str]:
-        value = (bind or "").strip()
-        if not value:
-            return "0.0.0.0", ""
-        if value.startswith("["):
-            index = value.rfind("]:")
-            if index > -1:
-                return value[:index + 1], value[index + 2:]
-            return value, ""
-        if ":" not in value:
-            return value, ""
-        host, port = value.rsplit(":", 1)
-        return host or "0.0.0.0", port
-
-    @classmethod
-    def _resolve_bind_host(cls, uwsgi_settings: Dict[str, Any], web_config: WebConfig) -> str:
-        http_bind = cls._extract_bind(uwsgi_settings.get("http-socket"), web_config.http_port)
-        https_bind = cls._extract_bind(uwsgi_settings.get("https-socket"), web_config.https_port)
-        http_host, _ = cls._split_bind(http_bind)
-        if http_host:
-            return http_host
-        https_host, _ = cls._split_bind(https_bind)
-        if https_host:
-            return https_host
+    def _resolve_bind_host(_uwsgi_settings: Dict[str, Any], _web_config: WebConfig) -> str:
+        # Always bind ARPVPN listeners on all interfaces for remote management.
         return "0.0.0.0"
 
     @classmethod
