@@ -361,6 +361,14 @@ body {
   border-color: var(--theme-border) !important;
 }
 
+.auth-card input.form-control {
+  color-scheme: normal;
+  appearance: none;
+  background-color: var(--theme-input-bg) !important;
+  color: var(--theme-input-text) !important;
+  -webkit-text-fill-color: var(--theme-input-text) !important;
+}
+
 .auth-card .form-control::placeholder,
 .auth-card .custom-select::placeholder {
   color: var(--theme-input-placeholder) !important;

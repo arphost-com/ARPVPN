@@ -165,7 +165,7 @@ class Interface(YamlAble):
     def down(self):
         info(f"Stopping interface {self.name}...")
         if self.is_down:
-            warning(f"Unable to bring {self.name} down: already down.")
+            info(f"Interface {self.name} is already down.")
             return
         from arpvpn.core.config.traffic import config
         if config.enabled:

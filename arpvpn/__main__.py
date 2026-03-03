@@ -116,10 +116,18 @@ def _sanitize_cookie_name(name: str, fallback: str) -> str:
 
 
 def _container_cookie_suffix() -> str:
+    explicit_suffix = (os.environ.get("ARPVPN_COOKIE_SUFFIX", "") or "").strip()
+    if explicit_suffix:
+        return re.sub(r"[^A-Za-z0-9]+", "_", explicit_suffix).strip("_").lower()
+
     raw_container_name = (os.environ.get("ARPVPN_CONTAINER_NAME", "") or "").strip()
-    if not raw_container_name:
-        return ""
-    return re.sub(r"[^A-Za-z0-9]+", "_", raw_container_name).strip("_").lower()
+    if raw_container_name:
+        return re.sub(r"[^A-Za-z0-9]+", "_", raw_container_name).strip("_").lower()
+
+    compose_project = (os.environ.get("COMPOSE_PROJECT_NAME", "") or "").strip()
+    if compose_project:
+        return re.sub(r"[^A-Za-z0-9]+", "_", compose_project).strip("_").lower()
+    return ""
 
 
 def _resolve_session_cookie_name() -> str:
@@ -135,21 +143,21 @@ def _resolve_remember_cookie_name(session_cookie_name: str) -> str:
 
 secure_cookies_env = os.environ.get("ARPVPN_SECURE_COOKIES", "0").lower() not in ("0", "false", "no")
 secure_transport_by_config = web_config.strict_https_mode
-secure_cookies_enabled = secure_cookies_env or secure_transport_by_config
 session_cookie_name = _resolve_session_cookie_name()
 remember_cookie_name = _resolve_remember_cookie_name(session_cookie_name)
+initial_secure_cookie_flag = bool(secure_transport_by_config and not args.debug)
 
 app.config['SECRET_KEY'] = web_config.secret_key
 app.config["SESSION_COOKIE_NAME"] = session_cookie_name
 app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SECURE"] = secure_cookies_enabled and not args.debug
+app.config["SESSION_COOKIE_SECURE"] = initial_secure_cookie_flag
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["REMEMBER_COOKIE_NAME"] = remember_cookie_name
 app.config["REMEMBER_COOKIE_HTTPONLY"] = True
-app.config["REMEMBER_COOKIE_SECURE"] = secure_cookies_enabled and not args.debug
+app.config["REMEMBER_COOKIE_SECURE"] = initial_secure_cookie_flag
 app.config["REMEMBER_COOKIE_SAMESITE"] = "Lax"
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=12)
-if secure_cookies_enabled:
+if secure_transport_by_config:
     app.config["PREFERRED_URL_SCHEME"] = "https"
 
 if web_config.tls_mode == web_config.TLS_MODE_REVERSE_PROXY:
@@ -277,6 +285,32 @@ def _format_https_authority(host: str, port: int) -> str:
     return f"{candidate}:{port}"
 
 
+def _request_uses_https_transport() -> bool:
+    if request.is_secure:
+        return True
+    x_forwarded_proto = request.headers.get("X-Forwarded-Proto", "").split(",", 1)[0].strip().lower()
+    return x_forwarded_proto == "https"
+
+
+def _resolve_secure_cookie_flag_for_request() -> bool:
+    if args.debug:
+        return False
+    if web_config.strict_https_mode:
+        return True
+    # Compatibility behavior for mixed HTTP/HTTPS deployments:
+    # honor secure cookies only on HTTPS requests when forced via env.
+    if secure_cookies_env:
+        return _request_uses_https_transport()
+    return False
+
+
+@app.before_request
+def sync_cookie_security_with_request_transport():
+    secure_flag = _resolve_secure_cookie_flag_for_request()
+    app.config["SESSION_COOKIE_SECURE"] = secure_flag
+    app.config["REMEMBER_COOKIE_SECURE"] = secure_flag
+
+
 @app.before_request
 def maybe_redirect_http_to_https():
     if not _https_redirect_mode_enabled():
@@ -344,7 +378,7 @@ def add_security_headers(response):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-    if secure_cookies_enabled and not args.debug:
+    if web_config.strict_https_mode and not args.debug:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "

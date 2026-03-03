@@ -39,11 +39,30 @@
 - Check CSRF/login events:
   - `ssh docker03 'tail -n 200 /home/debian/docker/vpn1/docker/data/arpvpn.log'`
 
+### Production guardrail (docker03)
+
+- Do not apply code/config changes directly on `docker03` (production).
+- Reproduce and validate fixes on `docker02`, then ship via GitLab image/tag and pull on `docker03`.
+- Use read-only diagnostics on `docker03`:
+  - `ssh docker03 'docker compose logs --tail=200'`
+  - `ssh docker03 'tail -n 200 /home/debian/docker/vpn1/docker/data/arpvpn.log'`
+
 ### CSRF troubleshooting (docker03 multitenant)
 
 - Use one origin consistently during setup/login (`http://<same-host>:1085`).
 - Do not switch hostnames/IPs between loading and submitting forms (host-only cookies).
 - If `redirect_http_to_https` is enabled later, continue with HTTPS only.
+
+### Multi-stack runtime notes
+
+- Keep these values unique per stack on the same host:
+  - `ARPVPN_CONTAINER_NAME`
+  - `ARPVPN_COOKIE_SUFFIX` (or explicit cookie names)
+  - `DATA_FOLDER`
+  - `ARPVPN_HTTP_PORT`
+  - `ARPVPN_HTTPS_PORT`
+- Compose now auto-creates `DATA_FOLDER` bind paths on first startup (`create_host_path: true`).
+- `./docker/up.sh` remains the recommended wrapper because it validates host-path ownership before launch.
 
 ## Local Service Endpoints (Always Use)
 

@@ -94,6 +94,33 @@ def test_theme_cookie_secure_flag_matches_strict_https(client):
     assert "Secure;" in response.headers.get("Set-Cookie", "")
 
 
+def test_theme_cookie_forced_secure_env_only_applies_to_https_requests(client, monkeypatch):
+    import arpvpn.__main__ as app_main
+
+    create_user("admin", "admin", User.ROLE_ADMIN)
+    login(client, "admin", "admin")
+
+    monkeypatch.setattr(app_main, "secure_cookies_env", True)
+    web_config.tls_mode = web_config.TLS_MODE_SELF_SIGNED
+    web_config.redirect_http_to_https = False
+
+    response = client.post(
+        "/api/v1/themes",
+        base_url="http://localhost",
+        json={"choice": "dark"},
+    )
+    assert is_http_success(response.status_code)
+    assert "Secure;" not in response.headers.get("Set-Cookie", "")
+
+    response = client.post(
+        "/api/v1/themes",
+        base_url="https://localhost",
+        json={"choice": "light"},
+    )
+    assert is_http_success(response.status_code)
+    assert "Secure;" in response.headers.get("Set-Cookie", "")
+
+
 def test_cookie_name_defaults_include_container_name(client, monkeypatch):
     import arpvpn.__main__ as app_main
 

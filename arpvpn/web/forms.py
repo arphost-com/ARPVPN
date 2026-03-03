@@ -25,14 +25,14 @@ from arpvpn.web.validators import LoginUsernameValidator, LoginPasswordValidator
     InterfaceIpValidator, InterfaceNameValidator, InterfacePortValidator, PeerIpValidator, PeerPrimaryDnsValidator, \
     PeerSecondaryDnsValidator, PeerNameValidator, NewPasswordValidator, OldPasswordValidator, JsonDataValidator, \
     PathExistsValidator, EndpointValidator, PeerSiteToSiteSubnetsValidator, HostnameOrIPv4Validator, \
-    HostnameValidator, EmailValidator
+    HostnameValidator, EmailValidator, is_valid_tls_server_name
 
 
 class LoginForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired(), LoginUsernameValidator()],
-                           render_kw={"placeholder": "Enter username"})
+                           render_kw={"placeholder": "Enter username", "autocomplete": "username"})
     password = PasswordField('Password', validators=[DataRequired(), LoginPasswordValidator()],
-                             render_kw={"placeholder": "Enter password"})
+                             render_kw={"placeholder": "Enter password", "autocomplete": "current-password"})
     remember_me = BooleanField('Remember me')
     submit = SubmitField('Log in')
     next = StringField()
@@ -40,20 +40,28 @@ class LoginForm(FlaskForm):
 
 class SignupForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired(), SignupUsernameValidator()],
-                           render_kw={"placeholder": "Enter username"})
-    password = PasswordField('Password', validators=[DataRequired()], render_kw={"placeholder": "Enter password"})
+                           render_kw={"placeholder": "Enter username", "autocomplete": "username"})
+    password = PasswordField(
+        'Password',
+        validators=[DataRequired()],
+        render_kw={"placeholder": "Enter password", "autocomplete": "new-password"},
+    )
     confirm = PasswordField('Confirm password', validators=[DataRequired(), SignupPasswordValidator()],
-                            render_kw={"placeholder": "Confirm password"})
+                            render_kw={"placeholder": "Confirm password", "autocomplete": "new-password"})
     submit = SubmitField('Create account')
     next = StringField()
 
 
 class CreateUserForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired(), SignupUsernameValidator()],
-                           render_kw={"placeholder": "Enter username"})
-    password = PasswordField('Password', validators=[DataRequired()], render_kw={"placeholder": "Enter password"})
+                           render_kw={"placeholder": "Enter username", "autocomplete": "username"})
+    password = PasswordField(
+        'Password',
+        validators=[DataRequired()],
+        render_kw={"placeholder": "Enter password", "autocomplete": "new-password"},
+    )
     confirm = PasswordField('Confirm password', validators=[DataRequired(), SignupPasswordValidator()],
-                            render_kw={"placeholder": "Confirm password"})
+                            render_kw={"placeholder": "Confirm password", "autocomplete": "new-password"})
     role = SelectField(
         "Role",
         choices=[
@@ -200,22 +208,27 @@ class SettingsForm(FlaskForm):
             web_config.TLS_MODE_SELF_SIGNED,
             web_config.TLS_MODE_LETS_ENCRYPT,
         )
-        if requires_hostname and not (self.web_tls_server_name.data or "").strip():
+        hostname = (self.web_tls_server_name.data or "").strip()
+        if requires_hostname and not hostname:
             self.web_tls_server_name.errors.append(
                 "is required when TLS mode is self-signed or Let's Encrypt."
             )
             valid = False
 
-        if mode == web_config.TLS_MODE_LETS_ENCRYPT:
-            hostname = (self.web_tls_server_name.data or "").strip()
-            try:
-                ipaddress.IPv4Address(hostname)
+        if mode == web_config.TLS_MODE_SELF_SIGNED and hostname:
+            if not is_valid_tls_server_name(hostname, allow_ipv4=True, allow_localhost=True):
                 self.web_tls_server_name.errors.append(
-                    "must be a hostname for Let's Encrypt (IP addresses are not supported)."
+                    "must be a valid IPv4 address or fully-qualified hostname "
+                    "(example: vpn.example.com)."
                 )
                 valid = False
-            except ValueError:
-                pass
+
+        if mode == web_config.TLS_MODE_LETS_ENCRYPT and hostname:
+            if not is_valid_tls_server_name(hostname, allow_ipv4=False, allow_localhost=False):
+                self.web_tls_server_name.errors.append(
+                    "must be a fully-qualified hostname for Let's Encrypt."
+                )
+                valid = False
 
         if self.web_tls_generate_self_signed.data and mode != web_config.TLS_MODE_SELF_SIGNED:
             self.web_tls_generate_self_signed.errors.append(
@@ -229,11 +242,18 @@ class SettingsForm(FlaskForm):
             )
             valid = False
 
-        if mode == web_config.TLS_MODE_REVERSE_PROXY and not (self.web_proxy_incoming_hostname.data or "").strip():
-            self.web_proxy_incoming_hostname.errors.append(
-                "is required when reverse proxy mode is enabled."
-            )
-            valid = False
+        if mode == web_config.TLS_MODE_REVERSE_PROXY:
+            proxy_hostname = (self.web_proxy_incoming_hostname.data or "").strip()
+            if not proxy_hostname:
+                self.web_proxy_incoming_hostname.errors.append(
+                    "is required when reverse proxy mode is enabled."
+                )
+                valid = False
+            elif not is_valid_tls_server_name(proxy_hostname, allow_ipv4=False, allow_localhost=True):
+                self.web_proxy_incoming_hostname.errors.append(
+                    "must be localhost or a fully-qualified hostname (example: vpn.example.com)."
+                )
+                valid = False
 
         if self.web_redirect_http_to_https.data and mode == web_config.TLS_MODE_HTTP:
             self.web_redirect_http_to_https.errors.append(
@@ -344,22 +364,27 @@ class SetupForm(FlaskForm):
             fallback_server_name = (self.app_endpoint.data or "").strip()
             if fallback_server_name:
                 self.web_tls_server_name.data = fallback_server_name
-        if requires_hostname and not (self.web_tls_server_name.data or "").strip():
+        hostname = (self.web_tls_server_name.data or "").strip()
+        if requires_hostname and not hostname:
             self.web_tls_server_name.errors.append(
                 "is required when TLS mode is self-signed or Let's Encrypt."
             )
             valid = False
 
-        if mode == web_config.TLS_MODE_LETS_ENCRYPT:
-            hostname = (self.web_tls_server_name.data or "").strip()
-            try:
-                ipaddress.IPv4Address(hostname)
+        if mode == web_config.TLS_MODE_SELF_SIGNED and hostname:
+            if not is_valid_tls_server_name(hostname, allow_ipv4=True, allow_localhost=True):
                 self.web_tls_server_name.errors.append(
-                    "must be a hostname for Let's Encrypt (IP addresses are not supported)."
+                    "must be a valid IPv4 address or fully-qualified hostname "
+                    "(example: vpn.example.com)."
                 )
                 valid = False
-            except ValueError:
-                pass
+
+        if mode == web_config.TLS_MODE_LETS_ENCRYPT and hostname:
+            if not is_valid_tls_server_name(hostname, allow_ipv4=False, allow_localhost=False):
+                self.web_tls_server_name.errors.append(
+                    "must be a fully-qualified hostname for Let's Encrypt."
+                )
+                valid = False
 
         if self.web_tls_generate_self_signed.data and mode != web_config.TLS_MODE_SELF_SIGNED:
             self.web_tls_generate_self_signed.errors.append(
@@ -373,11 +398,18 @@ class SetupForm(FlaskForm):
             )
             valid = False
 
-        if mode == web_config.TLS_MODE_REVERSE_PROXY and not (self.web_proxy_incoming_hostname.data or "").strip():
-            self.web_proxy_incoming_hostname.errors.append(
-                "is required when reverse proxy mode is enabled."
-            )
-            valid = False
+        if mode == web_config.TLS_MODE_REVERSE_PROXY:
+            proxy_hostname = (self.web_proxy_incoming_hostname.data or "").strip()
+            if not proxy_hostname:
+                self.web_proxy_incoming_hostname.errors.append(
+                    "is required when reverse proxy mode is enabled."
+                )
+                valid = False
+            elif not is_valid_tls_server_name(proxy_hostname, allow_ipv4=False, allow_localhost=True):
+                self.web_proxy_incoming_hostname.errors.append(
+                    "must be localhost or a fully-qualified hostname (example: vpn.example.com)."
+                )
+                valid = False
 
         if self.web_redirect_http_to_https.data and mode == web_config.TLS_MODE_HTTP:
             self.web_redirect_http_to_https.errors.append(

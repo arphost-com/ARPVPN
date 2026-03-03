@@ -32,6 +32,7 @@ Using docker
    * ``ARPVPN_IMAGE`` (image/tag to run)
    * ``ARPVPN_RUNTIME_USER`` (runtime user inside container, default ``arpvpn``)
    * ``ARPVPN_CONTAINER_NAME`` (container name; set unique value per stack)
+   * ``ARPVPN_COOKIE_SUFFIX`` (optional cookie namespace suffix; defaults to container name)
    * ``ARPVPN_SECURE_COOKIES`` (``0`` for mixed HTTP/HTTPS, ``1`` for strict HTTPS)
    * ``ARPVPN_HTTP_PORT`` (HTTP bind port, default ``8085``)
    * ``ARPVPN_HTTPS_PORT`` (HTTPS bind port, default ``8086``)
@@ -42,14 +43,14 @@ Using docker
    * v1 ``main``: ``10.10.10.96:5050/arphost/arpvpn:stable``
    * v2 ``codex/multitenant-v2``: ``10.10.10.96:5050/arphost/arpvpn:v2-latest``
 
-3. Create/validate data folder ownership and start:
+3. Pull and start:
 
     .. code-block:: bash
 
         ./up.sh pull
         ./up.sh up -d --force-recreate arpvpn
 
-4. If data folder was created previously as root, fix ownership once:
+4. If data folder already exists as root-owned from prior installs, fix ownership once:
 
     .. code-block:: bash
 
