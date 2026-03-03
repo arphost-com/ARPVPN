@@ -1,6 +1,8 @@
 import argparse
 import atexit
+import ipaddress
 import os
+import socket
 from datetime import datetime, timedelta, timezone
 from logging import warning, fatal, info, debug
 
@@ -137,10 +139,61 @@ def _https_redirect_mode_enabled() -> bool:
     )
 
 
+def _is_valid_redirect_host(hostname: str) -> bool:
+    candidate = (hostname or "").strip()
+    if not candidate:
+        return False
+    if candidate.lower() == "localhost":
+        return True
+    try:
+        ipaddress.IPv4Address(candidate)
+        return True
+    except ValueError:
+        pass
+    if "." not in candidate:
+        return False
+    allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.")
+    if any(ch not in allowed for ch in candidate):
+        return False
+    return not candidate.startswith(".") and not candidate.endswith(".")
+
+
+def _detect_local_server_ip() -> str:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("1.1.1.1", 80))
+            ip_value = (sock.getsockname()[0] or "").strip()
+            if ip_value and ip_value != "0.0.0.0":
+                return ip_value
+    except OSError:
+        pass
+    try:
+        host_ips = socket.gethostbyname_ex(socket.gethostname())[2]
+    except OSError:
+        host_ips = []
+    for ip_value in host_ips:
+        if ip_value and not ip_value.startswith("127.") and ip_value != "0.0.0.0":
+            return ip_value
+    return ""
+
+
 def _https_redirect_host() -> str:
     if web_config.tls_mode == web_config.TLS_MODE_REVERSE_PROXY:
         return (web_config.proxy_incoming_hostname or "").strip()
-    return (web_config.tls_server_name or "").strip()
+    configured_host = (web_config.tls_server_name or "").strip()
+    if _is_valid_redirect_host(configured_host):
+        return configured_host
+    fallback_ip = _detect_local_server_ip()
+    if fallback_ip:
+        if configured_host:
+            warning(
+                "Configured TLS server name '%s' is not a valid redirect host. "
+                "Falling back to local IP '%s'.",
+                configured_host,
+                fallback_ip,
+            )
+        return fallback_ip
+    return configured_host
 
 
 def _https_redirect_port() -> int:

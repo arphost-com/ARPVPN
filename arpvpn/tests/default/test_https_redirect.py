@@ -1,5 +1,6 @@
 import pytest
 
+import arpvpn.__main__ as app_main
 from arpvpn.core.config.web import config as web_config
 from arpvpn.tests.utils import default_cleanup, get_testing_app
 
@@ -82,3 +83,14 @@ def test_http_redirect_uses_custom_https_port(client):
     response = client.get("/login", base_url="http://vpn.example.com:8085", follow_redirects=False)
     assert response.status_code == 307
     assert response.headers["Location"] == "https://vpn.example.com:9443/login"
+
+
+def test_http_redirect_falls_back_to_local_ip_for_invalid_tls_server_name(client, monkeypatch):
+    web_config.tls_mode = web_config.TLS_MODE_SELF_SIGNED
+    web_config.tls_server_name = "arpvpn"
+    web_config.redirect_http_to_https = True
+    monkeypatch.setattr(app_main, "_detect_local_server_ip", lambda: "10.10.10.100")
+
+    response = client.get("/login", base_url="http://arpvpn:8085", follow_redirects=False)
+    assert response.status_code == 307
+    assert response.headers["Location"] == "https://10.10.10.100:8086/login"

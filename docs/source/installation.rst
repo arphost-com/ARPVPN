@@ -31,6 +31,7 @@ Using docker
 
    * ``ARPVPN_IMAGE`` (image/tag to run)
    * ``ARPVPN_RUNTIME_USER`` (runtime user inside container, default ``arpvpn``)
+   * ``ARPVPN_CONTAINER_NAME`` (container name; set unique value per stack)
    * ``ARPVPN_SECURE_COOKIES`` (``0`` for mixed HTTP/HTTPS, ``1`` for strict HTTPS)
    * ``ARPVPN_HTTP_PORT`` (HTTP bind port, default ``8085``)
    * ``ARPVPN_HTTPS_PORT`` (HTTPS bind port, default ``8086``)

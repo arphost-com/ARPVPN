@@ -51,6 +51,7 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
    Important variables in `.env`:
    * `ARPVPN_IMAGE` (image/tag to run)
    * `ARPVPN_RUNTIME_USER` (runtime user inside the container, default `arpvpn`)
+   * `ARPVPN_CONTAINER_NAME` (container name; set unique value when running multiple stacks)
    * `ARPVPN_SECURE_COOKIES` (`0` for mixed HTTP/HTTPS access, `1` for strict HTTPS)
    * `ARPVPN_HTTP_PORT` (HTTP bind port, defaults to `8085`)
    * `ARPVPN_HTTPS_PORT` (HTTPS bind port, defaults to `8086`)
