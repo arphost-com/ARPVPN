@@ -150,12 +150,18 @@ def _is_valid_redirect_host(hostname: str) -> bool:
         return True
     except ValueError:
         pass
-    if "." not in candidate:
-        return False
     allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.")
     if any(ch not in allowed for ch in candidate):
         return False
-    return not candidate.startswith(".") and not candidate.endswith(".")
+    if candidate.startswith(".") or candidate.endswith(".") or ".." in candidate:
+        return False
+    labels = candidate.split(".")
+    for label in labels:
+        if not label:
+            return False
+        if label.startswith("-") or label.endswith("-"):
+            return False
+    return True
 
 
 def _detect_local_server_ip() -> str:
@@ -177,10 +183,24 @@ def _detect_local_server_ip() -> str:
     return ""
 
 
-def _https_redirect_host() -> str:
+def _request_host_hint() -> str:
+    host_header = (request.host or "").strip()
+    if not host_header:
+        return ""
+    if host_header.startswith("["):
+        closing = host_header.find("]")
+        if closing > 1:
+            return host_header[1:closing]
+        return ""
+    return host_header.split(":", 1)[0].strip()
+
+
+def _https_redirect_host(request_host_hint: str = "") -> str:
+    configured_host = ""
     if web_config.tls_mode == web_config.TLS_MODE_REVERSE_PROXY:
-        return (web_config.proxy_incoming_hostname or "").strip()
-    configured_host = (web_config.tls_server_name or "").strip()
+        configured_host = (web_config.proxy_incoming_hostname or "").strip()
+    else:
+        configured_host = (web_config.tls_server_name or "").strip()
     if _is_valid_redirect_host(configured_host):
         return configured_host
     fallback_ip = _detect_local_server_ip()
@@ -193,6 +213,16 @@ def _https_redirect_host() -> str:
                 fallback_ip,
             )
         return fallback_ip
+    hint = (request_host_hint or "").strip()
+    if _is_valid_redirect_host(hint):
+        if configured_host:
+            warning(
+                "Configured TLS server name '%s' is not a valid redirect host and no local IP fallback was found. "
+                "Using request host '%s' for HTTP->HTTPS redirect.",
+                configured_host,
+                hint,
+            )
+        return hint
     return configured_host
 
 
@@ -227,7 +257,7 @@ def maybe_redirect_http_to_https():
     if x_forwarded_proto == "https":
         return None
 
-    host = _https_redirect_host()
+    host = _https_redirect_host(_request_host_hint())
     if not host:
         warning("HTTP->HTTPS redirect enabled but no trusted hostname configured; skipping redirect.")
         return None

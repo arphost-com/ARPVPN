@@ -95,3 +95,16 @@ def test_http_redirect_falls_back_to_local_ip_for_invalid_tls_server_name(client
     response = client.get("/login", base_url="http://arpvpn:8085", follow_redirects=False)
     assert response.status_code == 307
     assert response.headers["Location"] == "https://10.10.10.100:8086/login"
+
+
+def test_http_redirect_uses_request_host_when_config_and_ip_fallback_missing(client, monkeypatch):
+    import arpvpn.__main__ as app_main
+
+    web_config.tls_mode = web_config.TLS_MODE_SELF_SIGNED
+    web_config.tls_server_name = ""
+    web_config.redirect_http_to_https = True
+    monkeypatch.setattr(app_main, "_detect_local_server_ip", lambda: "")
+
+    response = client.get("/login", base_url="http://10.10.10.93:8085", follow_redirects=False)
+    assert response.status_code == 307
+    assert response.headers["Location"] == "https://10.10.10.93:8086/login"
