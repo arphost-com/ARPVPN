@@ -52,6 +52,7 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
    * `ARPVPN_IMAGE` (image/tag to run)
    * `ARPVPN_RUNTIME_USER` (runtime user inside the container, default `arpvpn`)
    * `ARPVPN_CONTAINER_NAME` (container name; set unique value when running multiple stacks)
+   * `ARPVPN_SESSION_COOKIE_NAME` / `ARPVPN_REMEMBER_COOKIE_NAME` (optional explicit cookie names; auto-derived from container name if omitted)
    * `ARPVPN_SECURE_COOKIES` (`0` for mixed HTTP/HTTPS access, `1` for strict HTTPS)
    * `ARPVPN_HTTP_PORT` (HTTP bind port, defaults to `8085`)
    * `ARPVPN_HTTPS_PORT` (HTTPS bind port, defaults to `8086`)
@@ -85,6 +86,58 @@ TLS can be configured from the UI (`Settings -> Web`):
 
 For Let's Encrypt issuance, your hostname must resolve publicly to the host and inbound port `80/tcp` must be reachable.
 NOTE: Check available tags in your GitLab project's Container Registry and pin if needed.
+
+### Deploy multitenant (`codex/multitenant-v2`)
+
+Use this exact flow when you want the multitenant line:
+
+1. Clone the multitenant branch:
+   ```bash
+   git clone --branch codex/multitenant-v2 ssh://git@10.10.10.96:2424/arphost/ARPVPN.git
+   cd ARPVPN/docker
+   ```
+2. Create `.env` from the example:
+   ```bash
+   cp .env.example .env
+   ```
+3. Set these required values in `.env`:
+   ```env
+   ARPVPN_IMAGE=10.10.10.96:5050/arphost/arpvpn:v2-latest
+   ARPVPN_CONTAINER_NAME=arpvpn-v2
+   DATA_FOLDER=./data-v2
+   ARPVPN_HTTP_PORT=8085
+   ARPVPN_HTTPS_PORT=8086
+   ARPVPN_SECURE_COOKIES=0
+   ```
+4. Pull and start:
+   ```bash
+   ./up.sh pull
+   ./up.sh up -d --force-recreate arpvpn
+   ```
+5. Open the UI:
+   * HTTP: `http://<server-ip>:8085`
+   * HTTPS: `https://<server-ip>:8086`
+
+Important behavior:
+* ARPVPN binds on `0.0.0.0` for both HTTP and HTTPS in Docker mode.
+* If `Redirect HTTP to HTTPS` is enabled in UI settings, HTTP requests are redirected to HTTPS.
+* Keep `ARPVPN_SECURE_COOKIES=0` if you want HTTP login to work when redirect is disabled.
+* If you enable strict HTTPS behavior, use HTTPS URL consistently (do not switch between hostnames/IPs mid-session).
+
+Running multiple multitenant stacks on one host:
+* Give each stack unique values for:
+  * `ARPVPN_CONTAINER_NAME`
+  * `DATA_FOLDER`
+  * `ARPVPN_HTTP_PORT`
+  * `ARPVPN_HTTPS_PORT`
+  * optional explicit cookie names (`ARPVPN_SESSION_COOKIE_NAME`, `ARPVPN_REMEMBER_COOKIE_NAME`) if you keep the same hostname
+* Example second stack:
+  ```env
+  ARPVPN_CONTAINER_NAME=arpvpn-v2-b
+  DATA_FOLDER=./data-v2-b
+  ARPVPN_HTTP_PORT=18085
+  ARPVPN_HTTPS_PORT=18086
+  ```
 
 ### GitLab CI/CD and Registry setup
 
