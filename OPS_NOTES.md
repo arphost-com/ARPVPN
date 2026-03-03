@@ -16,6 +16,28 @@
 - Runtime host for current ARPVPN deployment: `docker03` (`10.10.10.100`)
 - GitLab host / registry origin: `docker01` (`10.10.10.96`)
 
+### docker03 ARPVPN paths
+
+- Legacy/stable stack path: `/home/debian/docker/arpvpn`
+- Multitenant test stack path: `/home/debian/docker/vpn1`
+- Multitenant compose working dir: `/home/debian/docker/vpn1/docker`
+- Multitenant data path: `/home/debian/docker/vpn1/docker/data`
+
+### docker03 multitenant runtime checks
+
+- Ensure the multitenant container is the active one:
+  - `ssh docker03 'docker ps --format "{{.Names}}\t{{.Image}}\t{{.Status}}" | grep -E "vpn1|arpvpn"'`
+- Verify multitenant code version inside container:
+  - `ssh docker03 'docker exec vpn1 sh -lc "cat /var/www/arpvpn/arpvpn/__version__.py"'`
+- Check CSRF/login events:
+  - `ssh docker03 'tail -n 200 /home/debian/docker/vpn1/docker/data/arpvpn.log'`
+
+### CSRF troubleshooting (docker03 multitenant)
+
+- Use one origin consistently during setup/login (`http://<same-host>:1085`).
+- Do not switch hostnames/IPs between loading and submitting forms (host-only cookies).
+- If `redirect_http_to_https` is enabled later, continue with HTTPS only.
+
 ## Local Service Endpoints (Always Use)
 
 - GitLab (local): `http://10.10.10.96:8929/`
