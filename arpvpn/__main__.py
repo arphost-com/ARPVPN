@@ -150,18 +150,12 @@ def _is_valid_redirect_host(hostname: str) -> bool:
         return True
     except ValueError:
         pass
+    if "." not in candidate:
+        return False
     allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.")
     if any(ch not in allowed for ch in candidate):
         return False
-    if candidate.startswith(".") or candidate.endswith(".") or ".." in candidate:
-        return False
-    labels = candidate.split(".")
-    for label in labels:
-        if not label:
-            return False
-        if label.startswith("-") or label.endswith("-"):
-            return False
-    return True
+    return not candidate.startswith(".") and not candidate.endswith(".") and ".." not in candidate
 
 
 def _detect_local_server_ip() -> str:
