@@ -87,7 +87,7 @@ def test_theme_cookie_secure_flag_matches_strict_https(client):
     web_config.redirect_http_to_https = True
     response = client.post(
         "/api/v1/themes",
-        base_url="https://vpn.example.com",
+        base_url="https://localhost",
         json={"choice": "light"},
     )
     assert is_http_success(response.status_code)
