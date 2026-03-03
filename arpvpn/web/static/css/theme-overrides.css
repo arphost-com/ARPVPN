@@ -353,41 +353,61 @@ body {
   box-shadow: 0 0 0 0.2rem rgba(47, 125, 246, 0.2);
 }
 
-[data-theme="dark"] .auth-card .form-control,
-[data-theme="dark"] .auth-card .form-control:focus,
-[data-theme="dark"] .auth-card .form-control:hover {
+.auth-card .form-control,
+.auth-card .custom-select,
+.auth-card .input-group-text {
+  background-color: var(--theme-input-bg) !important;
+  color: var(--theme-input-text) !important;
+  border-color: var(--theme-border) !important;
+}
+
+.auth-card .form-control::placeholder,
+.auth-card .custom-select::placeholder {
+  color: var(--theme-input-placeholder) !important;
+  opacity: 1;
+}
+
+.auth-card .form-control:focus,
+.auth-card .custom-select:focus,
+.auth-card .form-control:hover {
   background-color: var(--theme-input-bg) !important;
   color: var(--theme-input-text) !important;
   -webkit-text-fill-color: var(--theme-input-text) !important;
-  caret-color: var(--theme-input-text);
+  caret-color: var(--theme-input-text) !important;
 }
 
-[data-theme="dark"] .auth-card .form-control::placeholder {
-  color: var(--theme-input-placeholder) !important;
-}
-
-[data-theme="dark"] .auth-card input.form-control:-webkit-autofill,
-[data-theme="dark"] .auth-card input.form-control:-webkit-autofill:hover,
-[data-theme="dark"] .auth-card input.form-control:-webkit-autofill:focus,
-[data-theme="dark"] .auth-card input.form-control:-webkit-autofill:active,
-[data-theme="dark"] .auth-card textarea.form-control:-webkit-autofill,
-[data-theme="dark"] .auth-card textarea.form-control:-webkit-autofill:hover,
-[data-theme="dark"] .auth-card textarea.form-control:-webkit-autofill:focus {
+.auth-card input.form-control:-webkit-autofill,
+.auth-card input.form-control:-webkit-autofill:hover,
+.auth-card input.form-control:-webkit-autofill:focus,
+.auth-card input.form-control:-webkit-autofill:active,
+.auth-card textarea.form-control:-webkit-autofill,
+.auth-card textarea.form-control:-webkit-autofill:hover,
+.auth-card textarea.form-control:-webkit-autofill:focus {
+  background-color: var(--theme-input-bg) !important;
   -webkit-text-fill-color: var(--theme-input-text) !important;
   -webkit-box-shadow: 0 0 0 1000px var(--theme-input-bg) inset !important;
   box-shadow: 0 0 0 1000px var(--theme-input-bg) inset !important;
   border: 1px solid var(--theme-border) !important;
+  caret-color: var(--theme-input-text) !important;
   transition: background-color 99999s ease-in-out 0s;
 }
 
-[data-theme="dark"] .auth-card input.form-control:-moz-autofill,
-[data-theme="dark"] .auth-card input.form-control:-moz-autofill:hover,
-[data-theme="dark"] .auth-card input.form-control:-moz-autofill:focus,
-[data-theme="dark"] .auth-card textarea.form-control:-moz-autofill,
-[data-theme="dark"] .auth-card textarea.form-control:-moz-autofill:hover,
-[data-theme="dark"] .auth-card textarea.form-control:-moz-autofill:focus {
+.auth-card input.form-control:-moz-autofill,
+.auth-card input.form-control:-moz-autofill:hover,
+.auth-card input.form-control:-moz-autofill:focus,
+.auth-card textarea.form-control:-moz-autofill,
+.auth-card textarea.form-control:-moz-autofill:hover,
+.auth-card textarea.form-control:-moz-autofill:focus {
   color: var(--theme-input-text) !important;
   box-shadow: 0 0 0 1000px var(--theme-input-bg) inset !important;
+}
+
+[data-theme="light"] .auth-card {
+  color-scheme: light;
+}
+
+[data-theme="dark"] .auth-card {
+  color-scheme: dark;
 }
 
 [data-theme="dark"] .auth-card input[type="password"]::-ms-reveal,
