@@ -2,6 +2,7 @@ import argparse
 import atexit
 import ipaddress
 import os
+import re
 import socket
 from datetime import datetime, timedelta, timezone
 from logging import warning, fatal, info, debug
@@ -101,14 +102,49 @@ config_manager.load()
 if log_config.overwrite:
     log_config.reset_logfile()
 
+_COOKIE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def _sanitize_cookie_name(name: str, fallback: str) -> str:
+    candidate = (name or "").strip()
+    if not candidate:
+        return fallback
+    if _COOKIE_NAME_PATTERN.fullmatch(candidate):
+        return candidate
+    warning("Ignoring invalid cookie name '%s'; using '%s' instead.", candidate, fallback)
+    return fallback
+
+
+def _container_cookie_suffix() -> str:
+    raw_container_name = (os.environ.get("ARPVPN_CONTAINER_NAME", "") or "").strip()
+    if not raw_container_name:
+        return ""
+    return re.sub(r"[^A-Za-z0-9]+", "_", raw_container_name).strip("_").lower()
+
+
+def _resolve_session_cookie_name() -> str:
+    suffix = _container_cookie_suffix()
+    default_name = f"arpvpn_session_{suffix}" if suffix else "arpvpn_session"
+    return _sanitize_cookie_name(os.environ.get("ARPVPN_SESSION_COOKIE_NAME", ""), default_name)
+
+
+def _resolve_remember_cookie_name(session_cookie_name: str) -> str:
+    default_name = f"{session_cookie_name}_remember"
+    return _sanitize_cookie_name(os.environ.get("ARPVPN_REMEMBER_COOKIE_NAME", ""), default_name)
+
+
 secure_cookies_env = os.environ.get("ARPVPN_SECURE_COOKIES", "0").lower() not in ("0", "false", "no")
 secure_transport_by_config = web_config.strict_https_mode
 secure_cookies_enabled = secure_cookies_env or secure_transport_by_config
+session_cookie_name = _resolve_session_cookie_name()
+remember_cookie_name = _resolve_remember_cookie_name(session_cookie_name)
 
 app.config['SECRET_KEY'] = web_config.secret_key
+app.config["SESSION_COOKIE_NAME"] = session_cookie_name
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SECURE"] = secure_cookies_enabled and not args.debug
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["REMEMBER_COOKIE_NAME"] = remember_cookie_name
 app.config["REMEMBER_COOKIE_HTTPONLY"] = True
 app.config["REMEMBER_COOKIE_SECURE"] = secure_cookies_enabled and not args.debug
 app.config["REMEMBER_COOKIE_SAMESITE"] = "Lax"

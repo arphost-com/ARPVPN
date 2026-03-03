@@ -92,3 +92,24 @@ def test_theme_cookie_secure_flag_matches_strict_https(client):
     )
     assert is_http_success(response.status_code)
     assert "Secure;" in response.headers.get("Set-Cookie", "")
+
+
+def test_cookie_name_defaults_include_container_name(client, monkeypatch):
+    import arpvpn.__main__ as app_main
+
+    monkeypatch.delenv("ARPVPN_SESSION_COOKIE_NAME", raising=False)
+    monkeypatch.delenv("ARPVPN_REMEMBER_COOKIE_NAME", raising=False)
+    monkeypatch.setenv("ARPVPN_CONTAINER_NAME", "vpn1")
+    session_cookie = app_main._resolve_session_cookie_name()
+
+    assert session_cookie == "arpvpn_session_vpn1"
+    assert app_main._resolve_remember_cookie_name(session_cookie) == "arpvpn_session_vpn1_remember"
+
+
+def test_invalid_cookie_name_falls_back_to_default(client, monkeypatch):
+    import arpvpn.__main__ as app_main
+
+    monkeypatch.setenv("ARPVPN_CONTAINER_NAME", "vpn1")
+    monkeypatch.setenv("ARPVPN_SESSION_COOKIE_NAME", "bad name")
+
+    assert app_main._resolve_session_cookie_name() == "arpvpn_session_vpn1"
