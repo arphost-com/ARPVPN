@@ -1,0 +1,301 @@
+{% extends "web/web-main.html" %}
+
+{% block content %}
+    <main>
+        <div class="container-fluid">
+            <div class="page-header my-4">
+                <div>
+                    <h1 class="mb-1">{{ title }}</h1>
+                    <p class="text-muted mb-0">Operational guide for setup, users, WireGuard, mesh VPNs, TLS, statistics, and API use.</p>
+                </div>
+                <div class="page-header-actions">
+                    <a href="#mesh-vpns" class="btn btn-outline-primary btn-sm">Mesh VPNs</a>
+                    <a href="#tls-access" class="btn btn-outline-secondary btn-sm">TLS and access</a>
+                    <a href="#api-automation" class="btn btn-outline-secondary btn-sm">API</a>
+                </div>
+            </div>
+
+            <div class="card mb-4 panel-glass">
+                <div class="card-header">
+                    <i class="fas fa-map-signs mr-1"></i>
+                    What ARPVPN covers
+                </div>
+                <div class="card-body">
+                    <p>
+                        ARPVPN manages WireGuard interfaces, client peers, site-to-site peers, TLS/web access, user roles,
+                        traffic collection, RRD graphs, statistics, and selected automation APIs from one interface.
+                    </p>
+                    <p class="mb-0">
+                        Clients should use this platform mainly for connection details and bandwidth visibility.
+                        Staff users can also manage VPN lifecycle, users, certificates, and troubleshooting workflows.
+                    </p>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-xl-6">
+                    <div class="card mb-4 panel-glass" id="getting-started">
+                        <div class="card-header">
+                            <i class="fas fa-play-circle mr-1"></i>
+                            Getting Started
+                        </div>
+                        <div class="card-body">
+                            <ol class="pl-3 mb-0">
+                                <li>Complete the initial setup page and verify the public endpoint.</li>
+                                <li>Create at least one WireGuard interface with a reachable UDP port.</li>
+                                <li>Add client peers or site-to-site peers under the interface.</li>
+                                <li>Use the statistics page to confirm handshakes, transfer, and graph history.</li>
+                                <li>Enable TLS after HTTP access is working and choose whether HTTP should redirect.</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xl-6">
+                    <div class="card mb-4 panel-glass" id="roles-access">
+                        <div class="card-header">
+                            <i class="fas fa-user-shield mr-1"></i>
+                            Roles and Access
+                        </div>
+                        <div class="card-body">
+                            <ul class="mb-0">
+                                <li><strong>Admin</strong>: full local server control, users, TLS, WireGuard, and API access.</li>
+                                <li><strong>Support</strong>: user/client operations and client impersonation, but limited role changes.</li>
+                                <li><strong>Client</strong>: view only their connection details, usage, downloads, and scoped statistics.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% if current_user_is_staff and not is_impersonating %}
+            <div class="card mb-4 panel-glass" id="wireguard-operations">
+                <div class="card-header">
+                    <i class="fas fa-server mr-1"></i>
+                    WireGuard Operations
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-lg-6 mb-3 mb-lg-0">
+                            <h5 class="mb-3">Client VPN workflow</h5>
+                            <ol class="pl-3 mb-0">
+                                <li>Open <a href="/wireguard">WireGuard</a> and create an interface if one does not exist.</li>
+                                <li>Add a peer in <strong>Client</strong> mode.</li>
+                                <li>Download the generated peer config and import it into the client device.</li>
+                                <li>Use <a href="/statistics">Statistics</a> to verify handshake age, traffic, and alerts.</li>
+                            </ol>
+                        </div>
+                        <div class="col-lg-6">
+                            <h5 class="mb-3">Site-to-site workflow</h5>
+                            <ol class="pl-3 mb-0">
+                                <li>Create or select an interface on the ARPVPN server.</li>
+                                <li>Add a peer and set <strong>Mode</strong> to <strong>Site-to-site</strong>.</li>
+                                <li>Enter the remote gateway tunnel IP and the remote LAN subnets in CIDR format.</li>
+                                <li>Apply the generated config on the remote gateway and allow forwarding between LAN and WireGuard.</li>
+                                <li>Validate traffic to a host behind the remote site and check the statistics page for history.</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="card mb-4 panel-glass" id="mesh-vpns">
+                <div class="card-header">
+                    <i class="fas fa-project-diagram mr-1"></i>
+                    Mesh VPNs
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info" role="alert">
+                        Mesh support in ARPVPN is currently a control-plane and planning feature exposed by the API.
+                        It stores topology, link, route, and access-policy intent, but it does not yet auto-build all
+                        inter-server WireGuard tunnels for you from one page.
+                    </div>
+
+                    <h5 class="mb-3">What works today</h5>
+                    <ul>
+                        <li>Point-to-point, hub-and-spoke, and full-mesh topology modeling.</li>
+                        <li>Link metadata between ARPVPN servers.</li>
+                        <li>Route advertisements with overlap and duplicate-ownership validation.</li>
+                        <li>Access policies describing allowed or denied destination CIDRs.</li>
+                        <li>Import, export, and dry-run validation through the API.</li>
+                    </ul>
+
+                    <h5 class="mb-3">Practical setup path</h5>
+                    <ol class="pl-3">
+                        <li>Build the real traffic plane first: create site-to-site peers between ARPVPN servers in the WireGuard UI on each server.</li>
+                        <li>Make sure every server has a stable public endpoint, reachable UDP port, and a saved interface.</li>
+                        <li>Open each interface page and note the interface UUID from the browser URL.</li>
+                        <li>Choose a server naming convention such as <code>edge-a</code>, <code>edge-b</code>, and <code>core-hub</code>.</li>
+                        <li>Create the mesh topology and links through the API.</li>
+                        <li>Add route advertisements for each LAN behind each server.</li>
+                        <li>Add access policies for the networks or server identities that should reach those routes.</li>
+                        <li>Run dry-run validation before import/apply updates.</li>
+                    </ol>
+
+                    <h5 class="mb-3">Topology presets</h5>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-bordered table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Preset</th>
+                                    <th>API value</th>
+                                    <th>Use case</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for preset in mesh_presets %}
+                                    <tr>
+                                        <td>{{ preset.name }}</td>
+                                        <td><code>{{ preset.value }}</code></td>
+                                        <td>{{ preset.description }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {% if current_user_is_staff and not is_impersonating %}
+                    <h5 class="mb-3">Mesh API example</h5>
+<pre class="site-guide-snippet rounded p-3"><code>curl -X POST /api/v1/mesh/topologies \
+  -H "Authorization: Bearer &lt;token&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "core-mesh",
+    "preset": "full_mesh",
+    "server_ids": ["edge-a", "edge-b", "edge-c"],
+    "description": "Primary inter-site mesh"
+  }'
+
+curl -X POST /api/v1/mesh/links \
+  -H "Authorization: Bearer &lt;token&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_server": "edge-a",
+    "target_server": "edge-b",
+    "interface_uuid": "&lt;wireguard-interface-uuid&gt;",
+    "status": "active",
+    "enabled": true
+  }'
+
+curl -X POST /api/v1/mesh/routes \
+  -H "Authorization: Bearer &lt;token&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "owner_server": "edge-a",
+    "cidr": "10.55.0.0/24",
+    "via_link_uuid": "&lt;link-uuid&gt;",
+    "enabled": true
+  }'
+
+curl -X POST /api/v1/mesh/policies \
+  -H "Authorization: Bearer &lt;token&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "allow-edge-a-lan",
+    "source_kind": "server",
+    "source_id": "edge-a",
+    "destinations": ["10.55.0.0/24"],
+    "action": "allow",
+    "priority": 100
+  }'</code></pre>
+                    <p class="mb-0 text-muted">
+                        Supported access policy source kinds: {% for item in mesh_policy_source_kinds %}<code>{{ item }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-xl-6">
+                    <div class="card mb-4 panel-glass" id="tls-access">
+                        <div class="card-header">
+                            <i class="fas fa-lock mr-1"></i>
+                            Web Access and TLS
+                        </div>
+                        <div class="card-body">
+                            <ul class="mb-3">
+                                <li><strong>HTTP</strong>: plain web access, typically for first-time setup or local environments.</li>
+                                <li><strong>Self-signed</strong>: ARPVPN generates and serves its own certificate.</li>
+                                <li><strong>Let's Encrypt</strong>: ARPVPN issues a public certificate for a real hostname.</li>
+                                <li><strong>Reverse proxy</strong>: ARPVPN stays behind another web server or load balancer.</li>
+                            </ul>
+                            <p class="mb-0">
+                                If redirect is enabled, use HTTPS consistently. If redirect is disabled, both HTTP and HTTPS can remain available on the configured ports.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xl-6">
+                    <div class="card mb-4 panel-glass" id="statistics-rrd">
+                        <div class="card-header">
+                            <i class="fas fa-chart-area mr-1"></i>
+                            Statistics and RRD Graphs
+                        </div>
+                        <div class="card-body">
+                            <ul class="mb-0">
+                                <li>Use <a href="/statistics">Statistics</a> for connection history, rollups, alerts, failures, and RRD graph links.</li>
+                                <li>The dashboard shows current session visibility and high-level health.</li>
+                                <li>Each connection can expose historical graph images and JSON history endpoints when traffic collection is enabled.</li>
+                                <li>Clients only see scoped data for their own connection; staff sees broader operational data.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% if current_user_is_staff and not is_impersonating %}
+            <div class="row">
+                <div class="col-xl-6">
+                    <div class="card mb-4 panel-glass" id="api-automation">
+                        <div class="card-header">
+                            <i class="fas fa-code mr-1"></i>
+                            API and Automation
+                        </div>
+                        <div class="card-body">
+                            <p>
+                                ARPVPN exposes a versioned API under <code>/api/v1</code>. The current API is strongest for
+                                auth, mesh, statistics, RRD access, themes, and TLS management.
+                            </p>
+                            <p class="mb-0">
+                                Full API coverage for users, WireGuard CRUD, tenant management, and restart/system operations is still in progress.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xl-6">
+                    <div class="card mb-4 panel-glass" id="troubleshooting">
+                        <div class="card-header">
+                            <i class="fas fa-tools mr-1"></i>
+                            Troubleshooting
+                        </div>
+                        <div class="card-body">
+                            <ul class="mb-0">
+                                <li>If a peer shows stale or down, confirm endpoint reachability, UDP port exposure, and recent handshake time.</li>
+                                <li>If RRD graphs are empty, verify traffic collection is enabled and the tunnel has transferred data over time.</li>
+                                <li>If HTTP and HTTPS are both enabled, keep the same origin during login and setup workflows.</li>
+                                <li>If site-to-site traffic fails, check forwarding, firewall rules, and that the remote LANs are included in the peer route configuration.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="card mb-4 panel-glass" id="client-usage">
+                <div class="card-header">
+                    <i class="fas fa-user-check mr-1"></i>
+                    Client View
+                </div>
+                <div class="card-body">
+                    <p>
+                        As a client, your main pages are the dashboard, statistics, and your downloadable connection information.
+                        Use those pages to confirm the tunnel is active and to review historical usage.
+                    </p>
+                    <p class="mb-0">
+                        If you need user, route, or certificate changes, contact your tenant or platform administrator.
+                    </p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </main>
+{% endblock %}
