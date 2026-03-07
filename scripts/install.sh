@@ -43,6 +43,7 @@ cp requirements.txt "$INSTALL_DIR"
 
 info "Installing dependencies..."
 debug "Updating packages list..."
+export DEBIAN_FRONTEND="${DEBIAN_FRONTEND:-noninteractive}"
 apt-get -qq update
 
 dependencies="sudo python3 python3-venv wireguard-tools iptables uwsgi uwsgi-plugin-python3 iproute2 openssl rrdtool"
@@ -73,11 +74,12 @@ if has_pkg_candidate certbot; then
 fi
 
 debug "The following packages will be installed: $dependencies"
-apt-get -qq install $dependencies
+apt-get -qq install -y --no-install-recommends $dependencies
 if [ $? -ne 0 ]; then
     fatal "Unable to install dependencies."
     exit 1
 fi
+rm -rf /var/lib/apt/lists/*
 
 info "Setting up virtual environment..."
 python3 -m venv "$INSTALL_DIR/venv"
