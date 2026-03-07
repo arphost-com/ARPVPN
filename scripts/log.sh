@@ -1,11 +1,20 @@
 #!/bin/bash
 
-bold=$(tput bold)
-default=$(tput sgr0)
-cyan=$(tput setaf 6)
-red=$(tput setaf 1)
-yellow=$(tput setaf 3)
-dark_gray=$(tput setaf 8)
+if [[ -t 1 && -n "${TERM:-}" ]] && tput colors >/dev/null 2>&1; then
+  bold=$(tput bold)
+  default=$(tput sgr0)
+  cyan=$(tput setaf 6)
+  red=$(tput setaf 1)
+  yellow=$(tput setaf 3)
+  dark_gray=$(tput setaf 8)
+else
+  bold=""
+  default=""
+  cyan=""
+  red=""
+  yellow=""
+  dark_gray=""
+fi
 
 function log() {
   level=$1
