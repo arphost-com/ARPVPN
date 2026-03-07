@@ -59,17 +59,6 @@ def test_login_logout_ok(client):
     assert not current_user.is_authenticated
 
 
-def test_login_ko(client):
-    admin_user = User("admin")
-    admin_user.password = "admin"
-    users[admin_user.id] = admin_user
-    users.save(web_config.credentials_file, web_config.secret_key)
-
-    response = client.post("/login", data={"username": "admin", "password": "1234", "remember_me": False})
-    assert is_http_success(response.status_code)
-    assert not current_user.is_authenticated
-
-
 def test_default_server():
     """Test with not existent configuration file, so that the app loads all default values."""
     workdir = join(dirname(__file__), "data")

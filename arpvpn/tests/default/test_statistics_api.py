@@ -167,6 +167,17 @@ def test_stats_peers_and_alerts_client_scope(client):
     assert alerts_envelope["data"]["scope"] == "client"
 
 
+def test_stats_peers_csv_available(client):
+    create_user("admin", "admin", User.ROLE_ADMIN)
+    _, peers = setup_interface_with_peers(["client01"])
+    login(client, "admin", "admin")
+
+    response = client.get("/api/v1/stats/peers.csv")
+    assert is_http_success(response.status_code)
+    assert b"peer_uuid,peer_name,interface_uuid" in response.data
+    assert peers[0].name.encode() in response.data
+
+
 def test_stats_history_and_rrd_api_scoped_access(client):
     create_user("client01", "clientpass", User.ROLE_CLIENT)
     create_user("client02", "clientpass", User.ROLE_CLIENT)
