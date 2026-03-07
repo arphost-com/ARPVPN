@@ -15,10 +15,12 @@ class User(UserMixin, YamlAble):
     HASHING_METHOD = "pbkdf2:sha256"
     ROLE_ADMIN = "admin"
     ROLE_SUPPORT = "support"
+    ROLE_TENANT_ADMIN = "tenant_admin"
     ROLE_CLIENT = "client"
     ROLES = (
         ROLE_ADMIN,
         ROLE_SUPPORT,
+        ROLE_TENANT_ADMIN,
         ROLE_CLIENT,
     )
     login_date: datetime
@@ -27,6 +29,7 @@ class User(UserMixin, YamlAble):
         self.id = gen_uuid().hex
         self.name = name
         self.role = role if role in self.ROLES else self.ROLE_ADMIN
+        self.tenant_id = None
         self.__password = None
         self.__authenticated = False
 
@@ -35,6 +38,7 @@ class User(UserMixin, YamlAble):
             "id": self.id,
             "name": self.name,
             "role": self.role,
+            "tenant_id": self.tenant_id,
             "authenticated": self.__authenticated
         }.__str__()
 
@@ -52,6 +56,7 @@ class User(UserMixin, YamlAble):
             "id": self.id,
             "name": self.name,
             "role": self.role,
+            "tenant_id": self.tenant_id,
             "password": self.password,
         }
 
@@ -62,6 +67,7 @@ class User(UserMixin, YamlAble):
                            ):  # type: (...) -> Y
         u = User(dct["name"], dct.get("role", cls.ROLE_ADMIN))
         u.id = dct["id"]
+        u.tenant_id = dct.get("tenant_id", None)
         u.__password = str(dct["password"])
         return u
 

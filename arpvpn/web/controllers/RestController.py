@@ -223,9 +223,10 @@ class RestController:
         abort(http.HTTPStatus.INTERNAL_SERVER_ERROR)
 
     @staticmethod
-    def create_user(username: str, password: str, role: str) -> User:
+    def create_user(username: str, password: str, role: str, tenant_id: str = "") -> User:
         u = User(username, role=role)
+        u.tenant_id = str(tenant_id or "").strip() or None
         u.password = password
         users[u.id] = u
-        users.save(web_config.credentials_file, web_config.secret_key)
+        config_manager.save_identity_state()
         return u

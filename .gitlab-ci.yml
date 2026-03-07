@@ -40,6 +40,7 @@ unit_tests:
         arpvpn/tests/default/test_mesh_phase1.py \
         arpvpn/tests/default/test_mesh_api.py \
         arpvpn/tests/default/test_api_auth.py \
+        arpvpn/tests/default/test_tenant_user_invitation_api.py \
         arpvpn/tests/default/test_users_roles.py::test_admin_can_create_client_user \
         arpvpn/tests/default/test_users_roles.py::test_admin_can_edit_user_name_role_and_password \
         arpvpn/tests/default/test_users_roles.py::test_admin_can_delete_client_user \

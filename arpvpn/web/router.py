@@ -1,6 +1,7 @@
 import csv
 import copy
 import io
+import ipaddress
 import json
 import os
 import re
@@ -9,7 +10,7 @@ import subprocess
 from collections import deque
 from datetime import datetime, timezone
 from functools import wraps
-from http.client import BAD_REQUEST, NOT_FOUND, INTERNAL_SERVER_ERROR, UNAUTHORIZED, NO_CONTENT, FORBIDDEN
+from http.client import BAD_REQUEST, NOT_FOUND, INTERNAL_SERVER_ERROR, UNAUTHORIZED, NO_CONTENT, FORBIDDEN, CONFLICT
 from ipaddress import IPv4Address
 from logging import warning, debug, error, info
 from time import sleep
@@ -20,6 +21,7 @@ from flask import Blueprint, abort, request, Response, redirect, url_for, jsonif
 from flask_login import current_user, login_required, login_user
 
 from arpvpn.common.models.user import users, User
+from arpvpn.common.models.tenant import Tenant, Invitation, tenants, invitations, slugify_name
 from arpvpn.common.properties import global_properties
 from arpvpn.common.utils.logs import log_exception
 from arpvpn.common.utils.network import get_routing_table, get_system_interfaces
@@ -60,6 +62,9 @@ ALLOWED_NEXT_ENDPOINTS = {
 }
 IMPERSONATOR_SESSION_KEY = "impersonator_user_id"
 STAFF_ROLES = (User.ROLE_ADMIN, User.ROLE_SUPPORT)
+USER_MANAGEMENT_ROLES = (User.ROLE_ADMIN, User.ROLE_SUPPORT, User.ROLE_TENANT_ADMIN)
+API_AUTH_STAFF_ROLES = USER_MANAGEMENT_ROLES
+EMAIL_ADDRESS_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def get_env_int(name: str, default: int) -> int:
@@ -277,7 +282,7 @@ def role_allowed_in_scope(role: str, scope: str) -> bool:
     if scope == API_AUTH_SCOPE_ALL:
         return True
     if scope == API_AUTH_SCOPE_STAFF:
-        return role in STAFF_ROLES
+        return role in API_AUTH_STAFF_ROLES
     if scope == API_AUTH_SCOPE_CLIENT:
         return role == User.ROLE_CLIENT
     return False
@@ -300,11 +305,11 @@ def build_rbac_matrix() -> Dict[str, Dict[str, bool]]:
             "manage_mesh": True,
         },
         "tenant_admin": {
-            "maps_to_role": User.ROLE_SUPPORT,
+            "maps_to_role": User.ROLE_TENANT_ADMIN,
             "impersonate_clients": True,
             "manage_users": True,
-            "manage_tls": True,
-            "manage_mesh": True,
+            "manage_tls": False,
+            "manage_mesh": False,
         },
         "client": {
             "maps_to_role": User.ROLE_CLIENT,
@@ -1767,6 +1772,219 @@ def build_mesh_from_payload(payload: Dict[str, Any]):
     return mesh
 
 
+def actor_is_global_staff(actor: Optional[User] = None) -> bool:
+    actor = actor or current_actor()
+    return bool(actor and actor.has_role(User.ROLE_ADMIN, User.ROLE_SUPPORT))
+
+
+def actor_is_tenant_admin(actor: Optional[User] = None) -> bool:
+    actor = actor or current_actor()
+    return bool(actor and actor.has_role(User.ROLE_TENANT_ADMIN))
+
+
+def get_actor_tenant_id(actor: Optional[User] = None) -> Optional[str]:
+    actor = actor or current_actor()
+    tenant_id = getattr(actor, "tenant_id", None) if actor else None
+    return str(tenant_id or "").strip() or None
+
+
+def sync_invitation_status(invitation: Invitation) -> str:
+    current_status = invitation.current_status()
+    if current_status != invitation.status:
+        invitation.status = current_status
+        invitation.touch()
+    return current_status
+
+
+def actor_can_access_tenant(tenant_id: Optional[str], actor: Optional[User] = None) -> bool:
+    actor = actor or current_actor()
+    if not actor:
+        return False
+    if actor_is_global_staff(actor):
+        return True
+    actor_tenant_id = get_actor_tenant_id(actor)
+    return actor_tenant_id is not None and actor_tenant_id == str(tenant_id or "").strip()
+
+
+def tenant_visible_to_actor(tenant: Tenant, actor: Optional[User] = None) -> bool:
+    return actor_can_access_tenant(tenant.id, actor)
+
+
+def user_visible_to_actor(user_item: User, actor: Optional[User] = None) -> bool:
+    actor = actor or current_actor()
+    if not actor:
+        return False
+    if actor_is_global_staff(actor):
+        return True
+    if actor_is_tenant_admin(actor):
+        actor_tenant_id = get_actor_tenant_id(actor)
+        return actor_tenant_id is not None and user_item.tenant_id == actor_tenant_id
+    return actor.id == user_item.id
+
+
+def invitation_visible_to_actor(invitation: Invitation, actor: Optional[User] = None) -> bool:
+    return actor_can_access_tenant(invitation.tenant_id, actor)
+
+
+def get_accessible_tenants(actor: Optional[User] = None) -> List[Tenant]:
+    actor = actor or current_actor()
+    items = [tenant for tenant in tenants.values() if tenant_visible_to_actor(tenant, actor)]
+    items.sort(key=lambda tenant: tenant.name.lower())
+    return items
+
+
+def get_accessible_users(actor: Optional[User] = None) -> List[User]:
+    actor = actor or current_actor()
+    items = [user_item for user_item in users.values() if user_visible_to_actor(user_item, actor)]
+    items.sort(key=lambda user_item: (user_item.role, user_item.name.lower()))
+    return items
+
+
+def get_accessible_invitations(actor: Optional[User] = None) -> List[Invitation]:
+    actor = actor or current_actor()
+    items: List[Invitation] = []
+    for invitation in invitations.values():
+        sync_invitation_status(invitation)
+        if invitation_visible_to_actor(invitation, actor):
+            items.append(invitation)
+    items.sort(key=lambda invitation: (invitation.current_status(), invitation.email))
+    return items
+
+
+def tenant_to_api_dict(tenant: Tenant) -> Dict[str, Any]:
+    return {
+        "id": tenant.id,
+        "name": tenant.name,
+        "slug": tenant.slug,
+        "domains": list(tenant.domains),
+        "ips": list(tenant.ips),
+        "status": tenant.status,
+        "description": tenant.description,
+        "created_at": tenant.created_at,
+        "updated_at": tenant.updated_at,
+    }
+
+
+def user_to_api_dict(user_item: User) -> Dict[str, Any]:
+    return {
+        "id": user_item.id,
+        "username": user_item.name,
+        "role": user_item.role,
+        "tenant_id": user_item.tenant_id,
+    }
+
+
+def invitation_to_api_dict(invitation: Invitation, raw_token: str = "") -> Dict[str, Any]:
+    tenant = tenants.get(invitation.tenant_id, None)
+    payload: Dict[str, Any] = {
+        "id": invitation.id,
+        "tenant_id": invitation.tenant_id,
+        "tenant_name": tenant.name if tenant else None,
+        "email": invitation.email,
+        "role": invitation.role,
+        "status": invitation.current_status(),
+        "invited_by_user_id": invitation.invited_by_user_id,
+        "accepted_user_id": invitation.accepted_user_id or None,
+        "created_at": invitation.created_at,
+        "updated_at": invitation.updated_at,
+        "last_sent_at": invitation.last_sent_at,
+        "expires_at": invitation.expires_at,
+        "sent_count": invitation.sent_count,
+        "accept_endpoint": url_for("router.api_accept_invitation", invitation_id=invitation.id, _external=False),
+    }
+    if raw_token:
+        payload["accept_token"] = raw_token
+    return payload
+
+
+def parse_non_empty_string(value: Any, field_name: str) -> str:
+    candidate = str(value or "").strip()
+    if not candidate:
+        abort(BAD_REQUEST, f"{field_name} is required.")
+    return candidate
+
+
+def parse_optional_string(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def parse_email_address(value: Any) -> str:
+    candidate = str(value or "").strip().lower()
+    if not candidate:
+        abort(BAD_REQUEST, "email is required.")
+    if not EMAIL_ADDRESS_PATTERN.fullmatch(candidate):
+        abort(BAD_REQUEST, "email must be a valid email address.")
+    return candidate
+
+
+def parse_string_list_value(value: Any, field_name: str) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        values = value.split(",")
+    elif isinstance(value, list):
+        values = value
+    else:
+        abort(BAD_REQUEST, f"{field_name} must be a list or comma-separated string.")
+    normalized: List[str] = []
+    for item in values:
+        candidate = str(item or "").strip()
+        if candidate:
+            normalized.append(candidate)
+    return normalized
+
+
+def parse_ip_metadata(value: Any) -> List[str]:
+    items = parse_string_list_value(value, "ips")
+    for item in items:
+        try:
+            ipaddress.ip_address(item)
+        except ValueError:
+            abort(BAD_REQUEST, f"Invalid IP metadata entry: {item}")
+    return items
+
+
+def parse_tenant_status(value: Any) -> str:
+    status = str(value or Tenant.STATUS_ACTIVE).strip().lower()
+    if status not in Tenant.STATUSES:
+        abort(BAD_REQUEST, "status must be active, suspended, or disabled.")
+    return status
+
+
+def parse_role_value(value: Any) -> str:
+    role = str(value or User.ROLE_CLIENT).strip().lower()
+    if role not in User.ROLES:
+        abort(BAD_REQUEST, "Invalid role.")
+    return role
+
+
+def parse_expiry_hours(value: Any, default: int = Invitation.DEFAULT_EXPIRY_HOURS) -> int:
+    if value in (None, ""):
+        return default
+    try:
+        hours = int(value)
+    except (TypeError, ValueError):
+        abort(BAD_REQUEST, "expires_in_hours must be an integer.")
+    if hours < 1 or hours > 24 * 30:
+        abort(BAD_REQUEST, "expires_in_hours must be between 1 and 720.")
+    return hours
+
+
+def get_tenant_or_404(tenant_id: str) -> Tenant:
+    tenant = tenants.get(tenant_id, None)
+    if not tenant:
+        abort(NOT_FOUND, "Tenant not found.")
+    return tenant
+
+
+def get_invitation_or_404(invitation_id: str) -> Invitation:
+    invitation = invitations.get(invitation_id, None)
+    if not invitation:
+        abort(NOT_FOUND, "Invitation not found.")
+    sync_invitation_status(invitation)
+    return invitation
+
+
 @router.route("/logout")
 @login_required
 @setup_required
@@ -2102,7 +2320,7 @@ def api_auth_refresh_token():
         return api_error(UNAUTHORIZED, "user_not_found", "Refresh token user no longer exists.")
 
     api_token_store.revoke_token(refresh_token)
-    scope = API_AUTH_SCOPE_STAFF if user.has_role(*STAFF_ROLES) else API_AUTH_SCOPE_CLIENT
+    scope = API_AUTH_SCOPE_STAFF if user.has_role(*API_AUTH_STAFF_ROLES) else API_AUTH_SCOPE_CLIENT
     token_pair = api_token_store.issue_pair(
         user_id=user.id,
         access_ttl_seconds=API_AUTH_ACCESS_TTL_SECONDS,
@@ -2206,6 +2424,8 @@ def api_start_impersonation(user_id: str):
         abort(NOT_FOUND, "User not found.")
     if target_user.role != User.ROLE_CLIENT:
         abort(BAD_REQUEST, "Only client users can be impersonated.")
+    if not can_manage_user_account(target_user):
+        abort(FORBIDDEN, "Insufficient permissions.")
     actor = current_actor()
     if actor and target_user.id == actor.id:
         abort(BAD_REQUEST, "Cannot impersonate your own account.")
@@ -2248,6 +2468,483 @@ def api_stop_impersonation():
         "restored_user_id": impersonator.id,
         "restored_user_name": impersonator.name,
     })
+
+
+def resolve_user_management_role_and_tenant(
+    requested_role: str,
+    requested_tenant_id: Optional[str],
+    *,
+    actor: Optional[User] = None,
+) -> Tuple[str, Optional[str]]:
+    actor = actor or current_actor()
+    if not actor:
+        abort(UNAUTHORIZED)
+
+    tenant_id = str(requested_tenant_id or "").strip() or None
+    if tenant_id:
+        get_tenant_or_404(tenant_id)
+
+    if actor.has_role(User.ROLE_ADMIN):
+        if requested_role == User.ROLE_TENANT_ADMIN and not tenant_id:
+            abort(BAD_REQUEST, "tenant_id is required for tenant_admin users.")
+        return requested_role, tenant_id
+
+    if actor.has_role(User.ROLE_SUPPORT):
+        if requested_role != User.ROLE_CLIENT:
+            abort(FORBIDDEN, "Support users can only manage client accounts.")
+        return requested_role, tenant_id
+
+    if actor.has_role(User.ROLE_TENANT_ADMIN):
+        actor_tenant_id = get_actor_tenant_id(actor)
+        if not actor_tenant_id:
+            abort(FORBIDDEN, "Tenant admin is not assigned to a tenant.")
+        if requested_role != User.ROLE_CLIENT:
+            abort(FORBIDDEN, "Tenant admins can only manage client accounts.")
+        if tenant_id and tenant_id != actor_tenant_id:
+            abort(FORBIDDEN, "Tenant admins can only manage users in their assigned tenant.")
+        return requested_role, actor_tenant_id
+
+    abort(FORBIDDEN, "Insufficient permissions.")
+
+
+def resolve_invitation_role_and_tenant(
+    requested_role: str,
+    requested_tenant_id: Optional[str],
+    *,
+    actor: Optional[User] = None,
+) -> Tuple[str, str]:
+    resolved_role, tenant_id = resolve_user_management_role_and_tenant(
+        requested_role,
+        requested_tenant_id,
+        actor=actor,
+    )
+    if not tenant_id:
+        abort(BAD_REQUEST, "tenant_id is required for invitations.")
+    return resolved_role, tenant_id
+
+
+def validate_unique_tenant_fields(name: str, slug: str, exclude_id: str = ""):
+    for tenant in tenants.values():
+        if exclude_id and tenant.id == exclude_id:
+            continue
+        if tenant.name.lower() == name.lower():
+            abort(CONFLICT, "Tenant name already exists.")
+        if tenant.slug.lower() == slug.lower():
+            abort(CONFLICT, "Tenant slug already exists.")
+
+
+def validate_unique_username(username: str, exclude_id: str = ""):
+    existing_user = users.get_value_by_attr("name", username)
+    if existing_user and existing_user.id != exclude_id:
+        abort(CONFLICT, "Username already exists.")
+
+
+@router.route("/api/v1/tenants", methods=["GET"])
+@login_required
+@role_required(*USER_MANAGEMENT_ROLES)
+@setup_required
+def api_list_tenants():
+    actor = current_actor()
+    tenant_id_filter = parse_optional_string(request.args.get("tenant_id", ""))
+    items = get_accessible_tenants(actor)
+    if tenant_id_filter:
+        items = [tenant for tenant in items if tenant.id == tenant_id_filter]
+    return api_success({
+        "items": [tenant_to_api_dict(tenant) for tenant in items],
+        "total": len(items),
+        "scope": "global" if actor_is_global_staff(actor) else "tenant",
+    })
+
+
+@router.route("/api/v1/tenants", methods=["POST"])
+@login_required
+@role_required(User.ROLE_ADMIN)
+@setup_required
+def api_create_tenant():
+    payload = parse_json_payload()
+    name = parse_non_empty_string(payload.get("name"), "name")
+    slug = slugify_name(payload.get("slug") or name) or f"tenant-{secrets.token_hex(4)}"
+    validate_unique_tenant_fields(name, slug)
+    tenant = Tenant(
+        name=name,
+        slug=slug,
+        domains=parse_string_list_value(payload.get("domains", []), "domains"),
+        ips=parse_ip_metadata(payload.get("ips", [])),
+        status=parse_tenant_status(payload.get("status", Tenant.STATUS_ACTIVE)),
+        description=parse_optional_string(payload.get("description")),
+    )
+    tenants[tenant.id] = tenant
+    tenants.sort()
+    config_manager.save_identity_state()
+    log_audit_event("tenant.create", status="success", details={"tenant_id": tenant.id, "tenant_name": tenant.name})
+    return api_success(tenant_to_api_dict(tenant), status_code=201)
+
+
+@router.route("/api/v1/tenants/<tenant_id>", methods=["GET"])
+@login_required
+@role_required(*USER_MANAGEMENT_ROLES)
+@setup_required
+def api_get_tenant(tenant_id: str):
+    tenant = get_tenant_or_404(tenant_id)
+    if not tenant_visible_to_actor(tenant):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    return api_success(tenant_to_api_dict(tenant))
+
+
+@router.route("/api/v1/tenants/<tenant_id>", methods=["PUT"])
+@login_required
+@role_required(User.ROLE_ADMIN)
+@setup_required
+def api_update_tenant(tenant_id: str):
+    tenant = get_tenant_or_404(tenant_id)
+    payload = parse_json_payload()
+    name = parse_non_empty_string(payload.get("name", tenant.name), "name")
+    slug = slugify_name(payload.get("slug") or tenant.slug or name) or tenant.slug
+    validate_unique_tenant_fields(name, slug, exclude_id=tenant.id)
+    tenant.name = name
+    tenant.slug = slug
+    tenant.domains = parse_string_list_value(payload.get("domains", tenant.domains), "domains")
+    tenant.ips = parse_ip_metadata(payload.get("ips", tenant.ips))
+    tenant.status = parse_tenant_status(payload.get("status", tenant.status))
+    tenant.description = parse_optional_string(payload.get("description", tenant.description))
+    tenant.touch()
+    tenants.sort()
+    config_manager.save_identity_state()
+    log_audit_event("tenant.update", status="success", details={"tenant_id": tenant.id, "tenant_name": tenant.name})
+    return api_success(tenant_to_api_dict(tenant))
+
+
+@router.route("/api/v1/tenants/<tenant_id>", methods=["DELETE"])
+@login_required
+@role_required(User.ROLE_ADMIN)
+@setup_required
+def api_delete_tenant(tenant_id: str):
+    tenant = get_tenant_or_404(tenant_id)
+    tenant_users = [user_item for user_item in users.values() if user_item.tenant_id == tenant.id]
+    tenant_invitations = [invitation for invitation in invitations.values() if invitation.tenant_id == tenant.id]
+    if tenant_users:
+        abort(CONFLICT, "Cannot delete a tenant that still has users.")
+    if tenant_invitations:
+        abort(CONFLICT, "Cannot delete a tenant that still has invitations.")
+    del tenants[tenant.id]
+    config_manager.save_identity_state()
+    log_audit_event("tenant.delete", status="success", details={"tenant_id": tenant.id, "tenant_name": tenant.name})
+    return api_success({"deleted": True, "tenant_id": tenant.id})
+
+
+@router.route("/api/v1/users", methods=["GET"])
+@login_required
+@role_required(*USER_MANAGEMENT_ROLES)
+@setup_required
+def api_list_users():
+    actor = current_actor()
+    items = get_accessible_users(actor)
+    tenant_id_filter = parse_optional_string(request.args.get("tenant_id", ""))
+    role_filter = parse_optional_string(request.args.get("role", "")).lower()
+    if tenant_id_filter:
+        if not actor_can_access_tenant(tenant_id_filter, actor):
+            abort(FORBIDDEN, "Insufficient permissions.")
+        items = [user_item for user_item in items if (user_item.tenant_id or "") == tenant_id_filter]
+    if role_filter:
+        items = [user_item for user_item in items if user_item.role == role_filter]
+    return api_success({
+        "items": [user_to_api_dict(user_item) for user_item in items],
+        "total": len(items),
+        "scope": "global" if actor_is_global_staff(actor) else "tenant",
+    })
+
+
+@router.route("/api/v1/users", methods=["POST"])
+@login_required
+@role_required(*USER_MANAGEMENT_ROLES)
+@setup_required
+def api_create_user():
+    actor = current_actor()
+    payload = parse_json_payload()
+    username = parse_non_empty_string(payload.get("username"), "username")
+    password = parse_non_empty_string(payload.get("password"), "password")
+    requested_role = parse_role_value(payload.get("role", User.ROLE_CLIENT))
+    resolved_role, resolved_tenant_id = resolve_user_management_role_and_tenant(
+        requested_role,
+        parse_optional_string(payload.get("tenant_id")),
+        actor=actor,
+    )
+    validate_unique_username(username)
+    created = RestController.create_user(username, password, resolved_role, tenant_id=resolved_tenant_id or "")
+    log_audit_event(
+        "user.create",
+        status="success",
+        details={"target_user_id": created.id, "target_user_name": created.name, "target_role": created.role},
+    )
+    return api_success(user_to_api_dict(created), status_code=201)
+
+
+@router.route("/api/v1/users/<user_id>", methods=["GET"])
+@login_required
+@role_required(*USER_MANAGEMENT_ROLES)
+@setup_required
+def api_get_user(user_id: str):
+    target_user = users.get(user_id, None)
+    if not target_user:
+        abort(NOT_FOUND, "User not found.")
+    if not user_visible_to_actor(target_user):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    return api_success(user_to_api_dict(target_user))
+
+
+@router.route("/api/v1/users/<user_id>", methods=["PUT"])
+@login_required
+@role_required(*USER_MANAGEMENT_ROLES)
+@setup_required
+def api_update_user(user_id: str):
+    actor = current_actor()
+    target_user = users.get(user_id, None)
+    if not target_user:
+        abort(NOT_FOUND, "User not found.")
+    if not can_manage_user_account(target_user):
+        abort(FORBIDDEN, "Insufficient permissions.")
+
+    payload = parse_json_payload()
+    requested_username = parse_non_empty_string(payload.get("username", target_user.name), "username")
+    requested_role = parse_role_value(payload.get("role", target_user.role))
+    requested_tenant_id = parse_optional_string(payload.get("tenant_id", target_user.tenant_id or ""))
+    resolved_role, resolved_tenant_id = resolve_user_management_role_and_tenant(
+        requested_role,
+        requested_tenant_id,
+        actor=actor,
+    )
+    validate_unique_username(requested_username, exclude_id=target_user.id)
+
+    if target_user.id == actor.id and resolved_role != target_user.role:
+        abort(FORBIDDEN, "You cannot change your own role.")
+    if target_user.role == User.ROLE_ADMIN and resolved_role != User.ROLE_ADMIN and count_users_by_role(User.ROLE_ADMIN) <= 1:
+        abort(CONFLICT, "Cannot demote the last admin user.")
+
+    target_user.name = requested_username
+    target_user.role = resolved_role
+    target_user.tenant_id = resolved_tenant_id or None
+    new_password = parse_optional_string(payload.get("password"))
+    if new_password:
+        target_user.password = new_password
+    users.sort()
+    config_manager.save_identity_state()
+    log_audit_event(
+        "user.update",
+        status="success",
+        details={"target_user_id": target_user.id, "target_user_name": target_user.name, "target_role": target_user.role},
+    )
+    return api_success(user_to_api_dict(target_user))
+
+
+@router.route("/api/v1/users/<user_id>", methods=["DELETE"])
+@login_required
+@role_required(*USER_MANAGEMENT_ROLES)
+@setup_required
+def api_delete_user(user_id: str):
+    actor = current_actor()
+    target_user = users.get(user_id, None)
+    if not target_user:
+        abort(NOT_FOUND, "User not found.")
+    if not can_manage_user_account(target_user):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    if actor and target_user.id == actor.id:
+        abort(FORBIDDEN, "You cannot delete your own account.")
+    if target_user.role == User.ROLE_ADMIN and count_users_by_role(User.ROLE_ADMIN) <= 1:
+        abort(CONFLICT, "Cannot delete the last admin user.")
+    del users[target_user.id]
+    config_manager.save_identity_state()
+    log_audit_event(
+        "user.delete",
+        status="success",
+        details={"target_user_id": target_user.id, "target_user_name": target_user.name},
+    )
+    return api_success({"deleted": True, "user_id": target_user.id})
+
+
+@router.route("/api/v1/tenants/<tenant_id>/members", methods=["GET"])
+@login_required
+@role_required(*USER_MANAGEMENT_ROLES)
+@setup_required
+def api_list_tenant_members(tenant_id: str):
+    tenant = get_tenant_or_404(tenant_id)
+    if not tenant_visible_to_actor(tenant):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    items = [user_item for user_item in get_accessible_users(current_actor()) if user_item.tenant_id == tenant.id]
+    return api_success({
+        "tenant": tenant_to_api_dict(tenant),
+        "items": [user_to_api_dict(user_item) for user_item in items],
+        "total": len(items),
+    })
+
+
+@router.route("/api/v1/tenants/<tenant_id>/members", methods=["POST"])
+@login_required
+@role_required(*USER_MANAGEMENT_ROLES)
+@setup_required
+def api_create_tenant_member(tenant_id: str):
+    tenant = get_tenant_or_404(tenant_id)
+    if not tenant_visible_to_actor(tenant):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    actor = current_actor()
+    payload = parse_json_payload()
+    username = parse_non_empty_string(payload.get("username"), "username")
+    password = parse_non_empty_string(payload.get("password"), "password")
+    requested_role = parse_role_value(payload.get("role", User.ROLE_CLIENT))
+    resolved_role, resolved_tenant_id = resolve_user_management_role_and_tenant(
+        requested_role,
+        tenant.id,
+        actor=actor,
+    )
+    validate_unique_username(username)
+    created = RestController.create_user(username, password, resolved_role, tenant_id=resolved_tenant_id or "")
+    log_audit_event(
+        "tenant.member.create",
+        status="success",
+        details={"tenant_id": tenant.id, "target_user_id": created.id, "target_user_name": created.name},
+    )
+    return api_success(user_to_api_dict(created), status_code=201)
+
+
+@router.route("/api/v1/invitations", methods=["GET"])
+@login_required
+@role_required(*USER_MANAGEMENT_ROLES)
+@setup_required
+def api_list_invitations():
+    actor = current_actor()
+    items = get_accessible_invitations(actor)
+    tenant_id_filter = parse_optional_string(request.args.get("tenant_id", ""))
+    if tenant_id_filter:
+        if not actor_can_access_tenant(tenant_id_filter, actor):
+            abort(FORBIDDEN, "Insufficient permissions.")
+        items = [invitation for invitation in items if invitation.tenant_id == tenant_id_filter]
+    return api_success({
+        "items": [invitation_to_api_dict(invitation) for invitation in items],
+        "total": len(items),
+        "scope": "global" if actor_is_global_staff(actor) else "tenant",
+    })
+
+
+@router.route("/api/v1/invitations", methods=["POST"])
+@login_required
+@role_required(*USER_MANAGEMENT_ROLES)
+@setup_required
+def api_create_invitation():
+    actor = current_actor()
+    payload = parse_json_payload()
+    email = parse_email_address(payload.get("email"))
+    requested_role = parse_role_value(payload.get("role", User.ROLE_CLIENT))
+    resolved_role, resolved_tenant_id = resolve_invitation_role_and_tenant(
+        requested_role,
+        parse_optional_string(payload.get("tenant_id")),
+        actor=actor,
+    )
+    raw_token = ""
+    invitation = Invitation(
+        tenant_id=resolved_tenant_id,
+        email=email,
+        role=resolved_role,
+        invited_by_user_id=actor.id if actor else "",
+        expires_in_hours=parse_expiry_hours(payload.get("expires_in_hours")),
+    )
+    raw_token = invitation.raw_token
+    invitations[invitation.id] = invitation
+    invitations.sort()
+    config_manager.save_identity_state()
+    log_audit_event(
+        "invitation.create",
+        status="success",
+        details={"invitation_id": invitation.id, "tenant_id": invitation.tenant_id, "email": invitation.email},
+    )
+    return api_success(invitation_to_api_dict(invitation, raw_token=raw_token), status_code=201)
+
+
+@router.route("/api/v1/invitations/<invitation_id>", methods=["GET"])
+@login_required
+@role_required(*USER_MANAGEMENT_ROLES)
+@setup_required
+def api_get_invitation(invitation_id: str):
+    invitation = get_invitation_or_404(invitation_id)
+    if not invitation_visible_to_actor(invitation):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    return api_success(invitation_to_api_dict(invitation))
+
+
+@router.route("/api/v1/invitations/<invitation_id>/resend", methods=["POST"])
+@login_required
+@role_required(*USER_MANAGEMENT_ROLES)
+@setup_required
+def api_resend_invitation(invitation_id: str):
+    invitation = get_invitation_or_404(invitation_id)
+    if not invitation_visible_to_actor(invitation):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    raw_token = invitation.issue_token(parse_expiry_hours((request.get_json(silent=True) or {}).get("expires_in_hours")))
+    config_manager.save_identity_state()
+    log_audit_event(
+        "invitation.resend",
+        status="success",
+        details={"invitation_id": invitation.id, "tenant_id": invitation.tenant_id, "email": invitation.email},
+    )
+    return api_success(invitation_to_api_dict(invitation, raw_token=raw_token))
+
+
+@router.route("/api/v1/invitations/<invitation_id>/revoke", methods=["POST"])
+@login_required
+@role_required(*USER_MANAGEMENT_ROLES)
+@setup_required
+def api_revoke_invitation(invitation_id: str):
+    invitation = get_invitation_or_404(invitation_id)
+    if not invitation_visible_to_actor(invitation):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    invitation.revoke()
+    config_manager.save_identity_state()
+    log_audit_event(
+        "invitation.revoke",
+        status="success",
+        details={"invitation_id": invitation.id, "tenant_id": invitation.tenant_id, "email": invitation.email},
+    )
+    return api_success(invitation_to_api_dict(invitation))
+
+
+@router.route("/api/v1/invitations/<invitation_id>/accept", methods=["POST"])
+@setup_required
+def api_accept_invitation(invitation_id: str):
+    invitation = get_invitation_or_404(invitation_id)
+    if invitation.current_status() == Invitation.STATUS_REVOKED:
+        abort(FORBIDDEN, "Invitation has been revoked.")
+    if invitation.current_status() == Invitation.STATUS_ACCEPTED:
+        abort(CONFLICT, "Invitation has already been accepted.")
+    if invitation.current_status() == Invitation.STATUS_EXPIRED:
+        abort(FORBIDDEN, "Invitation has expired.")
+
+    payload = parse_json_payload()
+    raw_token = parse_non_empty_string(payload.get("token"), "token")
+    if not invitation.matches_token(raw_token):
+        abort(UNAUTHORIZED, "Invalid invitation token.")
+    username = parse_non_empty_string(payload.get("username"), "username")
+    password = parse_non_empty_string(payload.get("password"), "password")
+    confirm = parse_non_empty_string(payload.get("confirm"), "confirm")
+    if password != confirm:
+        abort(BAD_REQUEST, "confirm must match password.")
+    validate_unique_username(username)
+    tenant = get_tenant_or_404(invitation.tenant_id)
+    created = RestController.create_user(username, password, invitation.role, tenant_id=tenant.id)
+    invitation.accept(created.id)
+    config_manager.save_identity_state()
+    log_audit_event(
+        "invitation.accept",
+        status="success",
+        details={
+            "invitation_id": invitation.id,
+            "tenant_id": invitation.tenant_id,
+            "target_user_id": created.id,
+            "target_user_name": created.name,
+        },
+    )
+    return api_success({
+        "invitation": invitation_to_api_dict(invitation),
+        "user": user_to_api_dict(created),
+        "tenant": tenant_to_api_dict(tenant),
+    }, status_code=201)
 
 
 @router.route("/api/v1/mesh/overview", methods=["GET"])
@@ -3486,6 +4183,13 @@ def can_manage_user_account(target_user: User) -> bool:
         return True
     if current_user.has_role(User.ROLE_SUPPORT):
         return target_user.role == User.ROLE_CLIENT
+    if current_user.has_role(User.ROLE_TENANT_ADMIN):
+        actor_tenant_id = get_actor_tenant_id(current_user)
+        return (
+            target_user.role == User.ROLE_CLIENT and
+            actor_tenant_id is not None and
+            target_user.tenant_id == actor_tenant_id
+        )
     return False
 
 
@@ -3515,14 +4219,14 @@ def get_users_management_context(create_form=None, edit_form=None, delete_form=N
     create_form = create_form or CreateUserForm()
     edit_form = edit_form or EditUserForm()
     delete_form = delete_form or DeleteUserForm()
-    if current_user.has_role(User.ROLE_SUPPORT):
+    if current_user.has_role(User.ROLE_SUPPORT, User.ROLE_TENANT_ADMIN):
         create_form.role.choices = [(User.ROLE_CLIENT, "Client")]
         if request.method == "GET":
             create_form.role.data = User.ROLE_CLIENT
         edit_form.role.choices = [(User.ROLE_CLIENT, "Client")]
     impersonate_form = impersonate_form or ImpersonateClientForm()
     stop_form = stop_form or ImpersonationStopForm()
-    users_list = sorted(users.values(), key=lambda u: (u.role, u.name.lower()))
+    users_list = get_accessible_users(current_user)
     return {
         "title": "Users",
         "create_form": create_form,
