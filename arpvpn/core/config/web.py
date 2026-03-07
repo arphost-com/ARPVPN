@@ -39,6 +39,8 @@ class WebConfig(BaseConfig):
     DEFAULT_HTTP_PORT = 8085
     DEFAULT_HTTPS_PORT = 8086
     CREDENTIALS_FILENAME = ".credentials"
+    TENANTS_FILENAME = ".tenants"
+    INVITATIONS_FILENAME = ".invitations"
     TLS_MODE_HTTP = "http"
     TLS_MODE_SELF_SIGNED = "self_signed"
     TLS_MODE_LETS_ENCRYPT = "letsencrypt"
@@ -74,6 +76,14 @@ class WebConfig(BaseConfig):
     @property
     def credentials_file(self):
         return global_properties.join_workdir(self.CREDENTIALS_FILENAME)
+
+    @property
+    def tenants_file(self):
+        return global_properties.join_workdir(self.TENANTS_FILENAME)
+
+    @property
+    def invitations_file(self):
+        return global_properties.join_workdir(self.INVITATIONS_FILENAME)
 
     def __init__(self):
         super().__init__()

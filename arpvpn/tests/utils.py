@@ -6,6 +6,7 @@ import sys
 from flask_login import current_user
 
 from arpvpn.common.models.user import users, User
+from arpvpn.common.models.tenant import tenants, invitations
 from arpvpn.common.properties import global_properties
 from arpvpn.common.utils.network import get_system_interfaces
 from arpvpn.core.managers.cron import cron_manager
@@ -46,6 +47,8 @@ def default_cleanup():
         for d in dirs:
             shutil.rmtree(os.path.join(root, d))
     users.clear()
+    tenants.clear()
+    invitations.clear()
     clients.clear()
     interfaces.clear()
     try:

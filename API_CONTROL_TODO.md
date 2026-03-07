@@ -20,9 +20,9 @@ See also: `MESH_ACL_TODO.md` for dedicated site-to-site mesh and IP access-contr
 - [x] Add token revocation and forced logout endpoints.
 
 ## Phase 2: Tenant and User Management APIs
-- [ ] CRUD APIs for tenants (name, domain/IP metadata, status).
-- [ ] CRUD APIs for users per tenant with role assignment.
-- [ ] Tenant admin APIs for client invitations (create, resend, revoke, accept).
+- [x] CRUD APIs for tenants (name, domain/IP metadata, status).
+- [x] CRUD APIs for users per tenant with role assignment.
+- [x] Tenant admin APIs for client invitations (create, resend, revoke, accept).
 - [ ] Bulk user import/export APIs (with role-safe validation).
 - [ ] Tenant isolation checks at service layer + integration tests.
 

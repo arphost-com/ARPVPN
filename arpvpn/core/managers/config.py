@@ -4,6 +4,7 @@ from logging import info, warning, error
 import yaml
 
 from arpvpn.common.models.user import UserDict, users
+from arpvpn.common.models.tenant import TenantDict, InvitationDict, tenants, invitations
 from arpvpn.common.properties import global_properties
 from arpvpn.common.utils.logs import log_exception
 from arpvpn.common.utils.system import try_makedir
@@ -65,6 +66,26 @@ class ConfigManager:
             except Exception:
                 error(f"Invalid credentials file detected: {web_config.credentials_file}")
                 raise
+        else:
+            users.clear()
+        if os.path.exists(web_config.tenants_file) and os.path.getsize(web_config.tenants_file) > 0:
+            try:
+                saved_tenants = TenantDict.load(web_config.tenants_file, web_config.secret_key)
+                tenants.set_contents(saved_tenants)
+            except Exception:
+                error(f"Invalid tenants file detected: {web_config.tenants_file}")
+                raise
+        else:
+            tenants.clear()
+        if os.path.exists(web_config.invitations_file) and os.path.getsize(web_config.invitations_file) > 0:
+            try:
+                saved_invitations = InvitationDict.load(web_config.invitations_file, web_config.secret_key)
+                invitations.set_contents(saved_invitations)
+            except Exception:
+                error(f"Invalid invitations file detected: {web_config.invitations_file}")
+                raise
+        else:
+            invitations.clear()
         if "wireguard" in config:
             wireguard_config.load(config["wireguard"])
             wireguard_config.apply()
@@ -91,10 +112,25 @@ class ConfigManager:
         wireguard_config.apply()
         web_config.apply()
         traffic_config.apply()
+        self.save_identity_state()
 
     @staticmethod
     def save_credentials():
         users.save(web_config.credentials_file, web_config.secret_key)
+
+    @staticmethod
+    def save_identity_state():
+        ConfigManager.__save_encrypted_store__(users, web_config.credentials_file)
+        ConfigManager.__save_encrypted_store__(tenants, web_config.tenants_file)
+        ConfigManager.__save_encrypted_store__(invitations, web_config.invitations_file)
+
+    @staticmethod
+    def __save_encrypted_store__(store, path: str):
+        if len(store) < 1:
+            if os.path.exists(path):
+                os.remove(path)
+            return
+        store.save(path, web_config.secret_key)
 
 
 config_manager = ConfigManager()

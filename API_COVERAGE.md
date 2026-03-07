@@ -132,18 +132,48 @@ Status:
 - Enough to automate theme preference and core TLS/certificate workflows.
 - Not yet split into tenant-scoped versus global certificate management.
 
+### Tenant, user, and invitation management
+
+Implemented:
+
+- `GET /api/v1/tenants`
+- `POST /api/v1/tenants`
+- `GET /api/v1/tenants/<tenant_id>`
+- `PUT /api/v1/tenants/<tenant_id>`
+- `DELETE /api/v1/tenants/<tenant_id>`
+- `GET /api/v1/users`
+- `POST /api/v1/users`
+- `GET /api/v1/users/<user_id>`
+- `PUT /api/v1/users/<user_id>`
+- `DELETE /api/v1/users/<user_id>`
+- `GET /api/v1/tenants/<tenant_id>/members`
+- `POST /api/v1/tenants/<tenant_id>/members`
+- `GET /api/v1/invitations`
+- `POST /api/v1/invitations`
+- `GET /api/v1/invitations/<invitation_id>`
+- `POST /api/v1/invitations/<invitation_id>/resend`
+- `POST /api/v1/invitations/<invitation_id>/revoke`
+- `POST /api/v1/invitations/<invitation_id>/accept`
+
+Status:
+
+- Admins can manage tenants, tenant-admin accounts, and global user state.
+- Support users are restricted to client-user operations.
+- Tenant admins are restricted to client-user and invitation operations inside their assigned tenant.
+- Bulk import/export APIs and deeper service-layer tenant isolation checks are still pending.
+
 ## UI Features Still Missing API Coverage
 
 These features still exist only through HTML form routes and do not have matching public API endpoints:
 
 ### User management
 
-- Create user
-- Edit user
-- Delete user
-- User listing for admins/support
+Still missing from the public API:
 
-Current UI routes:
+- Bulk user import/export
+- Full UI parity for tenant-aware role editing screens
+
+Current UI routes still used directly:
 
 - `/users`
 - `/users/<user_id>/edit`
@@ -194,34 +224,20 @@ Current UI routes:
 
 ### Multitenant control plane
 
-Not yet exposed through API:
+Still not exposed through API:
 
-- Tenant CRUD
-- Client invitation lifecycle
-- Tenant admin scoped user/client management
 - Per-tenant VPN instance/container lifecycle
 - Tenant configuration APIs
 - Tenant/global certificate permission split
+- Tenant-scoped bulk import/export workflows
 
 ## What Needs To Be Added Next
 
 To make ARPVPN controllable in all major aspects, these endpoint families should be added next.
 
-### Phase 2: users and tenants
+### Phase 3: WireGuard control
 
 Recommended resource families:
-
-- `GET/POST /api/v1/users`
-- `GET/PUT/DELETE /api/v1/users/<user_id>`
-- `GET/POST /api/v1/tenants`
-- `GET/PUT/DELETE /api/v1/tenants/<tenant_id>`
-- `GET/POST /api/v1/tenants/<tenant_id>/members`
-- `GET/POST /api/v1/invitations`
-- `POST /api/v1/invitations/<invitation_id>/resend`
-- `POST /api/v1/invitations/<invitation_id>/revoke`
-- `POST /api/v1/invitations/<invitation_id>/accept`
-
-### Phase 3: WireGuard control
 
 Recommended resource families:
 
