@@ -54,6 +54,7 @@ ALLOWED_NEXT_ENDPOINTS = {
     "/settings": "router.settings",
     "/users": "router.manage_users",
     "/themes": "router.themes",
+    "/documentation": "router.documentation",
     "/about": "router.about",
     "/setup": "router.setup",
 }
@@ -3227,6 +3228,27 @@ def themes():
         "title": "Themes"
     }
     return ViewController("web/themes.html", **context).load()
+
+
+@router.route("/documentation")
+@login_required
+@setup_required
+def documentation():
+    context = {
+        "title": "Documentation",
+        "mesh_presets": [
+            {"name": "Point-to-point", "value": "point_to_point", "description": "Two ARPVPN servers with a direct tunnel."},
+            {"name": "Hub and spoke", "value": "hub_spoke", "description": "One central server with multiple branch servers."},
+            {"name": "Full mesh", "value": "full_mesh", "description": "Each server can have links and route policy for every other server."},
+        ],
+        "mesh_policy_source_kinds": [
+            "peer",
+            "group",
+            "server",
+            "all",
+        ],
+    }
+    return ViewController("web/documentation.html", **context).load()
 
 
 @router.route("/api/v1/themes", methods=["GET"])
