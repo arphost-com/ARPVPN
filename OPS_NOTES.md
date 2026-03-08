@@ -16,6 +16,14 @@
 - Runtime host for current ARPVPN deployment: `docker03` (`10.10.10.100`)
 - GitLab host / registry origin: `docker01` (`10.10.10.96`)
 
+## docker02 ARPVPN Paths
+
+- Only keep two ARPVPN directories on `docker02`:
+  - `/home/debian/docker/arpvpn`
+  - `/home/debian/docker/arpvpn-mutlitenant`
+- Do not keep ad-hoc ARPVPN test/stage clones under `/home/debian/docker`.
+- If a full validation run needs a clean checkout, delete the existing target directory and `git clone` a fresh copy back into one of the two paths above.
+
 ### Production Change Policy (`docker03`)
 
 - Treat `docker03` as production and read-only by default.
