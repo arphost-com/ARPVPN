@@ -78,3 +78,19 @@ On your deployment host:
     docker compose -f docker/docker-compose.yaml up -d
 
 Set ``ARPVPN_IMAGE`` in compose/.env when using a non-default registry path.
+
+docker02 clean validation workflow
+----------------------------------
+
+Use only these two ARPVPN clone paths on ``docker02``:
+
+- ``/home/debian/docker/arpvpn``
+- ``/home/debian/docker/arpvpn-mutlitenant``
+
+For a full validation run:
+
+1. Delete the target clone directory.
+2. Re-clone the required branch into one of the two paths above.
+3. Run validation from that fresh clone with a unique container name, cookie suffix, data directory, and high test ports.
+
+Fresh end-to-end validation was completed on ``2026-03-08`` against both release lines from clean docker02 clones.
