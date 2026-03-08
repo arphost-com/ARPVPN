@@ -18,10 +18,11 @@
 
 ## docker02 ARPVPN Paths
 
-- Multitenant working clone used for validation: `/home/debian/ARPVPN-v2test`
-- Historical clone used in prior runs: `/home/debian/ARPVPN`
-- Docker workspace clones present: `/home/debian/docker/arpvpn-git` and `/home/debian/docker/arpvpn-clean-test`
-- Note: user-reported path was `/home/debian/docker/ARPVPN` (uppercase), but current host path is lowercase `arpvpn-*`.
+- Only keep two ARPVPN directories on `docker02`:
+  - `/home/debian/docker/arpvpn`
+  - `/home/debian/docker/arpvpn-mutlitenant`
+- Do not keep ad-hoc ARPVPN test/stage clones under `/home/debian/docker`.
+- If a full validation run needs a clean checkout, delete the existing target directory and `git clone` a fresh copy back into one of the two paths above.
 
 ### docker03 ARPVPN paths
 
