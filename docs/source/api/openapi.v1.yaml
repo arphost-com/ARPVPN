@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: ARPVPN API
-  version: "1.2.8"
+  version: "1.2.9"
   description: >
     Source-of-truth OpenAPI document for ARPVPN v1 API endpoints.
 servers:

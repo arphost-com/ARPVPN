@@ -2,8 +2,8 @@
 
 ## Release Line Status
 
-- `main` (v1 stable line): `1.2.8`
-- `codex/multitenant-v2` (v2 line): `2.x` in-progress
+- `main` (v1 stable line): `1.2.9`
+- `codex/multitenant-v2` (v2 line): `2.0.0`
 
 ## Image Tags
 
@@ -23,6 +23,9 @@
   - `/home/debian/docker/arpvpn-mutlitenant`
 - Do not keep ad-hoc ARPVPN test/stage clones under `/home/debian/docker`.
 - If a full validation run needs a clean checkout, delete the existing target directory and `git clone` a fresh copy back into one of the two paths above.
+- Fresh docker02 clean-clone validation completed on `2026-03-08` for both release lines.
+- Result: signup, setup, dashboard/about/documentation, token auth, tenant CRUD, tenant-admin scoping, and invitation acceptance all passed.
+- Only observed log warning on fresh boot: `No endpoint specified. Retrieving public IP address...`
 
 ### docker03 ARPVPN paths
 
