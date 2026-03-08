@@ -2,11 +2,12 @@
 
 ## What's new
 
-### 1.2.9
+### 2.0.0
 
+* Release line: first multitenant release cut on `codex/multitenant-v2`, published separately from the stable `1.2.x` line.
 * API Added: tenant, user, tenant-member, and invitation endpoints for `/api/v1/tenants`, `/api/v1/users`, and `/api/v1/invitations`.
 * API Changed: tenant-admin user management is tenant-scoped, and support users are now blocked from tenant CRUD.
-* Docs: added docker02 clean-clone validation guidance and aligned release metadata/docs with the shipped stable line.
+* Docs: added docker02 clean-clone validation guidance and aligned release metadata/docs with the shipped multitenant line.
 * Tests: removed redundant legacy dashboard/login checks while preserving equivalent coverage in the statistics and login suites.
 * Validation: fresh end-to-end verification passed on `docker02` on 2026-03-08 for both release lines using clean clones and full signup/setup/auth/tenant/user/invitation flows.
 * Known note: a fresh boot without an explicit WireGuard endpoint logs one startup warning while ARPVPN attempts automatic endpoint discovery.
