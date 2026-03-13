@@ -38,7 +38,7 @@ class Interface(YamlAble):
 
     def __init__(self, name: str, description: str, gw_iface: str, ipv4_address: str, listen_port: int, auto: bool,
                  on_up: List[str], on_down: List[str], uuid: str = "", private_key: str = "",
-                 public_key: str = "", peers: "PeerDict" = None):
+                 public_key: str = "", peers: "PeerDict" = None, tenant_id: str = ""):
         self.name = name
         self.gw_iface = gw_iface
         self.description = description
@@ -47,6 +47,7 @@ class Interface(YamlAble):
         self.auto = auto
         self.on_up = on_up
         self.on_down = on_down
+        self.tenant_id = str(tenant_id or "").strip() or None
         self.uuid = uuid or gen_uuid().hex
         self.peers = peers or PeerDict()
         for peer in self.peers.values():
@@ -75,6 +76,7 @@ class Interface(YamlAble):
             "auto": self.auto,
             "on_up": self.on_up,
             "on_down": self.on_down,
+            "tenant_id": self.tenant_id,
             "peers": self.peers
         }
 
@@ -95,10 +97,11 @@ class Interface(YamlAble):
         auto = dct["auto"]
         on_up = dct.get("on_up", [])
         on_down = dct.get("on_down", [])
+        tenant_id = dct.get("tenant_id", "")
         peers = dct.get("peers", None)
         iface = Interface(name=name, description=description, gw_iface=gw_iface, ipv4_address=ipv4_address,
                           listen_port=listen_port, auto=auto, uuid=uuid, private_key=private_key,
-                          public_key=public_key, on_up=on_up, on_down=on_down, peers=peers)
+                          public_key=public_key, on_up=on_up, on_down=on_down, peers=peers, tenant_id=tenant_id)
         return iface
 
     def generate_conf(self) -> str:
@@ -196,7 +199,7 @@ class Interface(YamlAble):
         interfaces.sort()
 
     def edit(self, name: str, description: str, ipv4_address: str,
-             port: int, gw_iface: str, auto: bool, on_up: List[str], on_down: List[str]):
+             port: int, gw_iface: str, auto: bool, on_up: List[str], on_down: List[str], tenant_id: str = ""):
         self.name = name
         self.gw_iface = gw_iface
         self.description = description
@@ -205,10 +208,12 @@ class Interface(YamlAble):
         self.auto = auto
         self.on_up = on_up
         self.on_down = on_down
+        self.tenant_id = str(tenant_id or "").strip() or None
         from arpvpn.core.config.wireguard import config
         self.conf_file = f"{os.path.join(config.interfaces_folder, self.name)}.conf"
 
     def add_peer(self, peer: "Peer"):
+        peer.tenant_id = str(getattr(peer, "tenant_id", "") or "").strip() or self.tenant_id
         self.peers[peer.uuid] = peer
         self.peers.sort()
 
@@ -279,7 +284,8 @@ class Peer(YamlAble):
 
     def __init__(self, name: str, description: str, ipv4_address: str, nat: bool, interface: Interface, dns1: str,
                  uuid: str = "", private_key: str = "", public_key: str = "", dns2: str = None,
-                 mode: str = MODE_CLIENT, site_to_site_subnets: List[str] = None, full_tunnel: bool = False):
+                 mode: str = MODE_CLIENT, site_to_site_subnets: List[str] = None, full_tunnel: bool = False,
+                 tenant_id: str = "", owner_user_id: str = ""):
         self.name = name
         self.description = description
         self.ipv4_address = ipv4_address
@@ -288,6 +294,8 @@ class Peer(YamlAble):
         self.interface = interface
         self.dns1 = dns1
         self.dns2 = dns2
+        self.tenant_id = str(tenant_id or "").strip() or None
+        self.owner_user_id = str(owner_user_id or "").strip() or None
         if self.is_mode_valid(mode):
             self.mode = mode
         else:
@@ -373,7 +381,9 @@ class Peer(YamlAble):
             "dns1": self.dns1,
             "dns2": self.dns2,
             "mode": self.mode,
-            "site_to_site_subnets": self.site_to_site_subnets
+            "site_to_site_subnets": self.site_to_site_subnets,
+            "tenant_id": self.tenant_id,
+            "owner_user_id": self.owner_user_id,
         }
 
     @classmethod
@@ -394,9 +404,12 @@ class Peer(YamlAble):
         dns2 = dct.get("dns2", "")
         mode = dct.get("mode", cls.MODE_CLIENT)
         site_to_site_subnets = dct.get("site_to_site_subnets", [])
+        tenant_id = dct.get("tenant_id", "")
+        owner_user_id = dct.get("owner_user_id", "")
         return Peer(name=name, description=description, interface=None, ipv4_address=ipv4_address, nat=nat, uuid=uuid,
                     private_key=private_key, public_key=public_key, dns1=dns1, dns2=dns2, mode=mode,
-                    site_to_site_subnets=site_to_site_subnets, full_tunnel=full_tunnel)
+                    site_to_site_subnets=site_to_site_subnets, full_tunnel=full_tunnel,
+                    tenant_id=tenant_id, owner_user_id=owner_user_id)
 
     def generate_conf(self) -> str:
         """Generate a wireguard configuration file suitable for this client."""
@@ -420,7 +433,8 @@ class Peer(YamlAble):
         return iface + peer
 
     def edit(self, name: str, description: str, ipv4_address: str, interface: Interface, dns1: str, dns2: str,
-             nat: bool, mode: str = MODE_CLIENT, site_to_site_subnets: List[str] = None, full_tunnel: bool = False):
+             nat: bool, mode: str = MODE_CLIENT, site_to_site_subnets: List[str] = None, full_tunnel: bool = False,
+             tenant_id: str = "", owner_user_id: str = ""):
         self.remove()
         self.name = name
         self.description = description
@@ -433,6 +447,8 @@ class Peer(YamlAble):
         self.full_tunnel = bool(full_tunnel)
         self.mode = mode if self.is_mode_valid(mode) else self.MODE_CLIENT
         self.site_to_site_subnets = self.parse_site_to_site_subnets(site_to_site_subnets or [])
+        self.tenant_id = str(tenant_id or "").strip() or None
+        self.owner_user_id = str(owner_user_id or "").strip() or None
 
     def remove(self):
         if self.uuid not in self.interface.peers:

@@ -5,7 +5,7 @@ from http.client import NO_CONTENT, INTERNAL_SERVER_ERROR
 from logging import debug
 
 from flask import Response, url_for, redirect, abort, request
-from flask_login import login_user
+from flask_login import login_user, current_user
 from werkzeug.wsgi import FileWrapper
 
 from arpvpn.common.models.user import users, User
@@ -33,7 +33,7 @@ class RestController:
         iface.edit(name=form.name.data, description=form.description.data,
                    gw_iface=form.gateway.data, ipv4_address=form.ipv4.data, port=form.port.data,
                    auto=form.auto.data, on_up=str_to_list(form.on_up.data),
-                   on_down=str_to_list(form.on_down.data))
+                   on_down=str_to_list(form.on_down.data), tenant_id=getattr(iface, "tenant_id", "") or "")
         config_manager.save()
 
     def apply_iface(self, iface: Interface, form):
@@ -44,9 +44,12 @@ class RestController:
     def add_iface(form):
         on_up = str_to_list(form.on_up.data)
         on_down = str_to_list(form.on_down.data)
+        tenant_id = ""
+        if current_user and current_user.is_authenticated and getattr(current_user, "role", "") == User.ROLE_TENANT_ADMIN:
+            tenant_id = str(getattr(current_user, "tenant_id", "") or "")
         iface = Interface(name=form.name.data, description=form.description.data, gw_iface=form.gateway.data,
                           ipv4_address=form.ipv4.data, listen_port=form.port.data, auto=form.auto.data, on_up=on_up,
-                          on_down=on_down)
+                          on_down=on_down, tenant_id=tenant_id)
         interfaces[iface.uuid] = iface
         interfaces.sort()
         config_manager.save()
@@ -69,10 +72,13 @@ class RestController:
         mode = form.mode.data or Peer.MODE_CLIENT
         full_tunnel = bool(form.full_tunnel.data) if mode == Peer.MODE_SITE_TO_SITE else False
         site_to_site_subnets = Peer.parse_site_to_site_subnets(form.site_to_site_subnets.data)
+        owner = users.get_value_by_attr("name", form.name.data)
         peer = Peer(name=form.name.data, description=form.description.data,
                     interface=iface, ipv4_address=form.ipv4.data,
                     dns1=form.dns1.data, dns2=form.dns2.data, nat=form.nat.data,
-                    mode=mode, site_to_site_subnets=site_to_site_subnets, full_tunnel=full_tunnel)
+                    mode=mode, site_to_site_subnets=site_to_site_subnets, full_tunnel=full_tunnel,
+                    tenant_id=(owner.tenant_id if owner else getattr(iface, "tenant_id", "")) or "",
+                    owner_user_id=(owner.id if owner else ""))
         iface.add_peer(peer)
         config_manager.save()
         return peer
@@ -93,9 +99,12 @@ class RestController:
         mode = form.mode.data or Peer.MODE_CLIENT
         full_tunnel = bool(form.full_tunnel.data) if mode == Peer.MODE_SITE_TO_SITE else False
         site_to_site_subnets = Peer.parse_site_to_site_subnets(form.site_to_site_subnets.data)
+        owner = users.get_value_by_attr("name", form.name.data)
         peer.edit(name=form.name.data, description=form.description.data, interface=iface,
                   ipv4_address=form.ipv4.data, nat=form.nat.data, dns1=form.dns1.data, dns2=form.dns2.data,
-                  mode=mode, site_to_site_subnets=site_to_site_subnets, full_tunnel=full_tunnel)
+                  mode=mode, site_to_site_subnets=site_to_site_subnets, full_tunnel=full_tunnel,
+                  tenant_id=(owner.tenant_id if owner else getattr(iface, "tenant_id", "")) or "",
+                  owner_user_id=(owner.id if owner else ""))
         config_manager.save()
 
     def download_peer(self, peer: Peer) -> Response:

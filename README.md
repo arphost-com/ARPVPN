@@ -24,6 +24,11 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
 * OpenAPI source: `docs/source/api/openapi.v1.yaml`
 * Versioning policy: `API_VERSIONING.md`
 * API changelog process: `API_CHANGELOG_PROCESS.md`
+* Migration notes: `API_MIGRATION_NOTES.md`
+* Threat model: `API_THREAT_MODEL.md`
+
+Cookie-authenticated API writes require a CSRF token from `GET /api/v1/auth/csrf`.
+Bearer-token API requests do not require that CSRF header.
 
 ## Installation
 
@@ -152,6 +157,8 @@ Project CI builds and publishes ``arpvpn`` image to GitLab Container Registry.
    * ``codex/multitenant-v2`` + ``v2.*`` tags publish ``v2-latest`` and commit/tag images.
 4. Optional environment/integration tests can be run by setting pipeline variable
    ``RUN_ENV_INTEGRATION_TESTS=1`` (non-blocking; informative only).
+5. Optional API contract tests run as ``api_contract_tests`` (non-blocking) and validate
+   the OpenAPI document plus the focused API/security regression subset.
 
 For full setup details, see ``docs/source/gitlab-deployment.rst``.
 
@@ -168,7 +175,7 @@ For a full clean test:
 2. `git clone` the branch back into one of those two paths.
 3. Run validation from that fresh clone rather than creating extra `arpvpn-*` staging directories.
 
-Fresh end-to-end validation on `docker02` was completed on 2026-03-08 for both `main` and `codex/multitenant-v2`.
+Fresh end-to-end validation on `docker02` was completed on 2026-03-10 for `codex/multitenant-v2`.
 
 ## Release lines
 

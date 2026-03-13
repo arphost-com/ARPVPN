@@ -114,6 +114,16 @@ class ConfigManager:
         traffic_config.apply()
         self.save_identity_state()
 
+    def reload_from_disk(self):
+        self.__load_config__()
+        from arpvpn.core.managers.tenancy import tenancy_manager
+        tenancy_manager.initialize(
+            legacy_users=users,
+            legacy_interfaces=wireguard_config.interfaces,
+            web_config=web_config,
+            wireguard_config=wireguard_config,
+        )
+
     @staticmethod
     def save_credentials():
         users.save(web_config.credentials_file, web_config.secret_key)

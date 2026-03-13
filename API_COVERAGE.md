@@ -1,6 +1,6 @@
 # ARPVPN API Coverage
 
-Authoritative snapshot of the API surface implemented in code as of 2026-03-07.
+Authoritative snapshot of the API surface implemented in code as of 2026-03-10.
 
 ## Summary
 
@@ -8,8 +8,9 @@ ARPVPN exposes a hybrid API under `/api/v1`.
 
 - It is not a pure REST API.
 - It is partly resource-oriented and partly action/RPC-oriented.
-- It is usable today for auth, mesh control, stats/traffic, themes, and TLS operations.
-- It is not yet a full control-plane API for all ARPVPN features.
+- It is usable today for auth, tenant/user lifecycle, WireGuard control, mesh control, stats/traffic, themes, TLS, and system/config operations.
+- It now includes admin backup/restore and tenant-scoped TLS settings APIs.
+- It is still not a full control-plane API for container lifecycle or separate tenant runtime lifecycle.
 
 ## API Style
 
@@ -25,6 +26,14 @@ These follow normal collection/item patterns and are the most REST-like parts of
 - `/api/v1/mesh/routes/<uuid>`
 - `/api/v1/mesh/policies`
 - `/api/v1/mesh/policies/<uuid>`
+- `/api/v1/tenants`
+- `/api/v1/tenants/<tenant_id>`
+- `/api/v1/users`
+- `/api/v1/users/<user_id>`
+- `/api/v1/wireguard/interfaces`
+- `/api/v1/wireguard/interfaces/<interface_id>`
+- `/api/v1/wireguard/peers`
+- `/api/v1/wireguard/peers/<peer_id>`
 
 These support `GET`, `POST`, `PUT`, and `DELETE` in a predictable way.
 
@@ -37,6 +46,7 @@ These are valid APIs, but they are RPC/action endpoints rather than strict REST 
 - `/api/v1/auth/revoke`
 - `/api/v1/auth/revoke-all`
 - `/api/v1/auth/force-logout/<user_id>`
+- `/api/v1/auth/csrf`
 - `/api/v1/impersonation/start/<user_id>`
 - `/api/v1/impersonation/stop`
 - `/api/v1/mesh/dry-run`
@@ -44,6 +54,7 @@ These are valid APIs, but they are RPC/action endpoints rather than strict REST 
 - `/api/v1/tls/mode`
 - `/api/v1/tls/self-signed`
 - `/api/v1/tls/letsencrypt`
+- `/api/v1/system/restore`
 
 ### Read/report APIs
 
@@ -67,6 +78,7 @@ Implemented:
 
 - `GET /api/v1/auth/modes`
 - `GET /api/v1/auth/rbac`
+- `GET /api/v1/auth/csrf`
 - `POST /api/v1/auth/token`
 - `POST /api/v1/auth/refresh`
 - `POST /api/v1/auth/revoke`
@@ -80,6 +92,7 @@ Status:
 - Usable for browser and external API clients.
 - Supports cookie/session auth and bearer token auth.
 - Includes rate limiting, lockout handling, revocation, and audit logging.
+- Cookie-authenticated API writes require CSRF tokens; bearer-token writes do not.
 
 ### Mesh control plane
 
@@ -126,11 +139,14 @@ Implemented:
 - `POST /api/v1/tls/mode`
 - `POST /api/v1/tls/self-signed`
 - `POST /api/v1/tls/letsencrypt`
+- `GET /api/v1/tenants/<tenant_id>/tls/status`
+- `PUT /api/v1/tenants/<tenant_id>/tls`
 
 Status:
 
 - Enough to automate theme preference and core TLS/certificate workflows.
-- Not yet split into tenant-scoped versus global certificate management.
+- Global TLS mutation is now super-admin only.
+- Tenant admins can store tenant-scoped TLS intent for their assigned tenant.
 
 ### Tenant, user, and invitation management
 
@@ -146,6 +162,8 @@ Implemented:
 - `GET /api/v1/users/<user_id>`
 - `PUT /api/v1/users/<user_id>`
 - `DELETE /api/v1/users/<user_id>`
+- `GET /api/v1/users/export`
+- `POST /api/v1/users/import`
 - `GET /api/v1/tenants/<tenant_id>/members`
 - `POST /api/v1/tenants/<tenant_id>/members`
 - `GET /api/v1/invitations`
@@ -160,18 +178,66 @@ Status:
 - Admins can manage tenants, tenant-admin accounts, and global user state.
 - Support users are restricted to client-user operations.
 - Tenant admins are restricted to client-user and invitation operations inside their assigned tenant.
-- Bulk import/export APIs and deeper service-layer tenant isolation checks are still pending.
+- Bulk import/export APIs are available with role-safe validation and idempotency support.
+- Tenant isolation is enforced in API visibility and management helpers and covered by integration tests.
+
+### WireGuard control
+
+Implemented:
+
+- `GET /api/v1/wireguard/interfaces`
+- `POST /api/v1/wireguard/interfaces`
+- `GET /api/v1/wireguard/interfaces/<interface_id>`
+- `PUT /api/v1/wireguard/interfaces/<interface_id>`
+- `DELETE /api/v1/wireguard/interfaces/<interface_id>`
+- `POST /api/v1/wireguard/interfaces/<interface_id>/<action>`
+- `GET /api/v1/wireguard/interfaces/<interface_id>/download`
+- `GET /api/v1/wireguard/interfaces/<interface_id>/qr`
+- `GET /api/v1/wireguard/peers`
+- `POST /api/v1/wireguard/peers`
+- `GET /api/v1/wireguard/peers/<peer_id>`
+- `PUT /api/v1/wireguard/peers/<peer_id>`
+- `DELETE /api/v1/wireguard/peers/<peer_id>`
+- `GET /api/v1/wireguard/peers/<peer_id>/download`
+- `GET /api/v1/wireguard/peers/<peer_id>/qr`
+- `GET /api/v1/jobs/<job_id>`
+
+Status:
+
+- Covers interface and peer CRUD plus config download and QR retrieval.
+- Includes start/stop/restart operations for interfaces.
+- Tenant admins are scoped to their own tenant’s WireGuard objects.
+- Clients can only view their own peer/interface state and downloads.
+- Long-running operations can be queued and polled through the async job API.
+
+### System, audit, and configuration
+
+Implemented:
+
+- `GET /api/v1/system/version`
+- `GET /api/v1/system/health`
+- `GET /api/v1/system/diagnostics`
+- `GET /api/v1/system/backup`
+- `POST /api/v1/system/restore`
+- `GET /api/v1/audit/events`
+- `GET /api/v1/config/global`
+- `PUT /api/v1/config/global`
+- `GET /api/v1/tenants/<tenant_id>/config`
+- `PUT /api/v1/tenants/<tenant_id>/config`
+
+Status:
+
+- Global config is API-managed for super-admin use.
+- Tenant branding/limits/defaults/DNS config is tenant-scoped.
+- Admin-only backup export and restore are available, with restore dry-run validation and rollback on failed reload.
+- Audit events are readable from structured log entries.
+- Health/version/diagnostics endpoints are available for automation and support workflows.
 
 ## UI Features Still Missing API Coverage
 
 These features still exist only through HTML form routes and do not have matching public API endpoints:
 
 ### User management
-
-Still missing from the public API:
-
-- Bulk user import/export
-- Full UI parity for tenant-aware role editing screens
 
 Current UI routes still used directly:
 
@@ -180,12 +246,6 @@ Current UI routes still used directly:
 - `/users/<user_id>/delete`
 
 ### WireGuard control
-
-- Interface create/edit/delete
-- Interface up/down/restart
-- Peer create/edit/delete
-- Peer config download
-- Peer QR/config retrieval parity
 
 Current UI routes:
 
@@ -200,9 +260,8 @@ Current UI routes:
 
 ### Settings and setup
 
-- Global settings save
 - Initial setup/bootstrap
-- Restart/apply flows tied to settings
+- Restart/apply flows tied to settings beyond the API-managed config objects
 
 Current UI routes:
 
@@ -212,10 +271,8 @@ Current UI routes:
 ### System and informational pages
 
 - Network inventory
-- About/version/system summary
+- About/version/system summary parity in the HTML UI
 - Restart button/action
-- Diagnostics/health endpoints
-- Audit log read APIs
 
 Current UI routes:
 

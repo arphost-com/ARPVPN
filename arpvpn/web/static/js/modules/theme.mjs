@@ -25,6 +25,11 @@ function isThemeApiAvailable() {
     return Boolean(document.getElementById("layoutSidenav"));
 }
 
+function getCsrfToken() {
+    const meta = document.querySelector("meta[name='arpvpn-csrf-token']");
+    return meta ? (meta.getAttribute("content") || "").trim() : "";
+}
+
 async function fetchThemeChoiceFromApi() {
     if (!isThemeApiAvailable()) return null;
     try {
@@ -53,12 +58,14 @@ async function fetchThemeChoiceFromApi() {
 async function persistThemeChoiceToApi(choice) {
     if (!isThemeApiAvailable()) return;
     try {
+        const csrfToken = getCsrfToken();
         await fetch(THEME_API_ENDPOINT, {
             method: "POST",
             credentials: "same-origin",
             headers: {
                 "Content-Type": "application/json",
-                "Accept": "application/json"
+                "Accept": "application/json",
+                ...(csrfToken ? {"X-CSRFToken": csrfToken} : {})
             },
             body: JSON.stringify({choice})
         });

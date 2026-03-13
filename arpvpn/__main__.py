@@ -11,6 +11,7 @@ from flask import Flask, session, current_app, request, redirect
 from flask_login import LoginManager, current_user
 from flask_login import login_manager as flask_login_manager
 from flask_qrcode import QRcode
+from flask_wtf.csrf import generate_csrf
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from arpvpn.__version__ import commit, release
@@ -157,6 +158,7 @@ app.config["REMEMBER_COOKIE_HTTPONLY"] = True
 app.config["REMEMBER_COOKIE_SECURE"] = initial_secure_cookie_flag
 app.config["REMEMBER_COOKIE_SAMESITE"] = "Lax"
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=12)
+app.config.setdefault("API_CSRF_ENABLED", True)
 if secure_transport_by_config:
     app.config["PREFERRED_URL_SCHEME"] = "https"
 
@@ -166,6 +168,7 @@ if web_config.tls_mode == web_config.TLS_MODE_REVERSE_PROXY:
         app.config["SERVER_NAME"] = web_config.proxy_incoming_hostname
 
 app.register_blueprint(router)
+app.jinja_env.globals["csrf_token"] = generate_csrf
 QRcode(app)
 login_manager.init_app(app)
 login_manager.login_view = "router.login"

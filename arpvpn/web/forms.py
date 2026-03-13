@@ -3,6 +3,7 @@ import json
 from secrets import randbelow
 from typing import List, Tuple
 
+from flask_login import current_user
 from flask_wtf import FlaskForm
 from wtforms import StringField, BooleanField, PasswordField, SubmitField, SelectField, IntegerField, \
     TextAreaField
@@ -546,6 +547,14 @@ class AddPeerForm(FlaskForm):
     def get_choices(cls) -> List[Tuple[str, str]]:
         choices = []
         for iface in interfaces.values():
+            if (
+                current_user and current_user.is_authenticated and
+                getattr(current_user, "role", "") == User.ROLE_TENANT_ADMIN
+            ):
+                iface_tenant_id = str(getattr(iface, "tenant_id", "") or "")
+                actor_tenant_id = str(getattr(current_user, "tenant_id", "") or "")
+                if iface_tenant_id and iface_tenant_id != actor_tenant_id:
+                    continue
             choices.append((iface.name, f"{iface.name} ({iface.ipv4_address})"))
         return choices
 

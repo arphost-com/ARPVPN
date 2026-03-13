@@ -32,6 +32,25 @@ def normalize_string_list(values: Any) -> List[str]:
     return normalized
 
 
+def normalize_settings_dict(values: Any) -> Dict[str, Any]:
+    if not isinstance(values, dict):
+        return {
+            "branding": {},
+            "limits": {},
+            "defaults": {},
+            "dns_servers": [],
+            "tls": {},
+        }
+    normalized = {
+        "branding": values.get("branding", {}) if isinstance(values.get("branding", {}), dict) else {},
+        "limits": values.get("limits", {}) if isinstance(values.get("limits", {}), dict) else {},
+        "defaults": values.get("defaults", {}) if isinstance(values.get("defaults", {}), dict) else {},
+        "dns_servers": normalize_string_list(values.get("dns_servers", [])),
+        "tls": values.get("tls", {}) if isinstance(values.get("tls", {}), dict) else {},
+    }
+    return normalized
+
+
 def slugify_name(value: str) -> str:
     cleaned = "".join(ch.lower() if ch.isalnum() else "-" for ch in str(value or "").strip())
     while "--" in cleaned:
@@ -58,6 +77,7 @@ class Tenant(YamlAble):
         ips: Any = None,
         status: str = STATUS_ACTIVE,
         description: str = "",
+        settings: Any = None,
     ):
         self.id = gen_uuid().hex
         self.name = str(name or "").strip()
@@ -66,6 +86,7 @@ class Tenant(YamlAble):
         self.ips = normalize_string_list(ips)
         self.status = status if status in self.STATUSES else self.STATUS_ACTIVE
         self.description = str(description or "").strip()
+        self.settings = normalize_settings_dict(settings)
         self.created_at = utcnow_iso()
         self.updated_at = self.created_at
 
@@ -81,6 +102,7 @@ class Tenant(YamlAble):
             "ips": self.ips,
             "status": self.status,
             "description": self.description,
+            "settings": self.settings,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -94,6 +116,7 @@ class Tenant(YamlAble):
             ips=dct.get("ips", []),
             status=dct.get("status", cls.STATUS_ACTIVE),
             description=dct.get("description", ""),
+            settings=dct.get("settings", {}),
         )
         tenant.id = dct.get("id", tenant.id)
         tenant.created_at = dct.get("created_at", tenant.created_at)

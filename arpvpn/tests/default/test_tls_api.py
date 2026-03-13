@@ -1,5 +1,6 @@
 import pytest
 
+from arpvpn.common.models.tenant import Tenant, tenants
 from arpvpn.common.models.user import User, users
 from arpvpn.core.config.web import config as web_config
 from arpvpn.tests.utils import default_cleanup, get_testing_app, is_http_success
@@ -37,11 +38,18 @@ def client():
         yield client
 
 
-def create_user(name: str, password: str, role: str):
+def create_user(name: str, password: str, role: str, tenant_id: str = ""):
     user = User(name, role=role)
+    user.tenant_id = tenant_id or None
     user.password = password
     users[user.id] = user
     return user
+
+
+def create_tenant(name: str) -> Tenant:
+    tenant = Tenant(name=name)
+    tenants[tenant.id] = tenant
+    return tenant
 
 
 def login(client, username: str, password: str):
@@ -73,6 +81,17 @@ def test_tls_status_api_forbidden_for_client_role(client):
 
     response = client.get("/api/v1/tls/status")
     assert response.status_code == 403
+
+
+def test_support_can_read_tls_status_but_cannot_modify_tls_mode(client):
+    create_user("support", "supportpass", User.ROLE_SUPPORT)
+    login(client, "support", "supportpass")
+
+    status_response = client.get("/api/v1/tls/status")
+    assert status_response.status_code == 200
+
+    update_response = client.post("/api/v1/tls/mode", json={"mode": "http"})
+    assert update_response.status_code == 403
 
 
 def test_tls_mode_update_api_calls_apply(monkeypatch, client):
@@ -202,3 +221,41 @@ def test_tls_letsencrypt_api_calls_apply(monkeypatch, client):
     assert captured["email"] == "ops@example.test"
     assert captured["generate_self_signed"] is False
     assert captured["issue_letsencrypt"] is True
+
+
+def test_tenant_admin_can_manage_own_tenant_tls_settings(client):
+    tenant = create_tenant("Tenant One")
+    create_user("tenant-admin", "tenantpass", User.ROLE_TENANT_ADMIN, tenant.id)
+    login(client, "tenant-admin", "tenantpass")
+
+    get_response = client.get(f"/api/v1/tenants/{tenant.id}/tls/status")
+    assert get_response.status_code == 200
+    assert get_response.get_json()["data"]["tenant_id"] == tenant.id
+
+    update_response = client.put(
+        f"/api/v1/tenants/{tenant.id}/tls",
+        json={
+            "mode": "self_signed",
+            "server_name": "tenant-one.example.test",
+            "redirect_http_to_https": True,
+        },
+        headers={"Idempotency-Key": "tenant-tls-1"},
+    )
+    assert update_response.status_code == 200
+    updated = update_response.get_json()["data"]
+    assert updated["mode"] == "self_signed"
+    assert updated["server_name"] == "tenant-one.example.test"
+    assert updated["redirect_http_to_https"] is True
+
+
+def test_tenant_admin_cannot_modify_other_tenant_tls_settings(client):
+    tenant_one = create_tenant("Tenant One")
+    tenant_two = create_tenant("Tenant Two")
+    create_user("tenant-admin", "tenantpass", User.ROLE_TENANT_ADMIN, tenant_one.id)
+    login(client, "tenant-admin", "tenantpass")
+
+    response = client.put(
+        f"/api/v1/tenants/{tenant_two.id}/tls",
+        json={"mode": "http"},
+    )
+    assert response.status_code == 403

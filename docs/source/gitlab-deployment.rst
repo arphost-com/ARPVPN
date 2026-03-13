@@ -67,6 +67,15 @@ with WireGuard/network tooling available.
 - Trigger by setting pipeline variable ``RUN_ENV_INTEGRATION_TESTS=1``.
 - This job is non-blocking (``allow_failure``) and does not gate image publication.
 
+API contract suite
+------------------
+
+The repository also runs ``api_contract_tests`` as a non-blocking CI job.
+
+- Validates ``docs/source/api/openapi.v1.yaml``.
+- Runs the focused API/security regression subset from ``scripts/run-api-contract-tests.sh``.
+- Keeps the existing ``unit_tests`` subset as the hard gate while still reporting API drift early.
+
 Deploying ARPVPN with compose
 -----------------------------
 
@@ -93,4 +102,4 @@ For a full validation run:
 2. Re-clone the required branch into one of the two paths above.
 3. Run validation from that fresh clone with a unique container name, cookie suffix, data directory, and high test ports.
 
-Fresh end-to-end validation was completed on ``2026-03-08`` against both release lines from clean docker02 clones.
+Fresh end-to-end validation was completed on ``2026-03-10`` for ``codex/multitenant-v2`` from the clean docker02 clone.
