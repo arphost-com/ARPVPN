@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: ARPVPN API
-  version: "1.2.9"
+  version: "1.2.10"
   description: >
     Source-of-truth OpenAPI document for ARPVPN v1 API endpoints.
 servers:
@@ -11,12 +11,19 @@ tags:
   - name: Auth
   - name: Mesh
   - name: Stats
+  - name: System
+  - name: TLS
+  - name: Tenants
 paths:
   /api/v1/auth/token:
     post:
       tags: [Auth]
       operationId: issueApiToken
       summary: Issue bearer access/refresh tokens.
+      description: >
+        Used by external clients or browser automation. Example roles:
+        `super_admin` and `support_admin` request `staff`, `tenant_admin` requests `staff`,
+        and `client` requests `client`.
       requestBody:
         required: true
         content:
@@ -32,6 +39,13 @@ paths:
                 scope:
                   type: string
                   enum: [all, staff, client]
+            examples:
+              tenantAdmin:
+                summary: Tenant admin requesting staff-scoped token
+                value:
+                  username: tenant-admin
+                  password: change-me
+                  scope: staff
       responses:
         "201":
           description: Token pair issued.
@@ -39,6 +53,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiSuccessEnvelope"
+              examples:
+                issued:
+                  value:
+                    ok: true
+                    request_id: 8d8d0c1f
+                    generated_at: "2026-03-10T18:30:00Z"
+                    data:
+                      token_type: Bearer
+                      scope: staff
+                      access_token: token-id.token-secret
+                      refresh_token: refresh-id.refresh-secret
         "401":
           description: Invalid credentials.
           content:
@@ -51,6 +76,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
+  /api/v1/auth/csrf:
+    get:
+      tags: [Auth]
+      operationId: getApiCsrfToken
+      summary: Get a CSRF token for cookie-authenticated API mutations.
+      description: >
+        Required for same-origin browser/API requests that rely on the Flask session cookie.
+        Bearer-token API requests do not require this header.
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: CSRF token metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSuccessEnvelope"
+              examples:
+                cookieCsrf:
+                  value:
+                    ok: true
+                    request_id: 701aa3f1
+                    generated_at: "2026-03-10T18:31:00Z"
+                    data:
+                      csrf_token: ImFiYzEyMyI.aBcDef.ghijk
+                      required_for_cookie_auth: true
+                      header_names: ["X-CSRFToken", "X-CSRF-Token"]
   /api/v1/auth/refresh:
     post:
       tags: [Auth]
@@ -258,6 +310,206 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiSuccessEnvelope"
+  /api/v1/system/backup:
+    get:
+      tags: [System]
+      operationId: exportSystemBackup
+      summary: Export an admin-only backup snapshot.
+      description: >
+        Returns base64-encoded backup content for config, credentials, tenants, and invitations.
+        Intended for super-admin disaster recovery and migration workflows.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Backup snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSuccessEnvelope"
+              examples:
+                backup:
+                  value:
+                    ok: true
+                    request_id: 9fd2f67c
+                    generated_at: "2026-03-10T18:32:00Z"
+                    data:
+                      format: arpvpn-backup-v1
+                      files:
+                        config:
+                          exists: true
+                          size_bytes: 2048
+                          sha256: abc123
+                          content_b64: ZXhhbXBsZQ==
+        "403":
+          description: Only super admin can export backups.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+  /api/v1/system/restore:
+    post:
+      tags: [System]
+      operationId: restoreSystemBackup
+      summary: Restore a backup snapshot.
+      description: >
+        Admin-only restore endpoint with idempotency support. Use `dry_run=true` to validate the
+        backup bundle without applying it.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dry_run:
+                  type: boolean
+                backup:
+                  type: object
+            examples:
+              dryRun:
+                value:
+                  dry_run: true
+                  backup:
+                    format: arpvpn-backup-v1
+                    files:
+                      config:
+                        exists: true
+                        content_b64: ZXhhbXBsZQ==
+      responses:
+        "200":
+          description: Backup validated or restored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSuccessEnvelope"
+  /api/v1/tls/mode:
+    post:
+      tags: [TLS]
+      operationId: updateGlobalTlsMode
+      summary: Update global ARPVPN TLS mode.
+      description: Super-admin only. Support users remain read-only for global TLS status.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mode:
+                  type: string
+                  enum: [http, self_signed, letsencrypt, reverse_proxy]
+                server_name:
+                  type: string
+                letsencrypt_email:
+                  type: string
+                proxy_incoming_hostname:
+                  type: string
+                redirect_http_to_https:
+                  type: boolean
+            examples:
+              selfSigned:
+                value:
+                  mode: self_signed
+                  server_name: vpn.example.test
+                  redirect_http_to_https: true
+      responses:
+        "200":
+          description: Updated global TLS state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSuccessEnvelope"
+        "403":
+          description: Only super admin can change global TLS.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+  /api/v1/tenants/{tenant_id}/tls/status:
+    get:
+      tags: [Tenants, TLS]
+      operationId: getTenantTlsStatus
+      summary: Read tenant-scoped TLS settings.
+      description: Tenant admins can read only their own tenant. Support and super admin can inspect any tenant.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: tenant_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tenant TLS status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSuccessEnvelope"
+  /api/v1/tenants/{tenant_id}/tls:
+    put:
+      tags: [Tenants, TLS]
+      operationId: updateTenantTlsStatus
+      summary: Update tenant-scoped TLS settings.
+      description: >
+        Tenant admins can update only their assigned tenant. Settings are stored for tenant-scoped
+        deployments and separate tenant runtime stacks.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: tenant_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mode:
+                  type: string
+                  enum: [http, self_signed, letsencrypt, reverse_proxy]
+                server_name:
+                  type: string
+                letsencrypt_email:
+                  type: string
+                proxy_incoming_hostname:
+                  type: string
+                redirect_http_to_https:
+                  type: boolean
+            examples:
+              tenantLetsEncrypt:
+                value:
+                  mode: letsencrypt
+                  server_name: tenant-a.example.test
+                  letsencrypt_email: ops@example.test
+                  redirect_http_to_https: true
+      responses:
+        "200":
+          description: Tenant TLS settings stored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSuccessEnvelope"
+        "403":
+          description: Insufficient permissions or wrong tenant scope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
 components:
   securitySchemes:
     bearerAuth:

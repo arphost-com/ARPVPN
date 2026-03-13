@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "arpvpn"
-version = "1.2.9"
+version = "1.2.10"
 description = "WireGuard management with client and site-to-site VPN support"
 authors = ["Jose <joseantoniomazon@gmail.com>"]
 license = "GPL-3.0"

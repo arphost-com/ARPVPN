@@ -1,12 +1,13 @@
 import hashlib
 import hmac
 import secrets
+import threading
 import time
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from threading import Lock
-from typing import Any, Deque, Dict, Optional, Tuple
+from typing import Any, Callable, Deque, Dict, Optional, Tuple
 
 
 def now_utc() -> datetime:
@@ -28,6 +29,47 @@ class ApiTokenRecord:
     def is_expired(self, as_of: Optional[datetime] = None) -> bool:
         reference = as_of or now_utc()
         return reference >= self.expires_at
+
+
+@dataclass
+class IdempotencyRecord:
+    scope_key: str
+    fingerprint: str
+    response_data: Any
+    status_code: int
+    created_at: datetime
+    expires_at: datetime
+
+    def is_expired(self, as_of: Optional[datetime] = None) -> bool:
+        reference = as_of or now_utc()
+        return reference >= self.expires_at
+
+
+@dataclass
+class AsyncJobRecord:
+    job_id: str
+    operation: str
+    actor_user_id: str
+    created_at: datetime
+    status: str = "queued"
+    finished_at: Optional[datetime] = None
+    result: Any = None
+    error: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "job_id": self.job_id,
+            "operation": self.operation,
+            "actor_user_id": self.actor_user_id,
+            "status": self.status,
+            "created_at": self.created_at.isoformat().replace("+00:00", "Z"),
+            "finished_at": (
+                self.finished_at.isoformat().replace("+00:00", "Z")
+                if self.finished_at else None
+            ),
+            "result": self.result,
+            "error": self.error or None,
+        }
 
 
 class ApiTokenStore:
@@ -306,3 +348,118 @@ class AuthLockoutManager:
         with self._lock:
             self._failures.clear()
             self._locked_until.clear()
+
+
+class IdempotencyStore:
+    def __init__(self):
+        self._records: Dict[str, IdempotencyRecord] = {}
+        self._lock = Lock()
+
+    @staticmethod
+    def build_fingerprint(method: str, path: str, actor_user_id: str, request_body: str) -> str:
+        data = "\n".join([
+            str(method or "").upper(),
+            str(path or ""),
+            str(actor_user_id or ""),
+            str(request_body or ""),
+        ]).encode("utf-8")
+        return hashlib.sha256(data).hexdigest()
+
+    def get(self, scope_key: str) -> Optional[IdempotencyRecord]:
+        key = str(scope_key or "").strip()
+        if not key:
+            return None
+        with self._lock:
+            self._cleanup_locked()
+            return self._records.get(key)
+
+    def store(
+        self,
+        scope_key: str,
+        fingerprint: str,
+        response_data: Any,
+        status_code: int,
+        ttl_seconds: int = 24 * 60 * 60,
+    ) -> IdempotencyRecord:
+        key = str(scope_key or "").strip()
+        if not key:
+            raise ValueError("scope_key is required")
+        now_value = now_utc()
+        record = IdempotencyRecord(
+            scope_key=key,
+            fingerprint=str(fingerprint or "").strip(),
+            response_data=response_data,
+            status_code=int(status_code),
+            created_at=now_value,
+            expires_at=now_value + timedelta(seconds=max(int(ttl_seconds), 1)),
+        )
+        with self._lock:
+            self._cleanup_locked()
+            self._records[key] = record
+        return record
+
+    def _cleanup_locked(self):
+        now_value = now_utc()
+        expired = [
+            key for key, record in self._records.items()
+            if record.is_expired(now_value)
+        ]
+        for key in expired:
+            self._records.pop(key, None)
+
+    def reset_for_tests(self):
+        with self._lock:
+            self._records.clear()
+
+
+class AsyncJobStore:
+    def __init__(self):
+        self._jobs: Dict[str, AsyncJobRecord] = {}
+        self._lock = Lock()
+
+    def create_job(self, operation: str, actor_user_id: str) -> AsyncJobRecord:
+        job = AsyncJobRecord(
+            job_id=secrets.token_hex(16),
+            operation=str(operation or "").strip() or "operation",
+            actor_user_id=str(actor_user_id or "").strip(),
+            created_at=now_utc(),
+        )
+        with self._lock:
+            self._jobs[job.job_id] = job
+        return job
+
+    def get_job(self, job_id: str) -> Optional[AsyncJobRecord]:
+        with self._lock:
+            return self._jobs.get(str(job_id or "").strip())
+
+    def start_job(
+        self,
+        operation: str,
+        actor_user_id: str,
+        target: Callable[[], Any],
+    ) -> AsyncJobRecord:
+        job = self.create_job(operation, actor_user_id)
+
+        def runner():
+            with self._lock:
+                job.status = "running"
+            try:
+                result = target()
+            except Exception as exc:  # pragma: no cover - thread exception path is timing-sensitive
+                with self._lock:
+                    job.status = "failed"
+                    job.error = str(exc)
+                    job.finished_at = now_utc()
+                return
+            with self._lock:
+                job.status = "completed"
+                job.result = result
+                job.finished_at = now_utc()
+
+        thread = threading.Thread(target=runner, daemon=True, name=f"arpvpn-job-{job.job_id[:8]}")
+        thread.start()
+        return job
+
+    def reset_for_tests(self):
+        with self._lock:
+            self._jobs.clear()

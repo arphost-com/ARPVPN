@@ -67,6 +67,21 @@ integration_tests_env:
     - if: '$RUN_ENV_INTEGRATION_TESTS == "1"'
     - when: never
 
+api_contract_tests:
+  stage: test
+  image: python:3.11-slim
+  allow_failure: true
+  before_script:
+    - pip install --no-cache-dir poetry==1.8.3
+    - poetry config virtualenvs.create false
+    - poetry install --with dev --no-interaction --no-ansi
+    - chmod +x scripts/run-api-contract-tests.sh
+  script:
+    - ./scripts/run-api-contract-tests.sh
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
 package_dist:
   stage: package
   image: python:3.11-slim

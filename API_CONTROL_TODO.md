@@ -23,15 +23,15 @@ See also: `MESH_ACL_TODO.md` for dedicated site-to-site mesh and IP access-contr
 - [x] CRUD APIs for tenants (name, domain/IP metadata, status).
 - [x] CRUD APIs for users per tenant with role assignment.
 - [x] Tenant admin APIs for client invitations (create, resend, revoke, accept).
-- [ ] Bulk user import/export APIs (with role-safe validation).
-- [ ] Tenant isolation checks at service layer + integration tests.
+- [x] Bulk user import/export APIs (with role-safe validation).
+- [x] Tenant isolation checks at service layer + integration tests.
 
 ## Phase 3: WireGuard Control APIs
-- [ ] Interface APIs (create/list/get/update/delete/start/stop/restart).
-- [ ] Peer APIs (create/list/get/update/delete/download config/QR retrieval).
-- [ ] Per-tenant VPN scoping and policy enforcement in all wireguard endpoints.
+- [x] Interface APIs (create/list/get/update/delete/start/stop/restart).
+- [x] Peer APIs (create/list/get/update/delete/download config/QR retrieval).
+- [x] Per-tenant VPN scoping and policy enforcement in all wireguard endpoints.
 - [ ] Container lifecycle API for separate tenant VPN instances (port allocation/status).
-- [ ] Safe async job model for long-running operations (apply/restart/regenerate keys).
+- [x] Safe async job model for long-running operations (apply/restart/regenerate keys).
 
 ## Phase 4: Traffic, Usage, and RRD APIs
 - [x] Per-connection traffic history API (interface + peer).
@@ -45,31 +45,31 @@ See also: `MESH_ACL_TODO.md` for dedicated site-to-site mesh and IP access-contr
 - [x] Endpoint to generate self-signed certs for configured hostnames.
 - [x] Endpoint to issue/renew Let’s Encrypt certificates.
 - [x] Read-only certificate status endpoint (issuer, expiry, SANs).
-- [ ] Permission gates: super admin global, tenant admin tenant-scoped.
+- [x] Permission gates: super admin global, tenant admin tenant-scoped.
 
 ## Phase 6: Configuration and System APIs
-- [ ] Tenant configuration APIs (branding, limits, defaults, DNS options).
-- [ ] Super admin global configuration APIs.
-- [ ] Health/diagnostics APIs (service status, dependency checks, version/commit).
-- [ ] Audit log APIs (who/what/when/where, immutable event history).
-- [ ] Backup/restore APIs for config + credentials metadata (role-restricted).
+- [x] Tenant configuration APIs (branding, limits, defaults, DNS options).
+- [x] Super admin global configuration APIs.
+- [x] Health/diagnostics APIs (service status, dependency checks, version/commit).
+- [x] Audit log APIs (who/what/when/where, immutable event history).
+- [x] Backup/restore APIs for config + credentials metadata (role-restricted).
 
 ## Phase 7: Security and Hardening
-- [ ] Idempotency key support for create/update operations.
-- [ ] CSRF protection policy for cookie-auth API calls.
+- [x] Idempotency key support for create/update operations.
+- [x] CSRF protection policy for cookie-auth API calls.
 - [ ] Input validation schemas for every endpoint.
-- [ ] Structured authorization tests for each role/action combination.
-- [ ] Threat-model review for impersonation, tenant boundaries, and key material handling.
+- [x] Structured authorization tests for each role/action combination.
+- [x] Threat-model review for impersonation, tenant boundaries, and key material handling.
 
 ## Phase 8: Developer Experience and Rollout
-- [ ] Publish OpenAPI docs with examples by role and tenant scope.
-- [ ] Add API smoke tests and contract tests in CI.
+- [x] Publish OpenAPI docs with examples by role and tenant scope.
+- [x] Add API smoke tests and contract tests in CI.
 - [ ] Add SDK/client generation pipeline (optional but recommended).
 - [ ] Add feature flags to release incrementally per endpoint group.
-- [ ] Define migration notes for legacy UI flows to API-backed operations.
+- [x] Define migration notes for legacy UI flows to API-backed operations.
 
 ## Done Criteria
 - [ ] Every UI operation has a matching API endpoint.
 - [ ] Role and tenant boundaries are enforced and tested end-to-end.
 - [ ] API docs and examples are complete and versioned.
-- [ ] Both release lines have clear backport/cherry-pick guidance for API changes.
+- [x] Both release lines have clear backport/cherry-pick guidance for API changes.

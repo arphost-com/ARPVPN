@@ -58,10 +58,18 @@ def default_cleanup():
         pass
     cron_manager.stop()
     try:
-        from arpvpn.web.router import api_token_store, api_rate_limiter, api_auth_lockouts
+        from arpvpn.web.router import (
+            api_token_store,
+            api_rate_limiter,
+            api_auth_lockouts,
+            api_idempotency_store,
+            api_async_jobs,
+        )
         api_token_store.reset_for_tests()
         api_rate_limiter.reset_for_tests()
         api_auth_lockouts.reset_for_tests()
+        api_idempotency_store.reset_for_tests()
+        api_async_jobs.reset_for_tests()
     except Exception:
         pass
     if current_user:
@@ -88,8 +96,13 @@ def get_testing_app():
     global_properties.setup_required = False
     global_properties.dev_env = True
     from arpvpn.__main__ import app
+    from arpvpn.core.config.wireguard import config as wireguard_config
+    wireguard_config.wg_bin = "/bin/echo"
+    wireguard_config.wg_quick_bin = "/bin/echo"
+    wireguard_config.iptables_bin = "/bin/echo"
     app.config["TESTING"] = True  # nosemgrep: python.flask.security.audit.hardcoded-config.avoid_hardcoded_config_TESTING
     app.config["WTF_CSRF_ENABLED"] = False  # nosemgrep: python.flask.security.audit.wtf-csrf-disabled.flask-wtf-csrf-disabled
+    app.config["API_CSRF_ENABLED"] = False
     return app
 
 

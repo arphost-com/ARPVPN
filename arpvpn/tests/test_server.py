@@ -40,7 +40,7 @@ def test_signup_ko(client):
     response = client.post("/signup", data={"username": "admin", "password": "admin"},
                            follow_redirects=True)
     assert is_http_success(response.status_code)
-    assert not os.path.exists(web_config.credentials_file)
+    assert len(users) == 0
     assert not current_user.is_authenticated
 
 

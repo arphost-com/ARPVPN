@@ -2,6 +2,14 @@
 
 ## What's new
 
+### 1.2.10
+
+* Security: cookie-authenticated API writes now require CSRF tokens from `/api/v1/auth/csrf`; bearer-token API writes are exempt.
+* API Added: admin-only system backup/restore endpoints for config, credentials, tenant, and invitation metadata.
+* API Changed: global TLS mutation is now super-admin only, with tenant-scoped TLS settings available under `/api/v1/tenants/<tenant_id>/tls`.
+* CI/Docs: added API contract test job, OpenAPI examples for auth/system/TLS flows, migration notes, and a threat-model review.
+* Validation: docker02 stable-line full-suite verification pending final backport test.
+
 ### 1.2.9
 
 * API Added: tenant, user, tenant-member, and invitation endpoints for `/api/v1/tenants`, `/api/v1/users`, and `/api/v1/invitations`.
