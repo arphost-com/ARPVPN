@@ -9,7 +9,7 @@
 * API Changed: global TLS mutation is now super-admin only, with tenant-scoped TLS settings available under `/api/v1/tenants/<tenant_id>/tls`.
 * API Added: tenant runtime allocation/status endpoints for separate tenant VPN stacks under `/api/v1/tenants/<tenant_id>/runtime`.
 * CI/Docs: added API contract test job, endpoint-group feature flags, OpenAPI examples for auth/system/TLS flows, migration notes, and a threat-model review.
-* Validation: docker02 multitenant validation will be rerun after the forward-port is finalized.
+* Validation: docker02 multitenant full-suite verification passed on 2026-03-13 (`154 passed, 1 warning`).
 
 ### 2.0.1
 

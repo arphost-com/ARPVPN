@@ -104,5 +104,5 @@ For a full validation run:
 2. Re-clone the required branch into one of the two paths above.
 3. Run validation from that fresh clone with a unique container name, cookie suffix, data directory, and high test ports.
 
-Fresh end-to-end validation was completed on ``2026-03-13`` for ``main`` and on ``2026-03-10`` for
+Fresh end-to-end validation was completed on ``2026-03-13`` for both ``main`` and
 ``codex/multitenant-v2`` from the clean docker02 clones.

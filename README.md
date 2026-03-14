@@ -178,7 +178,7 @@ For a full clean test:
 2. `git clone` the branch back into one of those two paths.
 3. Run validation from that fresh clone rather than creating extra `arpvpn-*` staging directories.
 
-Fresh end-to-end validation on `docker02` was completed on 2026-03-13 for `main` and on 2026-03-10 for `codex/multitenant-v2`.
+Fresh end-to-end validation on `docker02` was completed on 2026-03-13 for both `main` and `codex/multitenant-v2`.
 
 ## Release lines
 
