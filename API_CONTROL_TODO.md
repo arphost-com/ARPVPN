@@ -30,7 +30,7 @@ See also: `MESH_ACL_TODO.md` for dedicated site-to-site mesh and IP access-contr
 - [x] Interface APIs (create/list/get/update/delete/start/stop/restart).
 - [x] Peer APIs (create/list/get/update/delete/download config/QR retrieval).
 - [x] Per-tenant VPN scoping and policy enforcement in all wireguard endpoints.
-- [ ] Container lifecycle API for separate tenant VPN instances (port allocation/status).
+- [x] Container lifecycle API for separate tenant VPN instances (port allocation/status).
 - [x] Safe async job model for long-running operations (apply/restart/regenerate keys).
 
 ## Phase 4: Traffic, Usage, and RRD APIs
@@ -65,7 +65,7 @@ See also: `MESH_ACL_TODO.md` for dedicated site-to-site mesh and IP access-contr
 - [x] Publish OpenAPI docs with examples by role and tenant scope.
 - [x] Add API smoke tests and contract tests in CI.
 - [ ] Add SDK/client generation pipeline (optional but recommended).
-- [ ] Add feature flags to release incrementally per endpoint group.
+- [x] Add feature flags to release incrementally per endpoint group.
 - [x] Define migration notes for legacy UI flows to API-backed operations.
 
 ## Done Criteria

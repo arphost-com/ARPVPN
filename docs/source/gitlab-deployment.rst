@@ -75,6 +75,8 @@ The repository also runs ``api_contract_tests`` as a non-blocking CI job.
 - Validates ``docs/source/api/openapi.v1.yaml``.
 - Runs the focused API/security regression subset from ``scripts/run-api-contract-tests.sh``.
 - Keeps the existing ``unit_tests`` subset as the hard gate while still reporting API drift early.
+- Supports feature-flagged rollout of API groups through environment variables such as
+  ``ARPVPN_FEATURE_API_MESH=0`` or ``ARPVPN_FEATURE_API_WIREGUARD=0``.
 
 Deploying ARPVPN with compose
 -----------------------------
@@ -102,4 +104,5 @@ For a full validation run:
 2. Re-clone the required branch into one of the two paths above.
 3. Run validation from that fresh clone with a unique container name, cookie suffix, data directory, and high test ports.
 
-Fresh end-to-end validation was completed on ``2026-03-10`` for ``codex/multitenant-v2`` from the clean docker02 clone.
+Fresh end-to-end validation was completed on ``2026-03-13`` for ``main`` and on ``2026-03-10`` for
+``codex/multitenant-v2`` from the clean docker02 clones.

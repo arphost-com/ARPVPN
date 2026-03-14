@@ -88,6 +88,16 @@ def get_env_int(name: str, default: int) -> int:
         return default
 
 
+def get_env_bool(name: str, default: bool = True) -> bool:
+    value = str(os.environ.get(name, "1" if default else "0") or "").strip().lower()
+    if value in ("1", "true", "yes", "on"):
+        return True
+    if value in ("0", "false", "no", "off"):
+        return False
+    warning(f"Invalid boolean in env var {name}={value}, using default {default}")
+    return default
+
+
 HIGH_TRAFFIC_THRESHOLD_MB = get_env_int("ARPVPN_HIGH_TRAFFIC_THRESHOLD_MB", 1024)
 HIGH_TRAFFIC_THRESHOLD_BYTES = HIGH_TRAFFIC_THRESHOLD_MB * 1024 * 1024
 RRD_GRAPH_WINDOWS_SECONDS = {
@@ -121,6 +131,18 @@ API_AUTH_SCOPES = (API_AUTH_SCOPE_ALL, API_AUTH_SCOPE_STAFF, API_AUTH_SCOPE_CLIE
 API_CSRF_HEADER_NAMES = ("X-CSRFToken", "X-CSRF-Token")
 API_MUTATING_METHODS = ("POST", "PUT", "PATCH", "DELETE")
 API_BACKUP_FORMAT = "arpvpn-backup-v1"
+API_FEATURE_FLAGS = {
+    "/api/v1/auth": "ARPVPN_FEATURE_API_AUTH",
+    "/api/v1/mesh": "ARPVPN_FEATURE_API_MESH",
+    "/api/v1/stats": "ARPVPN_FEATURE_API_STATS",
+    "/api/v1/system": "ARPVPN_FEATURE_API_SYSTEM",
+    "/api/v1/tls": "ARPVPN_FEATURE_API_TLS",
+    "/api/v1/config": "ARPVPN_FEATURE_API_CONFIG",
+    "/api/v1/tenants": "ARPVPN_FEATURE_API_TENANTS",
+    "/api/v1/users": "ARPVPN_FEATURE_API_TENANTS",
+    "/api/v1/invitations": "ARPVPN_FEATURE_API_TENANTS",
+    "/api/v1/wireguard": "ARPVPN_FEATURE_API_WIREGUARD",
+}
 API_AUTH_PUBLIC_ENDPOINTS = {
     "router.api_auth_issue_token",
     "router.api_auth_refresh_token",
@@ -219,6 +241,13 @@ def is_api_request() -> bool:
     return request.path.startswith("/api/")
 
 
+def get_api_feature_flag_name(path: str) -> str:
+    for prefix, env_name in API_FEATURE_FLAGS.items():
+        if path.startswith(prefix):
+            return env_name
+    return ""
+
+
 def current_scope_label() -> str:
     if current_user.has_role(*STAFF_ROLES):
         return "staff"
@@ -250,6 +279,18 @@ def get_request_id() -> str:
 @router.before_request
 def assign_request_id():
     ensure_request_id()
+
+
+@router.before_request
+def enforce_api_feature_flags():
+    if not is_api_request():
+        return None
+    env_name = get_api_feature_flag_name(request.path)
+    if not env_name:
+        return None
+    if get_env_bool(env_name, True):
+        return None
+    return api_error(NOT_FOUND, "feature_disabled", f"API group disabled by {env_name}.")
 
 
 @router.after_request
@@ -1881,6 +1922,28 @@ def build_tenant_tls_status_payload(tenant: Tenant) -> Dict[str, Any]:
     }
 
 
+def get_tenant_runtime_settings(tenant: Tenant) -> Dict[str, Any]:
+    tenant_settings = copy.deepcopy(getattr(tenant, "settings", {}) or {})
+    runtime_settings = tenant_settings.get("runtime", {})
+    if not isinstance(runtime_settings, dict):
+        runtime_settings = {}
+    normalized = default_tenant_runtime_settings(tenant)
+    normalized.update(parse_tenant_runtime_settings(runtime_settings, tenant))
+    return normalized
+
+
+def build_tenant_runtime_payload(tenant: Tenant) -> Dict[str, Any]:
+    runtime = get_tenant_runtime_settings(tenant)
+    return {
+        "scope": "tenant",
+        "tenant_id": tenant.id,
+        "tenant_name": tenant.name,
+        "runtime": runtime,
+        "control_plane_only": True,
+        "note": "Runtime allocation/status is an ARPVPN control-plane record for separate tenant VPN stacks.",
+    }
+
+
 def system_backup_file_targets() -> Dict[str, str]:
     return {
         "config": config_manager.config_filepath,
@@ -2453,7 +2516,114 @@ def parse_tenant_tls_settings(value: Any) -> Dict[str, Any]:
     return settings
 
 
-def parse_tenant_settings(value: Any) -> Dict[str, Any]:
+def default_tenant_runtime_settings(tenant: Optional[Tenant] = None) -> Dict[str, Any]:
+    slug = slugify_name(getattr(tenant, "slug", "") or getattr(tenant, "name", "") or "tenant")
+    image_tag = str(os.environ.get("ARPVPN_IMAGE", "") or "").strip()
+    return {
+        "allocated": False,
+        "enabled": False,
+        "status": "planned",
+        "desired_state": "stopped",
+        "container_name": f"arpvpn-{slug}" if slug else "arpvpn-tenant",
+        "compose_project_name": f"arpvpn_{slug}" if slug else "arpvpn_tenant",
+        "image_tag": image_tag,
+        "http_port": 0,
+        "https_port": 0,
+        "vpn_port": 0,
+        "notes": "",
+        "control_plane_only": True,
+    }
+
+
+def collect_reserved_tenant_runtime_ports(exclude_tenant_id: str = "") -> Dict[str, set[int]]:
+    reserved = {
+        "http_port": set(),
+        "https_port": set(),
+        "vpn_port": set(),
+    }
+    for tenant in tenants.values():
+        if exclude_tenant_id and tenant.id == exclude_tenant_id:
+            continue
+        runtime = getattr(tenant, "settings", {}) or {}
+        runtime_settings = runtime.get("runtime", {})
+        if not isinstance(runtime_settings, dict):
+            continue
+        for key in reserved.keys():
+            value = runtime_settings.get(key, 0)
+            if isinstance(value, int) and value > 0:
+                reserved[key].add(value)
+    return reserved
+
+
+def allocate_tenant_runtime_ports(tenant: Tenant, current: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    settings = default_tenant_runtime_settings(tenant)
+    if isinstance(current, dict):
+        settings.update(copy.deepcopy(current))
+    reserved = collect_reserved_tenant_runtime_ports(exclude_tenant_id=tenant.id)
+    stride = get_env_int("ARPVPN_TENANT_RUNTIME_PORT_STRIDE", 10)
+    base_http = get_env_int("ARPVPN_TENANT_RUNTIME_HTTP_BASE", 18085)
+    base_https = get_env_int("ARPVPN_TENANT_RUNTIME_HTTPS_BASE", 18086)
+    base_vpn = get_env_int("ARPVPN_TENANT_RUNTIME_VPN_BASE", 51820)
+    index = 0
+    while True:
+        http_port = base_http + (index * stride)
+        https_port = base_https + (index * stride)
+        vpn_port = base_vpn + (index * stride)
+        if (
+            http_port not in reserved["http_port"]
+            and https_port not in reserved["https_port"]
+            and vpn_port not in reserved["vpn_port"]
+        ):
+            settings["http_port"] = http_port
+            settings["https_port"] = https_port
+            settings["vpn_port"] = vpn_port
+            settings["allocated"] = True
+            settings["enabled"] = True
+            settings["status"] = "planned"
+            settings["desired_state"] = "stopped"
+            return settings
+        index += 1
+
+
+def parse_tenant_runtime_settings(value: Any, tenant: Optional[Tenant] = None) -> Dict[str, Any]:
+    settings = default_tenant_runtime_settings(tenant)
+    if value in (None, ""):
+        return settings
+    if not isinstance(value, dict):
+        abort(BAD_REQUEST, "settings.runtime must be an object.")
+    settings.update(copy.deepcopy(value))
+    settings["allocated"] = parse_boolean_value(value.get("allocated", settings["allocated"]), settings["allocated"])
+    settings["enabled"] = parse_boolean_value(value.get("enabled", settings["enabled"]), settings["enabled"])
+    status = str(value.get("status", settings["status"]) or "").strip().lower()
+    desired_state = str(value.get("desired_state", settings["desired_state"]) or "").strip().lower()
+    if status not in ("planned", "running", "stopped", "error"):
+        abort(BAD_REQUEST, "settings.runtime.status is invalid.")
+    if desired_state not in ("running", "stopped", "restarting"):
+        abort(BAD_REQUEST, "settings.runtime.desired_state is invalid.")
+    settings["status"] = status
+    settings["desired_state"] = desired_state
+    settings["container_name"] = str(value.get("container_name", settings["container_name"]) or "").strip() or settings["container_name"]
+    settings["compose_project_name"] = str(
+        value.get("compose_project_name", settings["compose_project_name"]) or ""
+    ).strip() or settings["compose_project_name"]
+    settings["image_tag"] = str(value.get("image_tag", settings["image_tag"]) or "").strip()
+    settings["notes"] = str(value.get("notes", settings["notes"]) or "").strip()
+    for field_name in ("http_port", "https_port", "vpn_port"):
+        settings[field_name] = parse_integer_value(
+            value.get(field_name, settings[field_name]),
+            f"settings.runtime.{field_name}",
+            minimum=0,
+            maximum=65535,
+        )
+    reserved = collect_reserved_tenant_runtime_ports(exclude_tenant_id=getattr(tenant, "id", ""))
+    for field_name in ("http_port", "https_port", "vpn_port"):
+        port = settings[field_name]
+        if port > 0 and port in reserved[field_name]:
+            abort(CONFLICT, f"settings.runtime.{field_name} is already allocated to another tenant.")
+    return settings
+
+
+def parse_tenant_settings(value: Any, tenant: Optional[Tenant] = None) -> Dict[str, Any]:
     if value in (None, ""):
         return {
             "branding": {},
@@ -2461,6 +2631,7 @@ def parse_tenant_settings(value: Any) -> Dict[str, Any]:
             "defaults": {},
             "dns_servers": [],
             "tls": default_tenant_tls_settings(),
+            "runtime": default_tenant_runtime_settings(),
         }
     if not isinstance(value, dict):
         abort(BAD_REQUEST, "settings must be an object.")
@@ -2476,12 +2647,14 @@ def parse_tenant_settings(value: Any) -> Dict[str, Any]:
         except ValueError:
             abort(BAD_REQUEST, f"Invalid DNS server entry: {dns_value}")
     tls_settings = parse_tenant_tls_settings(value.get("tls", {}))
+    runtime_settings = parse_tenant_runtime_settings(value.get("runtime", {}), tenant)
     return {
         "branding": copy.deepcopy(branding),
         "limits": copy.deepcopy(limits),
         "defaults": copy.deepcopy(defaults),
         "dns_servers": dns_servers,
         "tls": tls_settings,
+        "runtime": runtime_settings,
     }
 
 
@@ -3622,8 +3795,9 @@ def api_create_tenant():
         ips=parse_ip_metadata(payload.get("ips", [])),
         status=parse_tenant_status(payload.get("status", Tenant.STATUS_ACTIVE)),
         description=parse_optional_string(payload.get("description")),
-        settings=parse_tenant_settings(payload.get("settings", {})),
+        settings={},
     )
+    tenant.settings = parse_tenant_settings(payload.get("settings", {}), tenant)
     tenants[tenant.id] = tenant
     tenants.sort()
     config_manager.save_identity_state()
@@ -3658,7 +3832,7 @@ def api_update_tenant(tenant_id: str):
     tenant.ips = parse_ip_metadata(payload.get("ips", tenant.ips))
     tenant.status = parse_tenant_status(payload.get("status", tenant.status))
     tenant.description = parse_optional_string(payload.get("description", tenant.description))
-    tenant.settings = parse_tenant_settings(payload.get("settings", getattr(tenant, "settings", {})))
+    tenant.settings = parse_tenant_settings(payload.get("settings", getattr(tenant, "settings", {})), tenant)
     tenant.touch()
     tenants.sort()
     config_manager.save_identity_state()
@@ -5643,10 +5817,10 @@ def api_update_tenant_config(tenant_id: str):
     if settings_payload is None:
         settings_payload = {
             key: payload.get(key)
-            for key in ("branding", "limits", "defaults", "dns_servers", "tls")
+            for key in ("branding", "limits", "defaults", "dns_servers", "tls", "runtime")
             if key in payload
         }
-    tenant.settings = parse_tenant_settings(settings_payload)
+    tenant.settings = parse_tenant_settings(settings_payload, tenant)
     tenant.touch()
     tenants.sort()
     config_manager.save_identity_state()
@@ -5688,13 +5862,121 @@ def api_update_tenant_tls_status(tenant_id: str):
     tls_payload = payload.get("tls", payload)
     current_settings = copy.deepcopy(getattr(tenant, "settings", {}) or {})
     current_settings["tls"] = parse_tenant_tls_settings(tls_payload)
-    tenant.settings = parse_tenant_settings(current_settings)
+    tenant.settings = parse_tenant_settings(current_settings, tenant)
     tenant.touch()
     tenants.sort()
     config_manager.save_identity_state()
     response_payload = build_tenant_tls_status_payload(tenant)
     store_idempotency_response(response_payload, 200)
     log_audit_event("config.tenant.tls.update", details={"tenant_id": tenant.id})
+    return api_success(response_payload)
+
+
+@router.route("/api/v1/tenants/<tenant_id>/runtime", methods=["GET"])
+@login_required
+@role_required(*USER_MANAGEMENT_ROLES)
+@setup_required
+def api_get_tenant_runtime(tenant_id: str):
+    tenant = get_tenant_or_404(tenant_id)
+    if not tenant_visible_to_actor(tenant):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    return api_success(build_tenant_runtime_payload(tenant))
+
+
+@router.route("/api/v1/tenants/<tenant_id>/runtime", methods=["PUT"])
+@login_required
+@role_required(*USER_MANAGEMENT_ROLES)
+@setup_required
+def api_update_tenant_runtime(tenant_id: str):
+    replay = parse_idempotency_replay()
+    if replay:
+        return api_success(replay[0], status_code=replay[1], meta={"idempotent_replay": True})
+    tenant = get_tenant_or_404(tenant_id)
+    actor = current_actor()
+    if not tenant_visible_to_actor(tenant):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    if actor and actor.has_role(User.ROLE_SUPPORT):
+        abort(FORBIDDEN, "Support users cannot update tenant runtime configuration.")
+    payload = parse_json_payload()
+    runtime_payload = payload.get("runtime", payload)
+    current_settings = copy.deepcopy(getattr(tenant, "settings", {}) or {})
+    current_settings["runtime"] = parse_tenant_runtime_settings(runtime_payload, tenant)
+    tenant.settings = parse_tenant_settings(current_settings, tenant)
+    tenant.touch()
+    tenants.sort()
+    config_manager.save_identity_state()
+    response_payload = build_tenant_runtime_payload(tenant)
+    store_idempotency_response(response_payload, 200)
+    log_audit_event("config.tenant.runtime.update", details={"tenant_id": tenant.id})
+    return api_success(response_payload)
+
+
+@router.route("/api/v1/tenants/<tenant_id>/runtime/allocate", methods=["POST"])
+@login_required
+@role_required(*USER_MANAGEMENT_ROLES)
+@setup_required
+def api_allocate_tenant_runtime(tenant_id: str):
+    replay = parse_idempotency_replay()
+    if replay:
+        return api_success(replay[0], status_code=replay[1], meta={"idempotent_replay": True})
+    tenant = get_tenant_or_404(tenant_id)
+    actor = current_actor()
+    if not tenant_visible_to_actor(tenant):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    if actor and actor.has_role(User.ROLE_SUPPORT):
+        abort(FORBIDDEN, "Support users cannot allocate tenant runtime configuration.")
+    current_settings = copy.deepcopy(getattr(tenant, "settings", {}) or {})
+    allocated_runtime = allocate_tenant_runtime_ports(tenant, current_settings.get("runtime", {}))
+    current_settings["runtime"] = allocated_runtime
+    tenant.settings = parse_tenant_settings(current_settings, tenant)
+    tenant.touch()
+    tenants.sort()
+    config_manager.save_identity_state()
+    response_payload = build_tenant_runtime_payload(tenant)
+    store_idempotency_response(response_payload, 200)
+    log_audit_event("config.tenant.runtime.allocate", details={"tenant_id": tenant.id})
+    return api_success(response_payload)
+
+
+@router.route("/api/v1/tenants/<tenant_id>/runtime/<action>", methods=["POST"])
+@login_required
+@role_required(*USER_MANAGEMENT_ROLES)
+@setup_required
+def api_control_tenant_runtime(tenant_id: str, action: str):
+    replay = parse_idempotency_replay()
+    if replay:
+        return api_success(replay[0], status_code=replay[1], meta={"idempotent_replay": True})
+    tenant = get_tenant_or_404(tenant_id)
+    actor = current_actor()
+    if not tenant_visible_to_actor(tenant):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    if actor and actor.has_role(User.ROLE_SUPPORT):
+        abort(FORBIDDEN, "Support users cannot change tenant runtime state.")
+    runtime = get_tenant_runtime_settings(tenant)
+    operation = str(action or "").strip().lower()
+    if operation == "start":
+        runtime["desired_state"] = "running"
+        runtime["status"] = "running"
+        runtime["enabled"] = True
+    elif operation == "stop":
+        runtime["desired_state"] = "stopped"
+        runtime["status"] = "stopped"
+    elif operation == "restart":
+        runtime["desired_state"] = "restarting"
+        runtime["status"] = "planned"
+        runtime["enabled"] = True
+    else:
+        abort(BAD_REQUEST, "action must be start, stop, or restart.")
+    current_settings = copy.deepcopy(getattr(tenant, "settings", {}) or {})
+    current_settings["runtime"] = runtime
+    tenant.settings = parse_tenant_settings(current_settings, tenant)
+    tenant.touch()
+    tenants.sort()
+    config_manager.save_identity_state()
+    response_payload = build_tenant_runtime_payload(tenant)
+    response_payload["requested_action"] = operation
+    store_idempotency_response(response_payload, 200)
+    log_audit_event("config.tenant.runtime.control", details={"tenant_id": tenant.id, "action": operation})
     return api_success(response_payload)
 
 

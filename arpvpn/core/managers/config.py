@@ -109,7 +109,10 @@ class ConfigManager:
 
     def reload_from_disk(self):
         self.__load_config__()
-        from arpvpn.core.managers.tenancy import tenancy_manager
+        try:
+            from arpvpn.core.managers.tenancy import tenancy_manager
+        except ModuleNotFoundError:
+            return
         tenancy_manager.initialize(
             legacy_users=users,
             legacy_interfaces=wireguard_config.interfaces,

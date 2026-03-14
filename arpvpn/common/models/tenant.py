@@ -40,6 +40,7 @@ def normalize_settings_dict(values: Any) -> Dict[str, Any]:
             "defaults": {},
             "dns_servers": [],
             "tls": {},
+            "runtime": {},
         }
     normalized = {
         "branding": values.get("branding", {}) if isinstance(values.get("branding", {}), dict) else {},
@@ -47,6 +48,7 @@ def normalize_settings_dict(values: Any) -> Dict[str, Any]:
         "defaults": values.get("defaults", {}) if isinstance(values.get("defaults", {}), dict) else {},
         "dns_servers": normalize_string_list(values.get("dns_servers", [])),
         "tls": values.get("tls", {}) if isinstance(values.get("tls", {}), dict) else {},
+        "runtime": values.get("runtime", {}) if isinstance(values.get("runtime", {}), dict) else {},
     }
     return normalized
 
