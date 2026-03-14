@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: ARPVPN API
-  version: "2.0.1"
+  version: "2.0.2"
   description: >
     Source-of-truth OpenAPI document for ARPVPN v1 API endpoints.
 servers:
@@ -510,6 +510,124 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
+  /api/v1/tenants/{tenant_id}/runtime:
+    get:
+      tags: [Tenants]
+      operationId: getTenantRuntime
+      summary: Read tenant runtime allocation and status.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: tenant_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tenant runtime metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSuccessEnvelope"
+    put:
+      tags: [Tenants]
+      operationId: updateTenantRuntime
+      summary: Update tenant runtime allocation and desired state.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: tenant_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                http_port:
+                  type: integer
+                https_port:
+                  type: integer
+                vpn_port:
+                  type: integer
+                container_name:
+                  type: string
+                compose_project_name:
+                  type: string
+                desired_state:
+                  type: string
+                  enum: [running, stopped, restarting]
+            examples:
+              runtimeUpdate:
+                value:
+                  http_port: 18085
+                  https_port: 18086
+                  vpn_port: 51820
+                  container_name: arpvpn-tenant-one
+                  compose_project_name: arpvpn_tenant_one
+                  desired_state: running
+      responses:
+        "200":
+          description: Tenant runtime updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSuccessEnvelope"
+  /api/v1/tenants/{tenant_id}/runtime/allocate:
+    post:
+      tags: [Tenants]
+      operationId: allocateTenantRuntime
+      summary: Allocate a default runtime port set for a tenant.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: tenant_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Runtime ports allocated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSuccessEnvelope"
+  /api/v1/tenants/{tenant_id}/runtime/{action}:
+    post:
+      tags: [Tenants]
+      operationId: controlTenantRuntime
+      summary: Update the requested runtime action for a tenant stack.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - in: path
+          name: tenant_id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: action
+          required: true
+          schema:
+            type: string
+            enum: [start, stop, restart]
+      responses:
+        "200":
+          description: Requested runtime action stored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiSuccessEnvelope"
 components:
   securitySchemes:
     bearerAuth:

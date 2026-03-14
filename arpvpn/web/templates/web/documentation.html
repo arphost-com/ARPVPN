@@ -222,9 +222,12 @@ curl -X POST /api/v1/mesh/policies \
                             <p class="mb-0">
                                 If redirect is enabled, use HTTPS consistently. If redirect is disabled, both HTTP and HTTPS can remain available on the configured ports.
                             </p>
-                            <p class="mt-3 mb-0 text-muted">
-                                Global TLS changes are super-admin only. Tenant admins can store tenant-scoped TLS intent through the API for separate tenant runtime stacks.
-                            </p>
+                    <p class="mt-3 mb-0 text-muted">
+                        Global TLS changes are super-admin only. Tenant admins can store tenant-scoped TLS intent through the API for separate tenant runtime stacks.
+                    </p>
+                    <p class="mt-3 mb-0 text-muted">
+                        Separate tenant runtime planning is exposed through <code>/api/v1/tenants/&lt;tenant_id&gt;/runtime</code> for port allocation and desired-state tracking.
+                    </p>
                         </div>
                     </div>
                 </div>
@@ -263,6 +266,7 @@ curl -X POST /api/v1/mesh/policies \
                                 <li>Cookie-authenticated API writes require a CSRF token from <code>GET /api/v1/auth/csrf</code>.</li>
                                 <li>Bearer-token clients use <code>POST /api/v1/auth/token</code> and do not need API CSRF headers.</li>
                                 <li>Super admins can export or restore snapshots with <code>/api/v1/system/backup</code> and <code>/api/v1/system/restore</code>.</li>
+                                <li>API groups can be feature-flagged with environment variables like <code>ARPVPN_FEATURE_API_MESH=0</code>.</li>
                             </ul>
                             <p class="mb-0">
                                 Container lifecycle and a few remaining rollout items are still in progress.

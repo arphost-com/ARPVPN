@@ -9,7 +9,7 @@ ARPVPN exposes a hybrid API under `/api/v1`.
 - It is not a pure REST API.
 - It is partly resource-oriented and partly action/RPC-oriented.
 - It is usable today for auth, tenant/user lifecycle, WireGuard control, mesh control, stats/traffic, themes, TLS, and system/config operations.
-- It now includes admin backup/restore and tenant-scoped TLS settings APIs.
+- It now includes admin backup/restore, tenant-scoped TLS settings, and tenant runtime allocation/status APIs.
 - It is still not a full control-plane API for container lifecycle or separate tenant runtime lifecycle.
 
 ## API Style
@@ -178,8 +178,25 @@ Status:
 - Admins can manage tenants, tenant-admin accounts, and global user state.
 - Support users are restricted to client-user operations.
 - Tenant admins are restricted to client-user and invitation operations inside their assigned tenant.
+- Tenant admins can also manage tenant-scoped TLS intent and tenant runtime allocation/status for their assigned tenant.
 - Bulk import/export APIs are available with role-safe validation and idempotency support.
 - Tenant isolation is enforced in API visibility and management helpers and covered by integration tests.
+
+### Tenant runtime control
+
+Implemented:
+
+- `GET /api/v1/tenants/<tenant_id>/runtime`
+- `PUT /api/v1/tenants/<tenant_id>/runtime`
+- `POST /api/v1/tenants/<tenant_id>/runtime/allocate`
+- `POST /api/v1/tenants/<tenant_id>/runtime/<action>`
+
+Status:
+
+- Provides container/runtime planning metadata for separate tenant VPN stacks.
+- Allocates unique HTTP/HTTPS/VPN host ports across tenants.
+- Stores desired state and status as ARPVPN control-plane intent.
+- Does not directly call Docker or Compose; external deployment automation still applies the plan.
 
 ### WireGuard control
 
@@ -232,6 +249,7 @@ Status:
 - Admin-only backup export and restore are available, with restore dry-run validation and rollback on failed reload.
 - Audit events are readable from structured log entries.
 - Health/version/diagnostics endpoints are available for automation and support workflows.
+- API groups can be toggled with feature flags such as `ARPVPN_FEATURE_API_MESH=0` or `ARPVPN_FEATURE_API_WIREGUARD=0`.
 
 ## UI Features Still Missing API Coverage
 

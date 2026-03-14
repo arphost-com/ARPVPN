@@ -30,6 +30,7 @@ This document maps legacy UI flows to the API surface so automation and future U
 - Global web/TLS settings map to `GET/PUT /api/v1/config/global` and `POST /api/v1/tls/*`.
 - Tenant branding/defaults/DNS settings map to `GET/PUT /api/v1/tenants/<tenant_id>/config`.
 - Tenant-scoped TLS intent now maps to `GET /api/v1/tenants/<tenant_id>/tls/status` and `PUT /api/v1/tenants/<tenant_id>/tls`.
+- Tenant runtime planning now maps to `GET/PUT /api/v1/tenants/<tenant_id>/runtime` plus `POST /runtime/allocate`.
 
 ## Stats and observability
 
