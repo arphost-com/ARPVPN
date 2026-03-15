@@ -86,7 +86,9 @@ def test_admin_can_read_and_update_global_config_and_audit_log(client):
 
     audit_response = client.get("/api/v1/audit/events?limit=10&action=config.global.update")
     assert audit_response.status_code == 200
-    assert audit_response.get_json()["data"]["total"] >= 1
+    audit_payload = audit_response.get_json()["data"]
+    assert audit_payload["total"] >= 1
+    assert audit_payload["items"][0]["signature_valid"] is True
 
 
 def test_tenant_admin_can_manage_own_tenant_config_but_not_global_config(client):

@@ -57,19 +57,19 @@ See also: `MESH_ACL_TODO.md` for dedicated site-to-site mesh and IP access-contr
 ## Phase 7: Security and Hardening
 - [x] Idempotency key support for create/update operations.
 - [x] CSRF protection policy for cookie-auth API calls.
-- [ ] Input validation schemas for every endpoint.
+- [x] Input validation schemas for every endpoint.
 - [x] Structured authorization tests for each role/action combination.
 - [x] Threat-model review for impersonation, tenant boundaries, and key material handling.
 
 ## Phase 8: Developer Experience and Rollout
 - [x] Publish OpenAPI docs with examples by role and tenant scope.
 - [x] Add API smoke tests and contract tests in CI.
-- [ ] Add SDK/client generation pipeline (optional but recommended).
+- [x] Add SDK/client generation pipeline (optional but recommended).
 - [x] Add feature flags to release incrementally per endpoint group.
 - [x] Define migration notes for legacy UI flows to API-backed operations.
 
 ## Done Criteria
-- [ ] Every UI operation has a matching API endpoint.
-- [ ] Role and tenant boundaries are enforced and tested end-to-end.
-- [ ] API docs and examples are complete and versioned.
+- [x] Every UI operation has a matching API endpoint.
+- [x] Role and tenant boundaries are enforced and tested end-to-end.
+- [x] API docs and examples are complete and versioned.
 - [x] Both release lines have clear backport/cherry-pick guidance for API changes.

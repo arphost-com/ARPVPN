@@ -105,6 +105,14 @@ def test_mesh_api_crud_dry_run_export_import(client):
     assert counts["route_advertisements"] == 1
     assert counts["access_policies"] == 1
 
+    diagnostics = client.get("/api/v1/mesh/diagnostics")
+    assert is_http_success(diagnostics.status_code)
+    diagnostics_body = diagnostics.get_json()
+    assert diagnostics_body["ok"] is True
+    assert diagnostics_body["data"]["counts"]["planned_pairs"] >= 1
+    assert diagnostics_body["data"]["recent_events"][0]["action"].startswith("mesh.")
+    assert diagnostics_body["data"]["recent_events"][0]["signature_valid"] is True
+
     exported = client.get("/api/v1/mesh/export")
     assert is_http_success(exported.status_code)
     export_body = exported.get_json()
@@ -124,6 +132,25 @@ def test_mesh_api_crud_dry_run_export_import(client):
     import_body = imported.get_json()
     assert import_body["ok"] is True
     assert import_body["data"]["imported"] is True
+
+    plan_response = client.get("/api/v1/mesh/plan")
+    assert is_http_success(plan_response.status_code)
+    plan_body = plan_response.get_json()
+    assert plan_body["ok"] is True
+    assert plan_body["data"]["plan"]["counts"]["planned_pairs"] >= 1
+
+    simulate_response = client.post(
+        "/api/v1/mesh/policy-simulate",
+        json={
+            "source_kind": "server",
+            "source_id": "edge-a",
+            "destination": "10.55.0.12",
+        },
+    )
+    assert is_http_success(simulate_response.status_code)
+    simulate_body = simulate_response.get_json()
+    assert simulate_body["ok"] is True
+    assert "action" in simulate_body["data"]["result"]
 
     delete_policy = client.delete(f"/api/v1/mesh/policies/{policy_uuid}")
     assert is_http_success(delete_policy.status_code)

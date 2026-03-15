@@ -2,6 +2,14 @@
 
 ## What's new
 
+### 1.2.11
+
+* Mesh UI Added: new `/mesh` control page with quick site-to-site and full-mesh wizards, route/policy management, diagnostics, and signed event review.
+* Mesh API Added: `GET /api/v1/mesh/diagnostics` for route propagation, plan rollups, policy summary, and recent mesh audit events.
+* Security: mesh and ACL rollout flags are now separated with `ARPVPN_FEATURE_MESH_V1` and `ARPVPN_FEATURE_ACL_V1`.
+* Security: mesh/config audit records now include signed event payloads and immediate in-memory availability for fresh installs and test runs.
+* Validation: docker02 stable mesh/system/UI regression subset passed on 2026-03-15 (`21 passed, 1 warning`), and generated OpenAPI now covers `115` live operations.
+
 ### 1.2.10
 
 * Security: cookie-authenticated API writes now require CSRF tokens from `/api/v1/auth/csrf`; bearer-token API writes are exempt.

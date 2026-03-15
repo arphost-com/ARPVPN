@@ -17,11 +17,13 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
 * Encrypted user credentials (AES).
 * Multi-user roles (`admin`, `support`, `client`) with staff impersonation of client sessions for troubleshooting.
 * API v1 with cookie/session and bearer token auth modes, plus mesh control-plane APIs.
+* Dedicated Mesh page for site-to-site and full-mesh planning, route/policy controls, diagnostics, and signed mesh event review.
 * Easy management through the ``arpvpn`` systemd service.
 
 ## API docs
 
 * OpenAPI source: `docs/source/api/openapi.v1.yaml`
+* Generated Python SDK: `sdk/python`
 * Versioning policy: `API_VERSIONING.md`
 * API changelog process: `API_CHANGELOG_PROCESS.md`
 * Migration notes: `API_MIGRATION_NOTES.md`
@@ -30,6 +32,13 @@ ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireG
 Cookie-authenticated API writes require a CSRF token from `GET /api/v1/auth/csrf`.
 Bearer-token API requests do not require that CSRF header.
 Tenant runtime planning for separate VPN stacks is exposed under `/api/v1/tenants/<tenant_id>/runtime`.
+System/profile/setup parity APIs are exposed under `/api/v1/system/*`, `/api/v1/profile`, `/api/v1/setup/status`, and `/api/v1/setup/bootstrap`.
+Mesh planning, diagnostics, and policy simulation are exposed under `/api/v1/mesh/plan`, `/api/v1/mesh/diagnostics`, and `/api/v1/mesh/policy-simulate`.
+Regenerate the contract artifacts with:
+```bash
+python3 scripts/generate_openapi.py
+python3 scripts/generate_sdk.py
+```
 
 ## Installation
 
@@ -162,6 +171,8 @@ Project CI builds and publishes ``arpvpn`` image to GitLab Container Registry.
    the OpenAPI document plus the focused API/security regression subset.
 6. API endpoint groups can be toggled with environment flags such as
    ``ARPVPN_FEATURE_API_MESH=0`` or ``ARPVPN_FEATURE_API_WIREGUARD=0`` for staged rollout.
+7. Mesh rollout can be split from API rollout with
+   ``ARPVPN_FEATURE_MESH_V1=0`` and ``ARPVPN_FEATURE_ACL_V1=0``.
 
 For full setup details, see ``docs/source/gitlab-deployment.rst``.
 
@@ -178,7 +189,8 @@ For a full clean test:
 2. `git clone` the branch back into one of those two paths.
 3. Run validation from that fresh clone rather than creating extra `arpvpn-*` staging directories.
 
-Fresh end-to-end validation on `docker02` was completed on 2026-03-13 for `main` and on 2026-03-10 for `codex/multitenant-v2`.
+Latest docker02 API/mesh regression validation completed on 2026-03-15 for both `main` and `codex/multitenant-v2`.
+Earlier fresh clean-clone validation completed on 2026-03-13 for `main` and on 2026-03-10 for `codex/multitenant-v2`.
 
 ## Release lines
 

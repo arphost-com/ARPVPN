@@ -25,6 +25,13 @@ const proxyIncomingHostname = document.getElementById("web_proxy_incoming_hostna
 const redirectHttpToHttps = document.getElementById("web_redirect_http_to_https");
 const generateSelfSigned = document.getElementById("web_tls_generate_self_signed");
 const issueLetsencrypt = document.getElementById("web_tls_issue_letsencrypt");
+const restartAppButton = document.getElementById("restartAppButton");
+const restartAppStatus = document.getElementById("restartAppStatus");
+
+function getCsrfToken() {
+    const meta = document.querySelector("meta[name='arpvpn-csrf-token']");
+    return meta ? (meta.getAttribute("content") || "").trim() : "";
+}
 
 function setDisabled(el, disabled) {
     if (!el) {
@@ -65,4 +72,48 @@ function syncTlsForm() {
 if (tlsMode) {
     tlsMode.addEventListener("change", syncTlsForm);
     syncTlsForm();
+}
+
+if (restartAppButton) {
+    restartAppButton.addEventListener("click", async function () {
+        restartAppButton.disabled = true;
+        if (restartAppStatus) {
+            restartAppStatus.hidden = false;
+            restartAppStatus.classList.remove("text-danger");
+            restartAppStatus.classList.add("text-muted");
+            restartAppStatus.textContent = "Submitting restart request...";
+        }
+        try {
+            const response = await fetch(restartAppButton.dataset.endpoint || "/api/v1/system/restart", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "X-CSRFToken": getCsrfToken()
+                },
+                body: JSON.stringify({
+                    reason: "Apply settings changes",
+                    mode: "auto",
+                    delay_seconds: 1
+                })
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) {
+                throw new Error((payload.error && payload.error.message) || "Restart request failed.");
+            }
+            if (restartAppStatus) {
+                restartAppStatus.classList.remove("text-danger");
+                restartAppStatus.classList.add("text-muted");
+                restartAppStatus.textContent = `Restart requested via ${payload.data.mode}.`;
+            }
+        } catch (error) {
+            if (restartAppStatus) {
+                restartAppStatus.classList.remove("text-muted");
+                restartAppStatus.classList.add("text-danger");
+                restartAppStatus.textContent = error.message || "Restart request failed.";
+            }
+            restartAppButton.disabled = false;
+        }
+    });
 }
