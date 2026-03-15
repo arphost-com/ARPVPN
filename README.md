@@ -7,7 +7,7 @@
 
 ARPVPN aims to provide a clean, simple yet powerful web GUI to manage your WireGuard server, and it's powered by Flask.
 
-**[Read the docs](https://github.com/arphost-com/ARPVPN/tree/codex/multitenant-v2/docs) for further information!**
+**[Read the docs](https://github.com/arphost-com/ARPVPN/tree/main/docs) for further information!**
 
 ## Key features
 
@@ -162,9 +162,9 @@ Project CI builds and publishes ``arpvpn`` image to GitLab Container Registry.
 
 1. Ensure project runner is Docker executor with ``privileged = true``.
 2. Ensure Container Registry is enabled in GitLab.
-3. Push by release line to publish (only after ``unit_tests`` CI job passes):
-   * ``main`` + ``v1.*`` tags publish ``stable``/``1.2.x`` and commit/tag images.
-   * ``codex/multitenant-v2`` + ``v2.*`` tags publish ``v2-latest`` and commit/tag images.
+3. Push to default branch to publish (only after the required `unit_tests` CI job passes):
+   * ``$CI_REGISTRY_IMAGE:stable``
+   * ``$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA``
 4. Optional environment/integration tests can be run by setting pipeline variable
    ``RUN_ENV_INTEGRATION_TESTS=1`` (non-blocking; informative only).
 5. Optional API contract tests run as ``api_contract_tests`` (non-blocking) and validate
@@ -189,7 +189,8 @@ For a full clean test:
 2. `git clone` the branch back into one of those two paths.
 3. Run validation from that fresh clone rather than creating extra `arpvpn-*` staging directories.
 
-Fresh end-to-end validation on `docker02` was completed on 2026-03-13 for both `main` and `codex/multitenant-v2`.
+Latest docker02 API/mesh regression validation completed on 2026-03-15 for both `main` and `codex/multitenant-v2`.
+Earlier fresh clean-clone validation completed on 2026-03-13 for `main` and on 2026-03-10 for `codex/multitenant-v2`.
 
 ## Release lines
 
