@@ -3,10 +3,12 @@ import copy
 import io
 import base64
 import hashlib
+import hmac
 import ipaddress
 import json
 import os
 import re
+import signal
 import secrets
 import subprocess
 from collections import deque
@@ -15,6 +17,7 @@ from functools import wraps
 from http.client import BAD_REQUEST, NOT_FOUND, INTERNAL_SERVER_ERROR, UNAUTHORIZED, NO_CONTENT, FORBIDDEN, CONFLICT, ACCEPTED
 from ipaddress import IPv4Address
 from logging import warning, debug, error, info
+from threading import Thread
 from time import sleep
 from typing import List, Dict, Any, Union, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
@@ -40,6 +43,7 @@ from arpvpn.core.config.wireguard import config as wireguard_config
 from arpvpn.core.drivers.traffic_storage_driver import TrafficData
 from arpvpn.core.exceptions import WireguardError
 from arpvpn.core.mesh import MeshTopology, VPNLink, RouteAdvertisement, AccessPolicy
+from arpvpn.core.mesh_planner import build_mesh_plan, evaluate_access_policy
 from arpvpn.core.managers.config import config_manager
 from arpvpn.core.managers.tls import tls_manager
 from arpvpn.core.models import interfaces, Interface, get_all_peers, Peer
@@ -54,6 +58,10 @@ from arpvpn.web.security_api import (
     IdempotencyStore,
     AsyncJobStore,
 )
+from arpvpn.web.api_schema import (
+    ApiSchemaValidationError,
+    get_api_request_schema,
+)
 from arpvpn.web.static.assets.resources import EMPTY_FIELD, APP_NAME
 from arpvpn.web.validators import is_valid_tls_server_name
 
@@ -65,6 +73,7 @@ ALLOWED_NEXT_ENDPOINTS = {
     "/statistics": "router.statistics",
     "/network": "router.network",
     "/wireguard": "router.wireguard",
+    "/mesh": "router.mesh",
     "/settings": "router.settings",
     "/users": "router.manage_users",
     "/themes": "router.themes",
@@ -138,6 +147,10 @@ API_FEATURE_FLAGS = {
     "/api/v1/system": "ARPVPN_FEATURE_API_SYSTEM",
     "/api/v1/tls": "ARPVPN_FEATURE_API_TLS",
     "/api/v1/config": "ARPVPN_FEATURE_API_CONFIG",
+    "/api/v1/profile": "ARPVPN_FEATURE_API_SYSTEM",
+    "/api/v1/network": "ARPVPN_FEATURE_API_SYSTEM",
+    "/api/v1/about": "ARPVPN_FEATURE_API_SYSTEM",
+    "/api/v1/setup": "ARPVPN_FEATURE_API_SYSTEM",
     "/api/v1/tenants": "ARPVPN_FEATURE_API_TENANTS",
     "/api/v1/users": "ARPVPN_FEATURE_API_TENANTS",
     "/api/v1/invitations": "ARPVPN_FEATURE_API_TENANTS",
@@ -147,6 +160,9 @@ API_AUTH_PUBLIC_ENDPOINTS = {
     "router.api_auth_issue_token",
     "router.api_auth_refresh_token",
 }
+MESH_V1_FEATURE_FLAG = "ARPVPN_FEATURE_MESH_V1"
+ACL_V1_FEATURE_FLAG = "ARPVPN_FEATURE_ACL_V1"
+AUDIT_SIGNATURE_ALGORITHM = "hmac-sha256"
 BENIGN_LOG_ISSUE_PATTERNS = (
     "failed to run 'ip a | grep -w",
     "already down.",
@@ -157,6 +173,7 @@ api_rate_limiter = SlidingWindowRateLimiter()
 api_auth_lockouts = AuthLockoutManager()
 api_idempotency_store = IdempotencyStore()
 api_async_jobs = AsyncJobStore()
+recent_audit_events_memory: deque[Dict[str, Any]] = deque(maxlen=500)
 PROCESS_STARTED_AT = datetime.now(timezone.utc)
 
 
@@ -256,6 +273,14 @@ def current_scope_label() -> str:
     return "client"
 
 
+def mesh_v1_enabled() -> bool:
+    return get_env_bool(MESH_V1_FEATURE_FLAG, True)
+
+
+def acl_v1_enabled() -> bool:
+    return get_env_bool(ACL_V1_FEATURE_FLAG, True)
+
+
 def should_use_secure_cookie() -> bool:
     configured_secure = bool(current_app.config.get("SESSION_COOKIE_SECURE", False))
     return configured_secure or bool(web_config.strict_https_mode)
@@ -291,6 +316,20 @@ def enforce_api_feature_flags():
     if get_env_bool(env_name, True):
         return None
     return api_error(NOT_FOUND, "feature_disabled", f"API group disabled by {env_name}.")
+
+
+@router.before_request
+def enforce_mesh_rollout_flags():
+    path = request.path
+    if path == "/mesh" or path.startswith("/api/v1/mesh"):
+        if not mesh_v1_enabled():
+            if is_api_request():
+                return api_error(NOT_FOUND, "feature_disabled", f"Mesh features disabled by {MESH_V1_FEATURE_FLAG}.")
+            abort(NOT_FOUND)
+    if path.startswith("/api/v1/mesh/policies") or path.startswith("/api/v1/mesh/policy-simulate"):
+        if not acl_v1_enabled():
+            return api_error(NOT_FOUND, "feature_disabled", f"ACL features disabled by {ACL_V1_FEATURE_FLAG}.")
+    return None
 
 
 @router.after_request
@@ -391,8 +430,10 @@ def build_rbac_matrix() -> Dict[str, Dict[str, bool]]:
 
 
 def log_audit_event(action: str, status: str = "success", details: Optional[Dict[str, Any]] = None):
+    created_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     actor = current_actor()
     payload: Dict[str, Any] = {
+        "created_at": created_at,
         "request_id": get_request_id(),
         "action": action,
         "status": status,
@@ -404,7 +445,42 @@ def log_audit_event(action: str, status: str = "success", details: Optional[Dict
     }
     if details:
         payload["details"] = details
+    signature = sign_audit_payload(payload)
+    if signature:
+        payload["signature_alg"] = AUDIT_SIGNATURE_ALGORITHM
+        payload["signature"] = signature
+    memory_payload = dict(payload)
+    memory_payload["signature_valid"] = bool(signature)
+    recent_audit_events_memory.append(memory_payload)
     info(f"[AUDIT] {json.dumps(payload, sort_keys=True)}")
+
+
+def get_audit_signing_key() -> bytes:
+    configured_key = str(os.environ.get("ARPVPN_AUDIT_SIGNING_KEY", "") or "").strip()
+    if configured_key:
+        return configured_key.encode("utf-8")
+    secret_key = str(web_config.secret_key or "").strip()
+    return secret_key.encode("utf-8")
+
+
+def sign_audit_payload(payload: Dict[str, Any]) -> str:
+    signing_key = get_audit_signing_key()
+    if not signing_key:
+        return ""
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hmac.new(signing_key, serialized.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def audit_signature_valid(event: Dict[str, Any]) -> bool:
+    signature = str(event.get("signature", "") or "").strip()
+    if not signature:
+        return False
+    candidate = dict(event)
+    candidate.pop("signature", None)
+    candidate.pop("signature_alg", None)
+    candidate.pop("signature_valid", None)
+    expected = sign_audit_payload(candidate)
+    return bool(expected) and hmac.compare_digest(signature, expected)
 
 
 def apply_api_rate_limit_or_abort(bucket: str, max_requests: int, window_seconds: int):
@@ -449,7 +525,7 @@ def build_token_response_payload(token_pair: Dict[str, Any], scope: str) -> Dict
 
 
 def get_refresh_token_from_request() -> str:
-    payload = request.get_json(silent=True)
+    payload = parse_json_payload(allow_empty=True)
     if isinstance(payload, dict):
         raw = payload.get("refresh_token", "")
         candidate = str(raw or "").strip()
@@ -462,7 +538,7 @@ def get_refresh_token_from_request() -> str:
 
 
 def get_revoke_token_from_request() -> Optional[str]:
-    payload = request.get_json(silent=True)
+    payload = parse_json_payload(allow_empty=True)
     if isinstance(payload, dict):
         raw = payload.get("token", "")
         candidate = str(raw or "").strip()
@@ -1373,17 +1449,16 @@ def get_log_summary(max_tail_lines: int = 5000, include_recent_issues: bool = Fa
 
 def get_audit_events(max_tail_lines: int = 5000) -> List[Dict[str, Any]]:
     logfile = logger_config.logfile
-    if not os.path.exists(logfile):
-        return []
     tail: deque[str] = deque(maxlen=max_tail_lines)
-    try:
-        with open(logfile, "r", encoding="utf-8", errors="ignore") as handle:
-            for line in handle:
-                entry = line.strip()
-                if entry:
-                    tail.append(entry)
-    except OSError:
-        return []
+    if os.path.exists(logfile):
+        try:
+            with open(logfile, "r", encoding="utf-8", errors="ignore") as handle:
+                for line in handle:
+                    entry = line.strip()
+                    if entry:
+                        tail.append(entry)
+        except OSError:
+            pass
     events: List[Dict[str, Any]] = []
     for entry in tail:
         if "[AUDIT]" not in entry:
@@ -1393,10 +1468,25 @@ def get_audit_events(max_tail_lines: int = 5000) -> List[Dict[str, Any]]:
         if not candidate:
             continue
         try:
-            events.append(json.loads(candidate))
+            event = json.loads(candidate)
         except json.JSONDecodeError:
             continue
-    return list(reversed(events))
+        event["signature_valid"] = audit_signature_valid(event)
+        events.append(event)
+    merged: List[Dict[str, Any]] = []
+    seen = set()
+    for event in list(reversed(recent_audit_events_memory)) + list(reversed(events)):
+        key = (
+            event.get("created_at"),
+            event.get("request_id"),
+            event.get("action"),
+            event.get("status"),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(event)
+    return merged
 
 
 def build_global_config_payload() -> Dict[str, Any]:
@@ -1567,6 +1657,260 @@ def build_system_diagnostics_payload() -> Dict[str, Any]:
         "interfaces_total": len(interfaces),
         "peers_total": len(get_all_peers()),
         "log_summary": get_log_summary(include_recent_issues=True),
+    }
+
+
+def build_network_inventory_payload() -> Dict[str, Any]:
+    wg_ifaces = list(interfaces.values())
+    inventory = list(get_network_ifaces(wg_ifaces).values())
+    inventory.sort(key=lambda item: item["name"])
+    return {
+        "scope": current_scope_label(),
+        "interfaces": inventory,
+        "routes": get_routing_table(),
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+
+
+def build_about_payload() -> Dict[str, Any]:
+    from arpvpn import __version__
+
+    return {
+        "product": {
+            "name": APP_NAME,
+            "vendor": "ARPHost",
+            "release": getattr(__version__, "release", "unknown"),
+            "commit": getattr(__version__, "commit", "unknown"),
+            "scope": current_scope_label(),
+        },
+        "arp_host": {
+            "summary": "ARPHost packages and operates ARPVPN for customer VPN management, observability, and hosted delivery.",
+            "documentation_url": url_for("router.documentation", _external=False),
+        },
+        "wireguard": {
+            "summary": "WireGuard is a modern VPN protocol focused on simplicity, performance, and strong cryptography.",
+            "endpoint": wireguard_config.endpoint,
+            "interfaces_total": len(interfaces),
+            "peers_total": len(get_all_peers()),
+        },
+        "system": build_system_health_payload(),
+    }
+
+
+def build_profile_payload(user_item: Optional[User] = None) -> Dict[str, Any]:
+    user_item = user_item or current_user
+    tenant = tenants.get(getattr(user_item, "tenant_id", "") or "", None)
+    login_date = getattr(user_item, "login_date", None)
+    return {
+        "user": {
+            "id": getattr(user_item, "id", ""),
+            "username": getattr(user_item, "name", ""),
+            "role": getattr(user_item, "role", ""),
+            "tenant_id": getattr(user_item, "tenant_id", None),
+            "tenant_name": tenant.name if tenant else None,
+            "login_at": login_date.isoformat() if login_date else None,
+            "login_ago": get_time_ago(login_date) if login_date else None,
+            "is_impersonating": is_impersonating(),
+        }
+    }
+
+
+def update_profile_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    username = parse_non_empty_string(payload.get("username"), "username")
+    existing = users.get_value_by_attr("name", username)
+    if existing and existing.id != current_user.id:
+        abort(CONFLICT, "Username already exists.")
+    current_user.name = username
+    config_manager.save_credentials()
+    log_audit_event("profile.update", details={"target_user_id": current_user.id, "target_user_name": username})
+    return build_profile_payload()
+
+
+def update_profile_password_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    old_password = parse_non_empty_string(payload.get("old_password"), "old_password")
+    new_password = parse_non_empty_string(payload.get("new_password"), "new_password")
+    confirm = parse_non_empty_string(payload.get("confirm"), "confirm")
+    if not current_user.check_password(old_password):
+        abort(FORBIDDEN, "old_password is incorrect.")
+    if new_password != confirm:
+        abort(BAD_REQUEST, "confirm must match new_password.")
+    if current_user.check_password(new_password):
+        abort(BAD_REQUEST, "new_password cannot be the same as the current password.")
+    current_user.password = new_password
+    config_manager.save_credentials()
+    log_audit_event("profile.password.update", details={"target_user_id": current_user.id})
+    return build_profile_payload()
+
+
+def build_setup_status_payload() -> Dict[str, Any]:
+    return {
+        "setup_required": bool(global_properties.setup_required and not global_properties.setup_file_exists()),
+        "setup_file_exists": global_properties.setup_file_exists(),
+        "defaults": {
+            "wireguard": {
+                "endpoint": wireguard_config.endpoint,
+                "wg_bin": wireguard_config.wg_bin,
+                "wg_quick_bin": wireguard_config.wg_quick_bin,
+                "iptables_bin": wireguard_config.iptables_bin,
+            },
+            "tls": {
+                "mode": web_config.TLS_MODE_SELF_SIGNED,
+                "server_name": web_config.tls_server_name or wireguard_config.endpoint,
+                "redirect_http_to_https": web_config.redirect_http_to_https,
+            },
+            "traffic_enabled": traffic_config.enabled,
+            "log_overwrite": logger_config.overwrite,
+        },
+    }
+
+
+def apply_setup_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    if global_properties.setup_file_exists():
+        abort(BAD_REQUEST, "Setup already performed.")
+    logger_config.overwrite = parse_boolean_value(payload.get("log_overwrite"), logger_config.overwrite)
+    traffic_config.enabled = parse_boolean_value(payload.get("traffic_enabled"), traffic_config.enabled)
+
+    wireguard_payload = payload.get("wireguard", {})
+    tls_payload = payload.get("tls", {})
+    if not isinstance(wireguard_payload, dict):
+        abort(BAD_REQUEST, "wireguard must be an object.")
+    if not isinstance(tls_payload, dict):
+        abort(BAD_REQUEST, "tls must be an object.")
+
+    wireguard_config.endpoint = parse_non_empty_string(wireguard_payload.get("endpoint"), "wireguard.endpoint")
+    wireguard_config.wg_bin = parse_non_empty_string(wireguard_payload.get("wg_bin"), "wireguard.wg_bin")
+    wireguard_config.wg_quick_bin = parse_non_empty_string(
+        wireguard_payload.get("wg_quick_bin"),
+        "wireguard.wg_quick_bin",
+    )
+    wireguard_config.iptables_bin = parse_non_empty_string(
+        wireguard_payload.get("iptables_bin"),
+        "wireguard.iptables_bin",
+    )
+
+    mode = parse_tls_mode(tls_payload.get("mode"))
+    server_name = str(tls_payload.get("server_name", wireguard_config.endpoint) or "").strip()
+    letsencrypt_email = str(tls_payload.get("letsencrypt_email", web_config.tls_letsencrypt_email) or "").strip()
+    proxy_incoming_hostname = str(
+        tls_payload.get("proxy_incoming_hostname", web_config.proxy_incoming_hostname) or ""
+    ).strip()
+    redirect_http_to_https = parse_boolean_value(
+        tls_payload.get("redirect_http_to_https"),
+        web_config.redirect_http_to_https,
+    )
+    generate_self_signed = parse_boolean_value(tls_payload.get("generate_self_signed"), mode == web_config.TLS_MODE_SELF_SIGNED)
+    issue_letsencrypt = parse_boolean_value(tls_payload.get("issue_letsencrypt"), False)
+
+    requires_hostname = mode in (web_config.TLS_MODE_SELF_SIGNED, web_config.TLS_MODE_LETS_ENCRYPT)
+    if requires_hostname:
+        server_name = parse_tls_server_name(
+            server_name,
+            allow_ipv4=mode == web_config.TLS_MODE_SELF_SIGNED,
+            allow_localhost=mode == web_config.TLS_MODE_SELF_SIGNED,
+            field_name="tls.server_name",
+        )
+    if mode == web_config.TLS_MODE_REVERSE_PROXY:
+        proxy_incoming_hostname = parse_tls_server_name(
+            proxy_incoming_hostname,
+            allow_ipv4=False,
+            allow_localhost=True,
+            field_name="tls.proxy_incoming_hostname",
+        )
+    if redirect_http_to_https and mode == web_config.TLS_MODE_HTTP:
+        abort(BAD_REQUEST, "tls.redirect_http_to_https requires a TLS mode other than http.")
+    if generate_self_signed and mode != web_config.TLS_MODE_SELF_SIGNED:
+        abort(BAD_REQUEST, "tls.generate_self_signed requires self-signed TLS mode.")
+    if issue_letsencrypt and mode != web_config.TLS_MODE_LETS_ENCRYPT:
+        abort(BAD_REQUEST, "tls.issue_letsencrypt requires letsencrypt TLS mode.")
+
+    web_config.tls_mode = mode
+    web_config.tls_server_name = server_name
+    web_config.tls_letsencrypt_email = letsencrypt_email
+    web_config.proxy_incoming_hostname = proxy_incoming_hostname
+    web_config.redirect_http_to_https = redirect_http_to_https and mode != web_config.TLS_MODE_HTTP
+
+    tls_manager.apply_web_tls_config(
+        web_config,
+        generate_self_signed=generate_self_signed,
+        issue_letsencrypt=issue_letsencrypt,
+    )
+    config_manager.save()
+    with open(global_properties.setup_filepath, "w", encoding="utf-8") as handle:
+        handle.write("")
+    log_audit_event("system.setup.bootstrap", details={"tls_mode": mode, "endpoint": wireguard_config.endpoint})
+    return build_setup_status_payload()
+
+
+def _process_name(pid: int) -> str:
+    try:
+        with open(f"/proc/{pid}/comm", "r", encoding="utf-8") as handle:
+            return handle.read().strip().lower()
+    except OSError:
+        return ""
+
+
+def _write_restart_marker(reason: str, requested_mode: str) -> str:
+    marker_path = global_properties.join_workdir("restart-request.json")
+    os.makedirs(os.path.dirname(marker_path), exist_ok=True)
+    with open(marker_path, "w", encoding="utf-8") as handle:
+        json.dump(
+            {
+                "requested_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "requested_by_user_id": getattr(current_user, "id", ""),
+                "requested_by_user_name": getattr(current_user, "name", ""),
+                "reason": reason,
+                "requested_mode": requested_mode,
+            },
+            handle,
+            indent=2,
+            sort_keys=True,
+        )
+    return marker_path
+
+
+def request_process_restart(reason: str, requested_mode: str = "auto", delay_seconds: int = 1) -> Dict[str, Any]:
+    handler = current_app.config.get("ARPVPN_RESTART_HANDLER")
+    if callable(handler):
+        return handler(reason=reason, requested_mode=requested_mode, delay_seconds=delay_seconds)
+
+    mode = str(requested_mode or "auto").strip().lower() or "auto"
+    delay_seconds = max(0, int(delay_seconds))
+    parent_pid = os.getppid()
+    parent_name = _process_name(parent_pid)
+    target_pid = None
+    signal_mode = None
+    if mode in ("auto", "parent") and "uwsgi" in parent_name:
+        target_pid = parent_pid
+        signal_mode = "parent-hup"
+    elif mode == "self":
+        target_pid = os.getpid()
+        signal_mode = "self-hup"
+
+    if target_pid is not None:
+        def _dispatch_restart():
+            sleep(max(1, delay_seconds))
+            try:
+                os.kill(target_pid, signal.SIGHUP)
+            except OSError as exc:
+                error(f"Unable to signal restart target {target_pid}: {exc}")
+
+        Thread(target=_dispatch_restart, daemon=True).start()
+        return {
+            "requested": True,
+            "mode": signal_mode,
+            "target_pid": target_pid,
+            "delay_seconds": delay_seconds,
+            "reason": reason,
+        }
+
+    marker_path = _write_restart_marker(reason, mode)
+    return {
+        "requested": True,
+        "mode": "marker",
+        "target_pid": None,
+        "delay_seconds": delay_seconds,
+        "reason": reason,
+        "marker_path": marker_path,
     }
 
 
@@ -2071,10 +2415,19 @@ def apply_system_backup_payload(backup_files: Dict[str, Dict[str, Any]]):
         raise
 
 
-def parse_json_payload() -> Dict[str, Any]:
+def parse_json_payload(allow_empty: bool = False) -> Dict[str, Any]:
     payload = request.get_json(silent=True)
+    if payload is None and allow_empty:
+        payload = {}
     if not isinstance(payload, dict):
         abort(BAD_REQUEST, "Invalid payload.")
+    endpoint_name = str(request.endpoint or "").rsplit(".", 1)[-1]
+    schema = get_api_request_schema(endpoint_name)
+    if schema is not None:
+        try:
+            payload = schema.validate(payload)
+        except ApiSchemaValidationError as exc:
+            abort(BAD_REQUEST, str(exc))
     return payload
 
 
@@ -2152,6 +2505,100 @@ def mesh_control_plane_payload() -> Dict[str, Any]:
         "route_advertisements": [route.__to_yaml_dict__() for route in mesh.route_advertisements.values()],
         "access_policies": [policy.__to_yaml_dict__() for policy in mesh.access_policies.values()],
         "route_conflicts": mesh.validate_route_advertisements(),
+    }
+
+
+def mesh_feature_flags_payload() -> Dict[str, bool]:
+    return {
+        "mesh_v1": mesh_v1_enabled(),
+        "acl_v1": acl_v1_enabled(),
+        "api_mesh": get_env_bool("ARPVPN_FEATURE_API_MESH", True),
+    }
+
+
+def get_mesh_recent_events(limit: int = 12) -> List[Dict[str, Any]]:
+    events = get_audit_events(max_tail_lines=max(limit * 30, 400))
+    mesh_events: List[Dict[str, Any]] = []
+    for event in events:
+        action = str(event.get("action", "") or "")
+        if not action.startswith("mesh."):
+            continue
+        mesh_events.append(event)
+        if len(mesh_events) >= limit:
+            break
+    return mesh_events
+
+
+def build_mesh_diagnostics_payload() -> Dict[str, Any]:
+    mesh_payload = mesh_control_plane_payload()
+    plan = build_mesh_plan(wireguard_config.mesh)
+    routes_by_owner = plan["routes_by_owner"]
+    server_ids = set(routes_by_owner.keys())
+    for topology in wireguard_config.mesh.topologies.values():
+        server_ids.update(topology.server_ids)
+    for link in wireguard_config.mesh.vpn_links.values():
+        server_ids.add(link.source_server)
+        server_ids.add(link.target_server)
+    sorted_servers = sorted(server_id for server_id in server_ids if server_id)
+
+    server_rollup = []
+    for server_id in sorted_servers:
+        local_peer_plans = []
+        link_statuses: List[str] = []
+        for pair in plan["planned_pairs"]:
+            if server_id in pair["servers"]:
+                link_statuses.extend(pair["link_statuses"])
+            for peer_plan in pair["peer_plans"]:
+                if peer_plan["local_server"] == server_id:
+                    local_peer_plans.append(peer_plan)
+        server_rollup.append({
+            "server_id": server_id,
+            "advertised_routes": routes_by_owner.get(server_id, []),
+            "advertised_route_count": len(routes_by_owner.get(server_id, [])),
+            "planned_links": sum(1 for pair in plan["planned_pairs"] if server_id in pair["servers"]),
+            "active_links": sum(1 for status in link_statuses if status == VPNLink.STATUS_ACTIVE),
+            "reachable_route_count": sum(len(peer_plan["allowed_ips"]) for peer_plan in local_peer_plans),
+        })
+
+    link_matrix = []
+    for pair in plan["planned_pairs"]:
+        link_matrix.append({
+            "pair_key": pair["pair_key"],
+            "servers": pair["servers"],
+            "topology_name": pair["topology_name"],
+            "topology_preset": pair["topology_preset"],
+            "existing_link_ids": pair["existing_link_ids"],
+            "link_statuses": pair["link_statuses"],
+            "status_summary": ",".join(pair["link_statuses"]) if pair["link_statuses"] else "planned",
+            "route_targets": sum(len(peer_plan["allowed_ips"]) for peer_plan in pair["peer_plans"]),
+        })
+
+    policies = list(wireguard_config.mesh.access_policies.values())
+    policy_summary = {
+        "total": len(policies),
+        "enabled": sum(1 for item in policies if item.enabled),
+        "deny_rules": sum(1 for item in policies if item.enabled and item.action == AccessPolicy.ACTION_DENY),
+        "default_action": AccessPolicy.ACTION_ALLOW,
+    }
+
+    return {
+        "scope": current_scope_label(),
+        "flags": mesh_feature_flags_payload(),
+        "counts": {
+            "topologies": len(mesh_payload["topologies"]),
+            "vpn_links": len(mesh_payload["vpn_links"]),
+            "route_advertisements": len(mesh_payload["route_advertisements"]),
+            "access_policies": len(mesh_payload["access_policies"]),
+            "planned_pairs": plan["counts"]["planned_pairs"],
+            "orphan_links": plan["counts"]["orphan_links"],
+        },
+        "route_conflicts": mesh_payload["route_conflicts"],
+        "plan": plan,
+        "server_rollup": server_rollup,
+        "link_matrix": link_matrix,
+        "policy_summary": policy_summary,
+        "recent_events": get_mesh_recent_events(),
+        "mesh": mesh_payload,
     }
 
 
@@ -3165,7 +3612,8 @@ def parse_peer_payload(payload: Dict[str, Any], existing: Optional[Peer] = None)
 
 def run_async_job_or_execute(operation: str, target):
     actor = current_actor()
-    if parse_boolean_value(request.args.get("async"), False) or parse_boolean_value((request.get_json(silent=True) or {}).get("async"), False):
+    payload = parse_json_payload(allow_empty=True)
+    if parse_boolean_value(request.args.get("async"), False) or parse_boolean_value(payload.get("async"), False):
         app = current_app._get_current_object()
         request_path = request.path
         request_base_url = request.host_url
@@ -3563,6 +4011,7 @@ def api_auth_refresh_token():
 @login_required
 @setup_required
 def api_auth_revoke_token():
+    parse_json_payload(allow_empty=True)
     target_token = get_revoke_token_from_request()
     if not target_token:
         return api_error(BAD_REQUEST, "token_required", "No token was provided for revocation.")
@@ -3591,7 +4040,7 @@ def api_auth_revoke_token():
 @login_required
 @setup_required
 def api_auth_revoke_all_tokens():
-    payload = request.get_json(silent=True) or {}
+    payload = parse_json_payload(allow_empty=True)
     target_user_id = str(payload.get("user_id", "") or "").strip()
     actor = current_actor()
     if not actor:
@@ -3617,6 +4066,7 @@ def api_auth_revoke_all_tokens():
 @role_required(*STAFF_ROLES)
 @setup_required
 def api_auth_force_logout(user_id: str):
+    parse_json_payload(allow_empty=True)
     target_user = users.get(user_id, None)
     if not target_user:
         abort(NOT_FOUND, "User not found.")
@@ -3640,6 +4090,7 @@ def api_auth_force_logout(user_id: str):
 @role_required(*STAFF_ROLES)
 @setup_required
 def api_start_impersonation(user_id: str):
+    parse_json_payload(allow_empty=True)
     if is_impersonating():
         abort(BAD_REQUEST, "Already impersonating a user.")
     target_user = users.get(user_id, None)
@@ -3673,6 +4124,7 @@ def api_start_impersonation(user_id: str):
 @login_required
 @setup_required
 def api_stop_impersonation():
+    parse_json_payload(allow_empty=True)
     impersonator = get_impersonator_user()
     if not impersonator:
         abort(BAD_REQUEST, "No active impersonation session.")
@@ -3845,6 +4297,7 @@ def api_update_tenant(tenant_id: str):
 @role_required(User.ROLE_ADMIN)
 @setup_required
 def api_delete_tenant(tenant_id: str):
+    parse_json_payload(allow_empty=True)
     tenant = get_tenant_or_404(tenant_id)
     tenant_users = [user_item for user_item in users.values() if user_item.tenant_id == tenant.id]
     tenant_invitations = [invitation for invitation in invitations.values() if invitation.tenant_id == tenant.id]
@@ -4101,6 +4554,7 @@ def api_update_user(user_id: str):
 @role_required(*USER_MANAGEMENT_ROLES)
 @setup_required
 def api_delete_user(user_id: str):
+    parse_json_payload(allow_empty=True)
     actor = current_actor()
     target_user = users.get(user_id, None)
     if not target_user:
@@ -4237,7 +4691,8 @@ def api_resend_invitation(invitation_id: str):
     invitation = get_invitation_or_404(invitation_id)
     if not invitation_visible_to_actor(invitation):
         abort(FORBIDDEN, "Insufficient permissions.")
-    raw_token = invitation.issue_token(parse_expiry_hours((request.get_json(silent=True) or {}).get("expires_in_hours")))
+    payload = parse_json_payload(allow_empty=True)
+    raw_token = invitation.issue_token(parse_expiry_hours(payload.get("expires_in_hours")))
     config_manager.save_identity_state()
     log_audit_event(
         "invitation.resend",
@@ -4252,6 +4707,7 @@ def api_resend_invitation(invitation_id: str):
 @role_required(*USER_MANAGEMENT_ROLES)
 @setup_required
 def api_revoke_invitation(invitation_id: str):
+    parse_json_payload(allow_empty=True)
     invitation = get_invitation_or_404(invitation_id)
     if not invitation_visible_to_actor(invitation):
         abort(FORBIDDEN, "Insufficient permissions.")
@@ -4428,6 +4884,7 @@ def api_update_wireguard_interface(interface_id: str):
 @role_required(*USER_MANAGEMENT_ROLES)
 @setup_required
 def api_delete_wireguard_interface(interface_id: str):
+    parse_json_payload(allow_empty=True)
     iface = get_interface_or_404(interface_id)
     if not can_manage_wireguard_interface(iface):
         abort(FORBIDDEN, "Insufficient permissions.")
@@ -4449,6 +4906,7 @@ def api_delete_wireguard_interface(interface_id: str):
 @role_required(*USER_MANAGEMENT_ROLES)
 @setup_required
 def api_operate_wireguard_interface(interface_id: str, action: str):
+    parse_json_payload(allow_empty=True)
     iface = get_interface_or_404(interface_id)
     if not can_manage_wireguard_interface(iface):
         abort(FORBIDDEN, "Insufficient permissions.")
@@ -4602,6 +5060,7 @@ def api_update_wireguard_peer(peer_id: str):
 @role_required(*USER_MANAGEMENT_ROLES)
 @setup_required
 def api_delete_wireguard_peer(peer_id: str):
+    parse_json_payload(allow_empty=True)
     peer = get_peer_or_404(peer_id)
     if not can_manage_wireguard_peer(peer):
         abort(FORBIDDEN, "Insufficient permissions.")
@@ -4659,6 +5118,14 @@ def api_mesh_overview():
     if current_user.has_role(*STAFF_ROLES):
         data["mesh"] = mesh_payload
     return api_success(data)
+
+
+@router.route("/api/v1/mesh/diagnostics", methods=["GET"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_diagnostics():
+    return api_success(build_mesh_diagnostics_payload())
 
 
 @router.route("/api/v1/mesh/topologies", methods=["GET"])
@@ -4730,6 +5197,7 @@ def api_mesh_update_topology(uuid: str):
 @role_required(*STAFF_ROLES)
 @setup_required
 def api_mesh_delete_topology(uuid: str):
+    parse_json_payload(allow_empty=True)
     topology = wireguard_config.mesh.topologies.get(uuid, None)
     if not topology:
         abort(NOT_FOUND, "Topology not found.")
@@ -4825,6 +5293,7 @@ def api_mesh_update_link(uuid: str):
 @role_required(*STAFF_ROLES)
 @setup_required
 def api_mesh_delete_link(uuid: str):
+    parse_json_payload(allow_empty=True)
     link = wireguard_config.mesh.vpn_links.get(uuid, None)
     if not link:
         abort(NOT_FOUND, "VPN link not found.")
@@ -4912,6 +5381,7 @@ def api_mesh_update_route(uuid: str):
 @role_required(*STAFF_ROLES)
 @setup_required
 def api_mesh_delete_route(uuid: str):
+    parse_json_payload(allow_empty=True)
     route = wireguard_config.mesh.route_advertisements.get(uuid, None)
     if not route:
         abort(NOT_FOUND, "Route advertisement not found.")
@@ -4996,6 +5466,7 @@ def api_mesh_update_policy(uuid: str):
 @role_required(*STAFF_ROLES)
 @setup_required
 def api_mesh_delete_policy(uuid: str):
+    parse_json_payload(allow_empty=True)
     policy = wireguard_config.mesh.access_policies.get(uuid, None)
     if not policy:
         abort(NOT_FOUND, "Access policy not found.")
@@ -5010,7 +5481,7 @@ def api_mesh_delete_policy(uuid: str):
 @role_required(*STAFF_ROLES)
 @setup_required
 def api_mesh_dry_run():
-    payload = parse_json_payload()
+    payload = parse_json_payload(allow_empty=True)
     mesh_payload = payload.get("mesh", None)
     if mesh_payload is None:
         mesh_payload = mesh_control_plane_payload()
@@ -5049,6 +5520,17 @@ def api_mesh_export():
     return api_success({
         "exported_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "mesh": mesh_control_plane_payload(),
+    })
+
+
+@router.route("/api/v1/mesh/plan", methods=["GET"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_plan():
+    return api_success({
+        "scope": current_scope_label(),
+        "plan": build_mesh_plan(wireguard_config.mesh),
     })
 
 
@@ -5103,6 +5585,26 @@ def api_mesh_import():
         "reference_issues": reference_issues,
         "route_conflicts": route_conflicts,
         "mesh": mesh_control_plane_payload(),
+    })
+
+
+@router.route("/api/v1/mesh/policy-simulate", methods=["POST"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_mesh_policy_simulate():
+    payload = parse_json_payload()
+    source_kind = parse_non_empty_string(payload.get("source_kind"), "source_kind")
+    source_id = parse_non_empty_string(payload.get("source_id"), "source_id")
+    destination = parse_non_empty_string(payload.get("destination"), "destination")
+    return api_success({
+        "scope": current_scope_label(),
+        "result": evaluate_access_policy(
+            wireguard_config.mesh,
+            source_kind=source_kind,
+            source_id=source_id,
+            destination=destination,
+        ),
     })
 
 
@@ -5667,6 +6169,72 @@ def documentation():
     return ViewController("web/documentation.html", **context).load()
 
 
+@router.route("/mesh")
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def mesh():
+    context = {
+        "title": "Mesh",
+        "diagnostics": build_mesh_diagnostics_payload(),
+        "mesh_presets": list(MeshTopology.PRESETS),
+        "mesh_link_statuses": list(VPNLink.STATUSES),
+        "mesh_policy_source_kinds": list(AccessPolicy.SOURCE_KINDS),
+        "mesh_policy_actions": list(AccessPolicy.ACTIONS),
+    }
+    return ViewController("web/mesh.html", **context).load()
+
+
+@router.route("/api/v1/network/inventory", methods=["GET"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_network_inventory():
+    return api_success(build_network_inventory_payload())
+
+
+@router.route("/api/v1/about", methods=["GET"])
+@login_required
+@setup_required
+def api_about():
+    return api_success(build_about_payload())
+
+
+@router.route("/api/v1/profile", methods=["GET"])
+@login_required
+@setup_required
+def api_profile():
+    return api_success(build_profile_payload())
+
+
+@router.route("/api/v1/profile", methods=["PUT"])
+@login_required
+@setup_required
+def api_profile_update():
+    return api_success(update_profile_from_payload(parse_json_payload()))
+
+
+@router.route("/api/v1/profile/password", methods=["POST"])
+@login_required
+@setup_required
+def api_profile_password_update():
+    return api_success(update_profile_password_from_payload(parse_json_payload()))
+
+
+@router.route("/api/v1/setup/status", methods=["GET"])
+@login_required
+@role_required(*STAFF_ROLES)
+def api_setup_status():
+    return api_success(build_setup_status_payload())
+
+
+@router.route("/api/v1/setup/bootstrap", methods=["POST"])
+@login_required
+@role_required(*STAFF_ROLES)
+def api_setup_bootstrap():
+    return api_success(apply_setup_payload(parse_json_payload()))
+
+
 @router.route("/api/v1/system/version", methods=["GET"])
 @login_required
 @setup_required
@@ -5731,6 +6299,20 @@ def api_system_restore():
     store_idempotency_response(response_payload, 200)
     log_audit_event("system.restore", details={"dry_run": dry_run, "files": list(backup_files.keys())})
     return api_success(response_payload)
+
+
+@router.route("/api/v1/system/restart", methods=["POST"])
+@login_required
+@role_required(*STAFF_ROLES)
+@setup_required
+def api_system_restart():
+    payload = parse_json_payload()
+    reason = parse_optional_string(payload.get("reason")) or "Requested from ARPVPN UI/API."
+    requested_mode = parse_optional_string(payload.get("mode")) or "auto"
+    delay_seconds = parse_integer_value(payload.get("delay_seconds", 1), "delay_seconds", minimum=0, maximum=30)
+    response_payload = request_process_restart(reason, requested_mode=requested_mode, delay_seconds=delay_seconds)
+    log_audit_event("system.restart.request", details=response_payload)
+    return api_success(response_payload, status_code=ACCEPTED)
 
 
 @router.route("/api/v1/audit/events", methods=["GET"])
@@ -5916,6 +6498,7 @@ def api_update_tenant_runtime(tenant_id: str):
 @role_required(*USER_MANAGEMENT_ROLES)
 @setup_required
 def api_allocate_tenant_runtime(tenant_id: str):
+    parse_json_payload(allow_empty=True)
     replay = parse_idempotency_replay()
     if replay:
         return api_success(replay[0], status_code=replay[1], meta={"idempotent_replay": True})
@@ -5943,6 +6526,7 @@ def api_allocate_tenant_runtime(tenant_id: str):
 @role_required(*USER_MANAGEMENT_ROLES)
 @setup_required
 def api_control_tenant_runtime(tenant_id: str, action: str):
+    parse_json_payload(allow_empty=True)
     replay = parse_idempotency_replay()
     if replay:
         return api_success(replay[0], status_code=replay[1], meta={"idempotent_replay": True})
@@ -5995,9 +6579,7 @@ def api_get_theme_choice():
 @login_required
 @setup_required
 def api_set_theme_choice():
-    payload = request.get_json(silent=True)
-    if not isinstance(payload, dict):
-        abort(BAD_REQUEST, "Invalid payload.")
+    payload = parse_json_payload()
     raw_choice = payload.get("choice", None)
     if not isinstance(raw_choice, str):
         abort(BAD_REQUEST, "Theme choice must be a string.")

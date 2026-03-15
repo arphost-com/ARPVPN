@@ -1,6 +1,6 @@
 # ARPVPN API Coverage
 
-Authoritative snapshot of the API surface implemented in code as of 2026-03-10.
+Authoritative snapshot of the API surface implemented in code as of 2026-03-14.
 
 ## Summary
 
@@ -9,8 +9,8 @@ ARPVPN exposes a hybrid API under `/api/v1`.
 - It is not a pure REST API.
 - It is partly resource-oriented and partly action/RPC-oriented.
 - It is usable today for auth, tenant/user lifecycle, WireGuard control, mesh control, stats/traffic, themes, TLS, and system/config operations.
-- It now includes admin backup/restore, tenant-scoped TLS settings, and tenant runtime allocation/status APIs.
-- It is still not a full control-plane API for container lifecycle or separate tenant runtime lifecycle.
+- It now includes admin backup/restore, tenant-scoped TLS settings, tenant runtime allocation/status APIs, setup/profile/network/about parity endpoints, mesh diagnostics, and generated SDK artifacts.
+- The generated OpenAPI contract currently covers 115 live operations.
 
 ## API Style
 
@@ -50,11 +50,15 @@ These are valid APIs, but they are RPC/action endpoints rather than strict REST 
 - `/api/v1/impersonation/start/<user_id>`
 - `/api/v1/impersonation/stop`
 - `/api/v1/mesh/dry-run`
+- `/api/v1/mesh/plan`
+- `/api/v1/mesh/diagnostics`
+- `/api/v1/mesh/policy-simulate`
 - `/api/v1/mesh/import`
 - `/api/v1/tls/mode`
 - `/api/v1/tls/self-signed`
 - `/api/v1/tls/letsencrypt`
 - `/api/v1/system/restore`
+- `/api/v1/system/restart`
 
 ### Read/report APIs
 
@@ -99,6 +103,7 @@ Status:
 Implemented:
 
 - `GET /api/v1/mesh/overview`
+- `GET /api/v1/mesh/diagnostics`
 - Full CRUD for topologies, links, routes, and policies
 - `POST /api/v1/mesh/dry-run`
 - `GET /api/v1/mesh/export`
@@ -107,6 +112,8 @@ Implemented:
 Status:
 
 - Strongest API surface currently in ARPVPN.
+- Includes deterministic mesh planning previews, diagnostics rollups, and policy simulation for rollout validation.
+- Mesh event trails are signed and exposed through audit reads and diagnostics summaries.
 - Good candidate for external automation today.
 
 ### Traffic, usage, and RRD
@@ -247,113 +254,33 @@ Status:
 - Global config is API-managed for super-admin use.
 - Tenant branding/limits/defaults/DNS config is tenant-scoped.
 - Admin-only backup export and restore are available, with restore dry-run validation and rollback on failed reload.
-- Audit events are readable from structured log entries.
+- Audit events are readable from structured log entries and now include signature verification metadata.
 - Health/version/diagnostics endpoints are available for automation and support workflows.
 - API groups can be toggled with feature flags such as `ARPVPN_FEATURE_API_MESH=0` or `ARPVPN_FEATURE_API_WIREGUARD=0`.
 
-## UI Features Still Missing API Coverage
+## UI Parity Status
 
-These features still exist only through HTML form routes and do not have matching public API endpoints:
+Supported operational UI flows now have matching public API endpoints.
 
-### User management
-
-Current UI routes still used directly:
-
-- `/users`
-- `/users/<user_id>/edit`
-- `/users/<user_id>/delete`
-
-### WireGuard control
-
-Current UI routes:
-
-- `/wireguard`
-- `/wireguard/interfaces/add`
-- `/wireguard/interfaces/<uuid>`
-- `/wireguard/interfaces/<uuid>/<action>`
-- `/wireguard/interfaces/<uuid>/download`
-- `/wireguard/peers/add`
-- `/wireguard/peers/<uuid>`
-- `/wireguard/peers/<uuid>/download`
-
-### Settings and setup
-
-- Initial setup/bootstrap
-- Restart/apply flows tied to settings beyond the API-managed config objects
-
-Current UI routes:
-
-- `/settings`
-- `/setup`
-
-### System and informational pages
-
-- Network inventory
-- About/version/system summary parity in the HTML UI
-- Restart button/action
-
-Current UI routes:
-
-- `/network`
-- `/about`
-
-### Multitenant control plane
-
-Still not exposed through API:
-
-- Per-tenant VPN instance/container lifecycle
-- Tenant configuration APIs
-- Tenant/global certificate permission split
-- Tenant-scoped bulk import/export workflows
+- User lifecycle, invitations, theme controls, profile/password updates, setup/bootstrap, network inventory, about/system metadata, restart flows, WireGuard control, mesh control, stats/RRD, TLS, tenant config, and tenant runtime control all have API counterparts.
+- HTML pages remain convenience/admin surfaces on top of those APIs rather than unique-only control paths.
 
 ## What Needs To Be Added Next
 
-To make ARPVPN controllable in all major aspects, these endpoint families should be added next.
-
-### Phase 3: WireGuard control
-
-Recommended resource families:
-
-Recommended resource families:
-
-- `GET/POST /api/v1/interfaces`
-- `GET/PUT/DELETE /api/v1/interfaces/<interface_id>`
-- `POST /api/v1/interfaces/<interface_id>/start`
-- `POST /api/v1/interfaces/<interface_id>/stop`
-- `POST /api/v1/interfaces/<interface_id>/restart`
-- `GET/POST /api/v1/peers`
-- `GET/PUT/DELETE /api/v1/peers/<peer_id>`
-- `GET /api/v1/peers/<peer_id>/config`
-- `GET /api/v1/peers/<peer_id>/qr`
-
-### Phase 4: config and operations
-
-Recommended resource/action families:
-
-- `GET/PUT /api/v1/config/global`
-- `GET/PUT /api/v1/config/tenant/<tenant_id>`
-- `GET /api/v1/system/health`
-- `GET /api/v1/system/version`
-- `POST /api/v1/system/restart`
-- `GET /api/v1/audit/events`
+- Host-level mesh application and ACL enforcement remain the next major gap.
+- The remaining work is in route install/remove hooks, mesh apply/rollback, per-link host metrics, firewall enforcement, and policy hit accounting rather than API shape.
 
 ## OpenAPI Status
 
-The live route surface in code is broader than the current OpenAPI file.
+The live OpenAPI generator now tracks the implemented route surface used in code.
 
-Current `openapi.v1.yaml` covers:
+Current `openapi.v1.yaml` covers the full supported API families, including:
 
-- Core auth
-- Part of mesh
-- Part of stats
-
-It does not yet fully describe:
-
-- Impersonation endpoints
-- Theme endpoints
-- TLS endpoints
-- Full mesh route surface
-- Full stats route surface
+- auth and impersonation
+- theme and TLS endpoints
+- tenant/user/invitation/runtime flows
+- mesh overview, CRUD, plan, diagnostics, dry-run, import/export, and policy simulation
+- stats, exports, and system/config operations
 
 That means the implementation is ahead of the published spec. The spec should be expanded before calling the API fully documented.
 

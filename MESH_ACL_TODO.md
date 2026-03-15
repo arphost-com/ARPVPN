@@ -10,13 +10,14 @@ Goal: add first-class site-to-site and multi-site mesh VPN capabilities across A
 - [x] Add conflict detection for overlapping CIDRs and duplicate route ownership.
 
 ## Phase 2: UI and API
-- [ ] Add UI wizard: create site-to-site link between two ARPVPN servers.
-- [ ] Add UI wizard: create 3+ server mesh from a server list and subnet map.
+- [x] Add UI wizard: create site-to-site link between two ARPVPN servers.
+- [x] Add UI wizard: create 3+ server mesh from a server list and subnet map.
 - [x] Add API endpoints for links/topologies/routes/policies (`/api/v1/mesh/*`).
 - [x] Add dry-run API for topology validation before apply.
 - [x] Add export/import for topology JSON.
 
 ## Phase 3: WireGuard Rendering and Apply Logic
+- [x] Add planning API for deterministic link/peer naming and `AllowedIPs` previews (`/api/v1/mesh/plan`).
 - [ ] Generate inter-server peer entries with deterministic naming and key rotation support.
 - [ ] Render `AllowedIPs` based on advertised routes for each remote server.
 - [ ] Add apply planner with rollback (transaction-like behavior across all affected interfaces).
@@ -28,28 +29,28 @@ Goal: add first-class site-to-site and multi-site mesh VPN capabilities across A
 - [ ] Add policy priorities and explicit default-deny option.
 - [ ] Add domain-to-IP expansion support (optional) with cached DNS resolution for policy targets.
 - [ ] Add explicit allowlists for LAN management ranges and infra services.
-- [ ] Add policy simulation output: matched rule, action, and reason.
+- [x] Add policy simulation output: matched rule, action, and reason.
 
 ## Phase 5: Observability and Operations
 - [ ] Add per-link metrics: handshake age, packet loss indicators, byte counters, route counts.
-- [ ] Add mesh diagnostics page: link state matrix and route propagation status.
+- [x] Add mesh diagnostics page: link state matrix and route propagation status.
 - [ ] Add policy hit counters and blocked-flow summaries.
-- [ ] Add structured event logs for link/policy changes and failures.
+- [x] Add structured event logs for link/policy changes and failures.
 - [ ] Add RRD history panels for inter-server links and policy hit trends.
 
 ## Phase 6: Security and Governance
-- [ ] Enforce role gates: only admins/support can edit mesh/policies; clients read scoped state only.
-- [ ] Add signed change records (who, what, when) for all mesh/policy operations.
+- [x] Enforce role gates: only admins/support can edit mesh/policies; clients read scoped state only.
+- [x] Add signed change records (who, what, when) for all mesh/policy operations.
 - [ ] Add approval mode for high-impact changes (full-mesh rebuild, default-deny enablement).
 - [ ] Add safeguards for self-lockout scenarios (management access protections).
 - [ ] Add key rotation workflows for inter-server peers.
 
 ## Phase 7: Testing and Rollout
-- [ ] Unit tests for topology validation, route conflict checks, and policy evaluation.
-- [ ] Integration tests with 2-node site-to-site and 3-node mesh topologies.
+- [x] Unit tests for topology validation, route conflict checks, and policy evaluation.
+- [x] Integration tests with 2-node site-to-site and 3-node mesh topologies.
 - [ ] Failure-injection tests for partial apply/rollback behavior.
 - [ ] Docker02 environment tests for route + policy persistence across restarts.
-- [ ] Phased rollout behind feature flags (`mesh_v1`, `acl_v1`).
+- [x] Phased rollout behind feature flags (`mesh_v1`, `acl_v1`).
 
 ## Reference Patterns (WireGuard Ecosystem)
 - [ ] Tailscale subnet routers and ACL/tag model alignment.

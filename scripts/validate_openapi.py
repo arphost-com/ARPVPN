@@ -3,6 +3,8 @@ import argparse
 import sys
 from pathlib import Path
 
+from scripts.api_contract_tools import iter_live_api_operations
+
 try:
     import yaml
 except ModuleNotFoundError:  # pragma: no cover - depends on runtime environment
@@ -43,6 +45,7 @@ def validate_openapi_document(path: Path) -> int:
         paths = {}
 
     operation_ids = set()
+    declared_operations = set()
     for route_path, route_item in paths.items():
         if not str(route_path).startswith("/api/v1"):
             errors.append(f"Path '{route_path}' must start with /api/v1.")
@@ -52,6 +55,7 @@ def validate_openapi_document(path: Path) -> int:
         for method, operation in route_item.items():
             if method.lower() not in {"get", "post", "put", "delete", "patch"}:
                 continue
+            declared_operations.add((route_path, method.lower()))
             if not isinstance(operation, dict):
                 errors.append(f"Operation '{method.upper()} {route_path}' must be an object.")
                 continue
@@ -63,6 +67,17 @@ def validate_openapi_document(path: Path) -> int:
                 errors.append(f"Duplicate operationId '{operation_id}'.")
                 continue
             operation_ids.add(operation_id)
+
+    live_operations = {
+        (item["openapi_path"], item["method"])
+        for item in iter_live_api_operations()
+    }
+    missing_operations = sorted(live_operations - declared_operations)
+    extra_operations = sorted(declared_operations - live_operations)
+    for route_path, method in missing_operations:
+        errors.append(f"Missing live API operation in spec: {method.upper()} {route_path}.")
+    for route_path, method in extra_operations:
+        errors.append(f"Spec operation does not exist in router: {method.upper()} {route_path}.")
 
     if errors:
         print("OpenAPI validation failed:")
