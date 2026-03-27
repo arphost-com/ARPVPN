@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: ARPVPN API
-  version: 2.0.3
+  version: 2.0.4
   description: Generated OpenAPI document for the live ARPVPN API surface.
 servers:
 - url: /
@@ -2942,7 +2942,7 @@ paths:
                   desired_state: stopped
                   container_name: arpvpn-tenant-one
                   compose_project_name: tenant_one
-                  image_tag: v2-latest
+                  image_tag: latest
                   notes: Dedicated stack for Tenant One
                   http_port: 18085
                   https_port: 18086
@@ -3132,7 +3132,7 @@ paths:
                   desired_state: stopped
                   container_name: arpvpn-tenant-one
                   compose_project_name: tenant_one
-                  image_tag: v2-latest
+                  image_tag: latest
                   notes: Dedicated stack for Tenant One
                   http_port: 18085
                   https_port: 18086
@@ -3242,7 +3242,7 @@ paths:
                   desired_state: stopped
                   container_name: arpvpn-tenant-one
                   compose_project_name: tenant_one
-                  image_tag: v2-latest
+                  image_tag: latest
                   notes: Dedicated stack for Tenant One
                   http_port: 18085
                   https_port: 18086
@@ -3268,7 +3268,7 @@ paths:
                 desired_state: stopped
                 container_name: arpvpn-tenant-one
                 compose_project_name: tenant_one
-                image_tag: v2-latest
+                image_tag: latest
                 notes: Dedicated stack for Tenant One
                 http_port: 18085
                 https_port: 18086
@@ -3455,7 +3455,7 @@ paths:
                 desired_state: stopped
                 container_name: arpvpn-tenant-one
                 compose_project_name: tenant_one
-                image_tag: v2-latest
+                image_tag: latest
                 notes: Dedicated stack for Tenant One
                 http_port: 18085
                 https_port: 18086
@@ -3466,7 +3466,7 @@ paths:
               desired_state: stopped
               container_name: arpvpn-tenant-one
               compose_project_name: tenant_one
-              image_tag: v2-latest
+              image_tag: latest
               notes: Dedicated stack for Tenant One
               http_port: 18085
               https_port: 18086
@@ -5196,7 +5196,7 @@ components:
                   example: tenant_one
                 image_tag:
                   type: string
-                  example: v2-latest
+                  example: latest
                 notes:
                   type: string
                   example: Dedicated stack for Tenant One
@@ -5217,7 +5217,7 @@ components:
                 desired_state: stopped
                 container_name: arpvpn-tenant-one
                 compose_project_name: tenant_one
-                image_tag: v2-latest
+                image_tag: latest
                 notes: Dedicated stack for Tenant One
                 http_port: 18085
                 https_port: 18086
@@ -5242,7 +5242,7 @@ components:
               desired_state: stopped
               container_name: arpvpn-tenant-one
               compose_project_name: tenant_one
-              image_tag: v2-latest
+              image_tag: latest
               notes: Dedicated stack for Tenant One
               http_port: 18085
               https_port: 18086
@@ -5278,7 +5278,7 @@ components:
             desired_state: stopped
             container_name: arpvpn-tenant-one
             compose_project_name: tenant_one
-            image_tag: v2-latest
+            image_tag: latest
             notes: Dedicated stack for Tenant One
             http_port: 18085
             https_port: 18086
@@ -6948,7 +6948,7 @@ components:
                   example: tenant_one
                 image_tag:
                   type: string
-                  example: v2-latest
+                  example: latest
                 notes:
                   type: string
                   example: Dedicated stack for Tenant One
@@ -6969,7 +6969,7 @@ components:
                 desired_state: stopped
                 container_name: arpvpn-tenant-one
                 compose_project_name: tenant_one
-                image_tag: v2-latest
+                image_tag: latest
                 notes: Dedicated stack for Tenant One
                 http_port: 18085
                 https_port: 18086
@@ -6994,7 +6994,7 @@ components:
               desired_state: stopped
               container_name: arpvpn-tenant-one
               compose_project_name: tenant_one
-              image_tag: v2-latest
+              image_tag: latest
               notes: Dedicated stack for Tenant One
               http_port: 18085
               https_port: 18086
@@ -7028,7 +7028,7 @@ components:
             desired_state: stopped
             container_name: arpvpn-tenant-one
             compose_project_name: tenant_one
-            image_tag: v2-latest
+            image_tag: latest
             notes: Dedicated stack for Tenant One
             http_port: 18085
             https_port: 18086
@@ -7119,7 +7119,7 @@ components:
                   example: tenant_one
                 image_tag:
                   type: string
-                  example: v2-latest
+                  example: latest
                 notes:
                   type: string
                   example: Dedicated stack for Tenant One
@@ -7140,7 +7140,7 @@ components:
                 desired_state: stopped
                 container_name: arpvpn-tenant-one
                 compose_project_name: tenant_one
-                image_tag: v2-latest
+                image_tag: latest
                 notes: Dedicated stack for Tenant One
                 http_port: 18085
                 https_port: 18086
@@ -7165,7 +7165,7 @@ components:
               desired_state: stopped
               container_name: arpvpn-tenant-one
               compose_project_name: tenant_one
-              image_tag: v2-latest
+              image_tag: latest
               notes: Dedicated stack for Tenant One
               http_port: 18085
               https_port: 18086
@@ -7250,7 +7250,7 @@ components:
               example: tenant_one
             image_tag:
               type: string
-              example: v2-latest
+              example: latest
             notes:
               type: string
               example: Dedicated stack for Tenant One
@@ -7271,7 +7271,7 @@ components:
             desired_state: stopped
             container_name: arpvpn-tenant-one
             compose_project_name: tenant_one
-            image_tag: v2-latest
+            image_tag: latest
             notes: Dedicated stack for Tenant One
             http_port: 18085
             https_port: 18086
@@ -7297,7 +7297,7 @@ components:
             desired_state: stopped
             container_name: arpvpn-tenant-one
             compose_project_name: tenant_one
-            image_tag: v2-latest
+            image_tag: latest
             notes: Dedicated stack for Tenant One
             http_port: 18085
             https_port: 18086
@@ -7320,7 +7320,7 @@ components:
           desired_state: stopped
           container_name: arpvpn-tenant-one
           compose_project_name: tenant_one
-          image_tag: v2-latest
+          image_tag: latest
           notes: Dedicated stack for Tenant One
           http_port: 18085
           https_port: 18086
@@ -7355,7 +7355,7 @@ components:
               example: tenant_one
             image_tag:
               type: string
-              example: v2-latest
+              example: latest
             notes:
               type: string
               example: Dedicated stack for Tenant One
@@ -7376,7 +7376,7 @@ components:
             desired_state: stopped
             container_name: arpvpn-tenant-one
             compose_project_name: tenant_one
-            image_tag: v2-latest
+            image_tag: latest
             notes: Dedicated stack for Tenant One
             http_port: 18085
             https_port: 18086
@@ -7405,7 +7405,7 @@ components:
           example: tenant_one
         image_tag:
           type: string
-          example: v2-latest
+          example: latest
         notes:
           type: string
           example: Dedicated stack for Tenant One
@@ -7427,7 +7427,7 @@ components:
           desired_state: stopped
           container_name: arpvpn-tenant-one
           compose_project_name: tenant_one
-          image_tag: v2-latest
+          image_tag: latest
           notes: Dedicated stack for Tenant One
           http_port: 18085
           https_port: 18086
@@ -7438,7 +7438,7 @@ components:
         desired_state: stopped
         container_name: arpvpn-tenant-one
         compose_project_name: tenant_one
-        image_tag: v2-latest
+        image_tag: latest
         notes: Dedicated stack for Tenant One
         http_port: 18085
         https_port: 18086

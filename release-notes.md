@@ -2,6 +2,13 @@
 
 ## What's new
 
+### 2.0.4
+
+* Repo split: multitenant is now tracked as a standalone private GitLab project at `arphost/arpvpn-multitenant`.
+* CI Changed: the multitenant repo now publishes only multitenant images and no longer carries the public `stable` / `1.2.x` publish jobs.
+* Docs Changed: installation, deployment, and repository metadata now point to the dedicated multitenant repo and registry image path.
+* Validation: standalone multitenant repo bootstrap, package build, and Docker build were revalidated on 2026-03-26 after the split cleanup.
+
 ### 2.0.3
 
 * Mesh UI Added: new `/mesh` control page with quick site-to-site and full-mesh wizards, route/policy management, diagnostics, and signed event review.
@@ -29,7 +36,7 @@
 
 ### 2.0.0
 
-* Release line: first multitenant release cut on `codex/multitenant-v2`, published separately from the stable `1.2.x` line.
+* Release line: first multitenant release cut before the later standalone private repo split.
 * API Added: tenant, user, tenant-member, and invitation endpoints for `/api/v1/tenants`, `/api/v1/users`, and `/api/v1/invitations`.
 * API Changed: tenant-admin user management is tenant-scoped, and support users are now blocked from tenant CRUD.
 * Docs: added docker02 clean-clone validation guidance and aligned release metadata/docs with the shipped multitenant line.

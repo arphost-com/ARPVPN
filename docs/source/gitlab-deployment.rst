@@ -1,7 +1,7 @@
 GitLab Deployment
 =================
 
-This project is configured to publish Docker images to GitLab Container Registry using ``.gitlab-ci.yml``.
+This project publishes Docker images to GitLab Container Registry using ``.gitlab-ci.yml``.
 
 Prerequisites
 -------------
@@ -36,33 +36,29 @@ Registry TLS/CA notes
 
 If your registry uses an internal or self-signed certificate, install the CA cert on the runner host so Docker and dind trust it.
 
-If your registry is configured as insecure HTTP (not recommended), configure dind accordingly at runner level.
+If your registry is configured as insecure HTTP, configure dind accordingly at runner level.
 
 CI publish behavior
 -------------------
 
-GitLab publish jobs are split by release line.
+1. Run the required ``unit_tests`` job.
+2. Build the package artifact via ``build.sh``.
+3. Build the Docker image.
+4. Push branch or tag specific image tags:
 
-1. Run the required ``unit_tests`` job (``pytest`` deterministic unit subset).
-2. Build package artifact via ``build.sh``.
-3. Build Docker image.
-4. Push branch/tag-specific image tags:
+   * default branch builds:
+      * ``$CI_REGISTRY_IMAGE:latest``
+      * ``$CI_REGISTRY_IMAGE:2.x``
+      * ``$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA``
+   * ``v2.*`` tags:
+      * ``$CI_REGISTRY_IMAGE:latest``
+      * ``$CI_REGISTRY_IMAGE:2.x``
+      * ``$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG``
 
-   * ``main`` + ``v1.*`` tags:
-      * ``$CI_REGISTRY_IMAGE:stable``
-      * ``$CI_REGISTRY_IMAGE:1.2.x``
-      * ``$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA`` (branch builds)
-      * ``$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG`` (tag builds)
-   * ``codex/multitenant-v2`` + ``v2.*`` tags:
-      * ``$CI_REGISTRY_IMAGE:v2-latest``
-      * ``$CI_REGISTRY_IMAGE:v2-$CI_COMMIT_SHORT_SHA`` (branch builds)
-      * ``$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG`` (tag builds)
+Optional environment or integration suite
+-----------------------------------------
 
-Optional environment/integration suite
---------------------------------------
-
-The full pytest suite is available as ``integration_tests_env`` and is intended for runners/hosts
-with WireGuard/network tooling available.
+The full pytest suite is available as ``integration_tests_env`` and is intended for runners or hosts with WireGuard and network tooling available.
 
 - Trigger by setting pipeline variable ``RUN_ENV_INTEGRATION_TESTS=1``.
 - This job is non-blocking (``allow_failure``) and does not gate image publication.
@@ -73,10 +69,9 @@ API contract suite
 The repository also runs ``api_contract_tests`` as a non-blocking CI job.
 
 - Validates ``docs/source/api/openapi.v1.yaml``.
-- Runs the focused API/security regression subset from ``scripts/run-api-contract-tests.sh``.
+- Runs the focused API or security regression subset from ``scripts/run-api-contract-tests.sh``.
 - Keeps the existing ``unit_tests`` subset as the hard gate while still reporting API drift early.
-- Supports feature-flagged rollout of API groups through environment variables such as
-  ``ARPVPN_FEATURE_API_MESH=0`` or ``ARPVPN_FEATURE_API_WIREGUARD=0``.
+- Supports feature-flagged rollout of API groups through environment variables such as ``ARPVPN_FEATURE_API_MESH=0`` or ``ARPVPN_FEATURE_API_WIREGUARD=0``.
 
 Deploying ARPVPN with compose
 -----------------------------
@@ -88,7 +83,7 @@ On your deployment host:
     docker login <your-registry>
     docker compose -f docker/docker-compose.yaml up -d
 
-Set ``ARPVPN_IMAGE`` in compose/.env when using a non-default registry path.
+Set ``ARPVPN_IMAGE`` in compose ``.env`` when using a non-default registry path.
 
 docker02 clean validation workflow
 ----------------------------------
@@ -101,8 +96,7 @@ Use only these two ARPVPN clone paths on ``docker02``:
 For a full validation run:
 
 1. Delete the target clone directory.
-2. Re-clone the required branch into one of the two paths above.
-3. Run validation from that fresh clone with a unique container name, cookie suffix, data directory, and high test ports.
+2. Re-clone the repository into one of the two paths above.
+3. Run validation from that fresh clone with a unique container name, cookie suffix, data directory, and test ports.
 
-Fresh end-to-end validation was completed on ``2026-03-13`` for both ``main`` and
-``codex/multitenant-v2`` from the clean docker02 clones.
+Fresh standalone multitenant validation was completed on ``2026-03-26`` from the clean ``docker02`` clone at ``/home/debian/docker/arpvpn-mutlitenant``.

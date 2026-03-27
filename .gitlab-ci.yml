@@ -21,8 +21,6 @@ unit_tests:
     - |
       ./scripts/check_api_artifacts.sh
     - |
-      # Run deterministic unit tests on generic CI runners.
-      # Integration-style tests that require host WireGuard/network tooling run separately on ops hosts.
       pytest -q \
         arpvpn/tests/test_server.py \
         arpvpn/tests/default/test_setup.py \
@@ -69,7 +67,6 @@ integration_tests_env:
     - poetry install --with dev --no-interaction --no-ansi
   script:
     - |
-      # Full environment/integration suite (requires WireGuard/network tooling on runner host).
       pytest -q arpvpn/tests
   rules:
     - if: '$RUN_ENV_INTEGRATION_TESTS == "1"'
@@ -105,7 +102,7 @@ package_dist:
       - dist/*.tar.gz
     expire_in: 1 day
 
-docker_publish_v1:
+docker_publish:
   stage: container
   image: docker:27.1.1
   services:
@@ -124,54 +121,20 @@ docker_publish_v1:
       if [ -n "${CI_COMMIT_TAG:-}" ]; then
         docker build --build-arg ARPVPN_UID=1000 --build-arg ARPVPN_GID=1000 -f docker/Dockerfile \
           -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG" \
-          -t "$CI_REGISTRY_IMAGE:stable" \
-          -t "$CI_REGISTRY_IMAGE:1.2.x" \
+          -t "$CI_REGISTRY_IMAGE:latest" \
+          -t "$CI_REGISTRY_IMAGE:2.x" \
           .
         docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG"
       else
         docker build --build-arg ARPVPN_UID=1000 --build-arg ARPVPN_GID=1000 -f docker/Dockerfile \
-          -t "$CI_REGISTRY_IMAGE:stable" \
-          -t "$CI_REGISTRY_IMAGE:1.2.x" \
+          -t "$CI_REGISTRY_IMAGE:latest" \
+          -t "$CI_REGISTRY_IMAGE:2.x" \
           -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA" \
           .
         docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
       fi
-    - docker push "$CI_REGISTRY_IMAGE:stable"
-    - docker push "$CI_REGISTRY_IMAGE:1.2.x"
+    - docker push "$CI_REGISTRY_IMAGE:latest"
+    - docker push "$CI_REGISTRY_IMAGE:2.x"
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-    - if: '$CI_COMMIT_TAG =~ /^v1\./'
-
-docker_publish_v2:
-  stage: container
-  image: docker:27.1.1
-  services:
-    - name: docker:27.1.1-dind
-      alias: docker
-      command:
-        - "--tls=false"
-        - "--insecure-registry=10.10.10.96:5050"
-  needs:
-    - unit_tests
-    - package_dist
-  script:
-    - echo "$CI_REGISTRY_PASSWORD" | docker login "http://$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
-    - |
-      set -euo pipefail
-      if [ -n "${CI_COMMIT_TAG:-}" ]; then
-        docker build --build-arg ARPVPN_UID=1000 --build-arg ARPVPN_GID=1000 -f docker/Dockerfile \
-          -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG" \
-          -t "$CI_REGISTRY_IMAGE:v2-latest" \
-          .
-        docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG"
-      else
-        docker build --build-arg ARPVPN_UID=1000 --build-arg ARPVPN_GID=1000 -f docker/Dockerfile \
-          -t "$CI_REGISTRY_IMAGE:v2-latest" \
-          -t "$CI_REGISTRY_IMAGE:v2-$CI_COMMIT_SHORT_SHA" \
-          .
-        docker push "$CI_REGISTRY_IMAGE:v2-$CI_COMMIT_SHORT_SHA"
-      fi
-    - docker push "$CI_REGISTRY_IMAGE:v2-latest"
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "codex/multitenant-v2"'
     - if: '$CI_COMMIT_TAG =~ /^v2\./'

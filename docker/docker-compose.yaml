@@ -1,6 +1,6 @@
 services:
   arpvpn:
-    image: "${ARPVPN_IMAGE:-10.10.10.96:5050/arphost/arpvpn:v2-latest}"
+    image: "${ARPVPN_IMAGE:-10.10.10.96:5050/arphost/arpvpn-multitenant:latest}"
     container_name: "${ARPVPN_CONTAINER_NAME:-arpvpn}"
     # Run as the image's application user by default (preserves sudo policy
     # needed by WireGuard commands invoked by the UI).
@@ -53,7 +53,7 @@ services:
       - NET_RAW
     volumes:
       - type: bind
-        source: "${DATA_FOLDER:-/srv/arpvpn-v2/data}"  # Optional, provides a way to see and edit the configuration files directly from the host.
+        source: "${DATA_FOLDER:-/srv/arpvpn-multitenant/data}"  # Optional, provides a way to see and edit the configuration files directly from the host.
         target: /data
         bind:
           create_host_path: true
