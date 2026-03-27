@@ -3,18 +3,24 @@ stages:
   - package
   - container
 
-variables:
-  DOCKER_DRIVER: overlay2
-  DOCKER_TLS_CERTDIR: ""
-  DOCKER_HOST: tcp://docker:2375
+.poetry_job_setup: &poetry_job_setup
+  - rm -rf .ci-venv
+  - python3 -m venv .ci-venv
+  - . .ci-venv/bin/activate
+  - pip install --no-cache-dir poetry==1.8.3
+  - poetry config virtualenvs.create false
+  - poetry install --with dev --no-interaction --no-ansi
+
+.poetry_package_setup: &poetry_package_setup
+  - rm -rf .ci-venv
+  - python3 -m venv .ci-venv
+  - . .ci-venv/bin/activate
+  - pip install --no-cache-dir poetry==1.8.3
 
 unit_tests:
   stage: test
   image: python:3.11-slim
-  before_script:
-    - pip install --no-cache-dir poetry==1.8.3
-    - poetry config virtualenvs.create false
-    - poetry install --with dev --no-interaction --no-ansi
+  before_script: *poetry_job_setup
   script:
     - |
       python3 scripts/validate_openapi.py
@@ -61,10 +67,7 @@ integration_tests_env:
   stage: test
   image: python:3.11-slim
   allow_failure: true
-  before_script:
-    - pip install --no-cache-dir poetry==1.8.3
-    - poetry config virtualenvs.create false
-    - poetry install --with dev --no-interaction --no-ansi
+  before_script: *poetry_job_setup
   script:
     - |
       pytest -q arpvpn/tests
@@ -77,6 +80,9 @@ api_contract_tests:
   image: python:3.11-slim
   allow_failure: true
   before_script:
+    - rm -rf .ci-venv
+    - python3 -m venv .ci-venv
+    - . .ci-venv/bin/activate
     - pip install --no-cache-dir poetry==1.8.3
     - poetry config virtualenvs.create false
     - poetry install --with dev --no-interaction --no-ansi
@@ -90,8 +96,7 @@ api_contract_tests:
 package_dist:
   stage: package
   image: python:3.11-slim
-  before_script:
-    - pip install --no-cache-dir poetry==1.8.3
+  before_script: *poetry_package_setup
   needs:
     - unit_tests
   script:
@@ -115,6 +120,14 @@ docker_publish:
     - unit_tests
     - package_dist
   script:
+    - |
+      if getent hosts docker >/dev/null 2>&1; then
+        export DOCKER_HOST=tcp://docker:2375
+        export DOCKER_TLS_CERTDIR=""
+      else
+        unset DOCKER_HOST
+        unset DOCKER_TLS_CERTDIR
+      fi
     - echo "$CI_REGISTRY_PASSWORD" | docker login "http://$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
     - |
       set -euo pipefail
