@@ -9,7 +9,7 @@ See also: `MESH_ACL_TODO.md` for dedicated site-to-site mesh and IP access-contr
 - [x] Standardize response envelope (success/error shape, request IDs, pagination metadata).
 - [x] Define error model (`code`, `message`, `details`, HTTP mapping).
 - [x] Add OpenAPI source of truth and CI validation.
-- [x] Add API changelog process per release line (`main` and `codex/multitenant-v2`).
+- [x] Add API changelog process and cross-repo backport guidance.
 
 ## Phase 1: AuthN/AuthZ and Session Control
 - [x] Add token-based auth (access + refresh tokens) for API clients.
@@ -72,4 +72,4 @@ See also: `MESH_ACL_TODO.md` for dedicated site-to-site mesh and IP access-contr
 - [x] Every UI operation has a matching API endpoint.
 - [x] Role and tenant boundaries are enforced and tested end-to-end.
 - [x] API docs and examples are complete and versioned.
-- [x] Both release lines have clear backport/cherry-pick guidance for API changes.
+- [x] Public and private repos have clear backport/cherry-pick guidance for API changes.

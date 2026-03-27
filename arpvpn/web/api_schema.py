@@ -274,7 +274,7 @@ TENANT_RUNTIME_FIELD = object_field(
         "desired_state": string_field(enum=("running", "stopped", "restarting"), example="stopped"),
         "container_name": string_field(example="arpvpn-tenant-one"),
         "compose_project_name": string_field(example="tenant_one"),
-        "image_tag": string_field(example="v2-latest"),
+        "image_tag": string_field(example="stable"),
         "notes": string_field(example="Dedicated stack for Tenant One"),
         "http_port": integer_field(example=18085),
         "https_port": integer_field(example=18086),

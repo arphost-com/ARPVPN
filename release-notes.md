@@ -2,6 +2,13 @@
 
 ## What's new
 
+### 1.2.12
+
+* Repo split: the private multitenant line has moved to its own repository, leaving this repo as the public single-tenant line.
+* CI Changed: removed the multitenant publish job from the public repo and kept only `stable` / `1.2.x` image publication here.
+* Docs Changed: installation and deployment guidance now describe only the public line.
+* Validation: public-line contract, unit subset, package build, and Docker build were revalidated on 2026-03-26 after the repo split cleanup.
+
 ### 1.2.11
 
 * Mesh UI Added: new `/mesh` control page with quick site-to-site and full-mesh wizards, route/policy management, diagnostics, and signed event review.

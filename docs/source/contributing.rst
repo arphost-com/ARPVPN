@@ -11,15 +11,13 @@ Any help is welcome, just make sure you read the following sections, which will 
 Git flow
 --------
 
-You should never work directly on the ``main`` branch. This branch is only used to gather new features and bugfixes previously merged to the ``dev`` branch and publish them in a single package. In other words, its purpose is to release new versions of ARPVPN.
-
-Hence, the ``dev`` branch **should always be your starting point and the target of your pull requests.**
+You should never work directly on the ``main`` branch. Create a feature branch from ``main`` and open a pull request back into ``main`` once the work is ready for review.
 
 .. code-block:: bash
 
     git clone https://github.com/arphost-com/ARPVPN.git
     cd ARPVPN
-    git checkout dev
+    git checkout -b my-change origin/main
 
 
 Requirements
@@ -97,8 +95,7 @@ to releases must follow the format ``v{MAJOR}.{MINOR}.{PATCH}``. Thus, release
 CI/CD
 -----
 
-Github Workflows are used to implement a CI/CD pipeline. When pull requests targeting the ``main`` or ``dev``
-branches are opened, a series of tests will automatically be ran to ensure everything is working properly.
+CI pipelines validate the hard-gate unit subset on every push and merge request. Optional environment and API-contract jobs provide additional signal without blocking publication.
 
 .. warning::
 

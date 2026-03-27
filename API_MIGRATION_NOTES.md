@@ -44,8 +44,8 @@ This document maps legacy UI flows to the API surface so automation and future U
 - New admin-only restore path: `POST /api/v1/system/restore`
 - Use `dry_run=true` before restore to validate content without writing files.
 
-## Release-line guidance
+## Release guidance
 
-- Land API changes on `codex/multitenant-v2` first when they touch tenant scoping.
-- Backport to `main` only after the docker02 validation path is green.
-- Keep `main` on the stable image tags and `codex/multitenant-v2` on `v2-*` image tags.
+- Land API changes in this repository only when they apply to the public single-tenant line.
+- If a matching change is needed in the private multitenant repository, port it there after the public validation path is green.
+- Keep this repository on the `stable` and `1.2.x` image tags.

@@ -1,21 +1,18 @@
 # ARPVPN API Changelog Process
 
-This process applies to both release lines:
-
-- `main` (`1.2.x`)
-- `codex/multitenant-v2` (`2.x`)
+This process applies to the public ARPVPN line in this repository.
 
 ## Required updates per API change
 
-1. Update `docs/source/api/openapi.v1.yaml` (or the v2 OpenAPI document on `codex/multitenant-v2`).
+1. Update `docs/source/api/openapi.v1.yaml`.
 2. Add a release-notes entry in `release-notes.md` with API-specific bullets.
 3. Update checklist status in `API_CONTROL_TODO.md` / `MESH_ACL_TODO.md` as applicable.
 4. Add/adjust API tests and ensure CI hard-gate passes.
 
-## Backport/cherry-pick guidance
+## Cross-repo guidance
 
-- Changes created on `main` that are needed in v2 should be cherry-picked to `codex/multitenant-v2`.
-- v2-only API features must not be merged into `main`.
+- If a change also belongs in the private multitenant repository, cherry-pick it there explicitly.
+- Keep this repository's release notes and OpenAPI document accurate even when the same change ships elsewhere.
 
 ## Entry format
 
