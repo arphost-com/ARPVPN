@@ -128,7 +128,7 @@ docker_publish:
         unset DOCKER_HOST
         unset DOCKER_TLS_CERTDIR
       fi
-    - echo "$CI_REGISTRY_PASSWORD" | docker login "http://$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
     - |
       set -euo pipefail
       if [ -n "${CI_COMMIT_TAG:-}" ]; then
