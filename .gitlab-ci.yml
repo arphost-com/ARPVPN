@@ -1,9 +1,16 @@
+default:
+  tags:
+    - docker02
+
 stages:
   - test
   - package
   - container
 
 .poetry_job_setup: &poetry_job_setup
+  - apt-get update
+  - apt-get install -y --no-install-recommends iproute2
+  - rm -rf /var/lib/apt/lists/*
   - rm -rf .ci-venv
   - python3 -m venv .ci-venv
   - . .ci-venv/bin/activate
