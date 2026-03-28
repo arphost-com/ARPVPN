@@ -87,6 +87,9 @@ api_contract_tests:
   image: python:3.11-slim
   allow_failure: true
   before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends iproute2
+    - rm -rf /var/lib/apt/lists/*
     - rm -rf .ci-venv
     - python3 -m venv .ci-venv
     - . .ci-venv/bin/activate
@@ -117,24 +120,12 @@ package_dist:
 docker_publish:
   stage: container
   image: docker:27.1.1
-  services:
-    - name: docker:27.1.1-dind
-      alias: docker
-      command:
-        - "--tls=false"
-        - "--insecure-registry=10.10.10.96:5050"
   needs:
     - unit_tests
     - package_dist
   script:
-    - |
-      if getent hosts docker >/dev/null 2>&1; then
-        export DOCKER_HOST=tcp://docker:2375
-        export DOCKER_TLS_CERTDIR=""
-      else
-        unset DOCKER_HOST
-        unset DOCKER_TLS_CERTDIR
-      fi
+    - unset DOCKER_HOST
+    - unset DOCKER_TLS_CERTDIR
     - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
     - |
       set -euo pipefail
