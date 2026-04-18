@@ -121,6 +121,18 @@ RRD_GRAPH_CACHE_TTL_SECONDS = get_env_int("ARPVPN_RRD_GRAPH_CACHE_TTL_SECONDS", 
 RRD_GRAPH_CACHE_DIRNAME = "rrd_graph_cache"
 RRD_GRAPH_CACHE_LOCKS: Dict[str, Lock] = {}
 RRD_GRAPH_CACHE_LOCKS_LOCK = Lock()
+STATISTICS_DIAGNOSTIC_FILTERS = (
+    "handshake",
+    "auth",
+    "interface",
+    "tls",
+    "rrd",
+    "bans",
+    "warnings",
+    "errors",
+    "all",
+)
+STATISTICS_DIAGNOSTIC_DISPLAY_LIMIT = 200
 TRAFFIC_ROLLUP_WINDOWS_SECONDS = {
     "hour": 60 * 60,
     "day": 24 * 60 * 60,
@@ -174,6 +186,50 @@ BENIGN_LOG_ISSUE_PATTERNS = (
     "already down.",
     "csrf validation failed on login; not counting toward lockout.",
 )
+LOG_AUTH_FAILURE_PATTERNS = (
+    "login_post): unable to validate form",
+    "unable to log in",
+    "unable to validate field 'password'",
+    "unable to validate field 'username'",
+)
+LOG_INTERFACE_FAILURE_PATTERNS = (
+    "failed to start interface",
+    "failed to stop interface",
+    "invalid operation:",
+)
+LOG_TLS_FAILURE_PATTERNS = (
+    "unable to issue let's encrypt certificate",
+    "unable to generate self-signed certificate",
+    "tls mode requires certificate",
+    "let's encrypt certificate was issued but expected files were not found",
+)
+LOG_RRD_FAILURE_PATTERNS = (
+    "unable to create rrd file",
+    "unable to update rrd data",
+    "unable to generate rrd graph",
+)
+LOG_DIAGNOSTIC_LABELS = {
+    "all": "Log tail",
+    "warnings": "Warnings",
+    "errors": "Errors / fatal",
+    "handshake": "Handshake failures",
+    "auth": "Auth failures",
+    "interface": "Interface failures",
+    "tls": "TLS failures",
+    "rrd": "RRD failures",
+    "bans": "Active login bans",
+}
+LOG_DIAGNOSTIC_KINDS = {
+    "all": "logs",
+    "warnings": "logs",
+    "errors": "logs",
+    "auth": "logs",
+    "interface": "logs",
+    "tls": "logs",
+    "rrd": "logs",
+    "handshake": "peers",
+    "bans": "bans",
+}
 api_token_store = ApiTokenStore(web_config.secret_key)
 api_rate_limiter = SlidingWindowRateLimiter()
 api_auth_lockouts = AuthLockoutManager()
@@ -939,83 +995,245 @@ def summarize_rollups(rollup_rows: List[Dict[str, Any]]) -> Dict[str, Dict[str, 
     return totals
 
 
-def get_failure_metrics(max_tail_lines: int = 5000) -> Dict[str, Any]:
-    metrics: Dict[str, Any] = {
+def build_log_diagnostics(max_tail_lines: int = 5000) -> Dict[str, Any]:
+    logfile = logger_config.logfile
+    diagnostics: Dict[str, Any] = {
+        "available": False,
+        "logfile": logfile,
+        "total_lines": 0,
+        "tail_lines": 0,
+        "warning_lines": 0,
+        "error_lines": 0,
+        "suppressed_issue_lines": 0,
+        "issue_entries": [],
+        "tail_entries": [],
+        "read_error": None,
         "auth_failures": 0,
         "interface_failures": 0,
         "tls_failures": 0,
         "rrd_failures": 0,
-        "active_login_bans": 0,
-        "inspected_log_lines": 0,
-        "log_available": False,
+        "active_login_bans": sum(1 for client in clients.values() if client.is_banned()),
         "total": 0,
     }
-
-    metrics["active_login_bans"] = sum(1 for client in clients.values() if client.is_banned())
-    logfile = logger_config.logfile
     if not os.path.exists(logfile):
-        metrics["total"] = metrics["active_login_bans"]
-        return metrics
+        diagnostics["total"] = diagnostics["active_login_bans"]
+        return diagnostics
 
     tail: deque[str] = deque(maxlen=max_tail_lines)
     try:
         with open(logfile, "r", encoding="utf-8", errors="ignore") as handle:
             for line in handle:
+                diagnostics["total_lines"] += 1
                 entry = line.strip()
                 if not entry:
                     continue
                 tail.append(entry)
-    except OSError:
-        metrics["total"] = metrics["active_login_bans"]
-        return metrics
+    except OSError as e:
+        diagnostics["read_error"] = str(e)
+        diagnostics["total"] = diagnostics["active_login_bans"]
+        return diagnostics
 
-    auth_patterns = (
-        "login_post): unable to validate form",
-        "unable to log in",
-        "unable to validate field 'password'",
-        "unable to validate field 'username'",
-    )
-    interface_patterns = (
-        "failed to start interface",
-        "failed to stop interface",
-        "invalid operation:",
-    )
-    tls_patterns = (
-        "unable to issue let's encrypt certificate",
-        "unable to generate self-signed certificate",
-        "tls mode requires certificate",
-        "let's encrypt certificate was issued but expected files were not found",
-    )
-    rrd_patterns = (
-        "unable to create rrd file",
-        "unable to update rrd data",
-        "unable to generate rrd graph",
-    )
-
+    issue_entries: List[str] = []
     for entry in tail:
         lowered = entry.lower()
-        if any(pattern in lowered for pattern in auth_patterns):
-            metrics["auth_failures"] += 1
-        if any(pattern in lowered for pattern in interface_patterns):
-            metrics["interface_failures"] += 1
-        if any(pattern in lowered for pattern in tls_patterns):
-            metrics["tls_failures"] += 1
-        if any(pattern in lowered for pattern in rrd_patterns):
-            metrics["rrd_failures"] += 1
+        is_error = "[error]" in lowered or "[fatal]" in lowered
+        is_warning = "[warning]" in lowered
+        if any(pattern in lowered for pattern in LOG_AUTH_FAILURE_PATTERNS):
+            diagnostics["auth_failures"] += 1
+        if any(pattern in lowered for pattern in LOG_INTERFACE_FAILURE_PATTERNS):
+            diagnostics["interface_failures"] += 1
+        if any(pattern in lowered for pattern in LOG_TLS_FAILURE_PATTERNS):
+            diagnostics["tls_failures"] += 1
+        if any(pattern in lowered for pattern in LOG_RRD_FAILURE_PATTERNS):
+            diagnostics["rrd_failures"] += 1
+        if not is_error and not is_warning:
+            continue
+        if any(pattern in lowered for pattern in BENIGN_LOG_ISSUE_PATTERNS):
+            diagnostics["suppressed_issue_lines"] += 1
+            continue
+        if is_error:
+            diagnostics["error_lines"] += 1
+        elif is_warning:
+            diagnostics["warning_lines"] += 1
+        issue_entries.append(entry)
 
-    metrics["inspected_log_lines"] = len(tail)
-    metrics["log_available"] = True
-    metrics["total"] = (
-        metrics["auth_failures"] +
-        metrics["interface_failures"] +
-        metrics["tls_failures"] +
-        metrics["rrd_failures"] +
-        metrics["active_login_bans"]
+    tail_entries = list(tail)
+    diagnostics["tail_entries"] = tail_entries
+    diagnostics["tail_lines"] = len(tail_entries)
+    diagnostics["issue_entries"] = issue_entries
+    diagnostics["available"] = True
+    diagnostics["total"] = (
+        diagnostics["auth_failures"]
+        + diagnostics["interface_failures"]
+        + diagnostics["tls_failures"]
+        + diagnostics["rrd_failures"]
+        + diagnostics["active_login_bans"]
     )
+    return diagnostics
+
+
+def get_failure_metrics(max_tail_lines: int = 5000) -> Dict[str, Any]:
+    diagnostics = build_log_diagnostics(max_tail_lines=max_tail_lines)
+    metrics: Dict[str, Any] = {
+        "auth_failures": diagnostics["auth_failures"],
+        "interface_failures": diagnostics["interface_failures"],
+        "tls_failures": diagnostics["tls_failures"],
+        "rrd_failures": diagnostics["rrd_failures"],
+        "active_login_bans": diagnostics["active_login_bans"],
+        "inspected_log_lines": diagnostics["tail_lines"],
+        "log_available": diagnostics["available"],
+        "total": diagnostics["total"],
+    }
     return metrics
 
 
-def build_statistics_payload(include_log_issues: bool = False) -> Dict[str, Any]:
+def normalize_statistics_diagnostic(value: Any) -> str:
+    candidate = str(value or "").strip().lower()
+    if candidate in STATISTICS_DIAGNOSTIC_FILTERS:
+        return candidate
+    return ""
+
+
+def categorize_log_entry(entry: str) -> str:
+    lowered = entry.lower()
+    if "[fatal]" in lowered or "[error]" in lowered:
+        return "error"
+    if "[warning]" in lowered:
+        return "warning"
+    return "info"
+
+
+def matches_statistics_log_filter(entry: str, diagnostic: str) -> bool:
+    lowered = entry.lower()
+    if diagnostic == "all":
+        return True
+    if diagnostic == "warnings":
+        return "[warning]" in lowered and not any(pattern in lowered for pattern in BENIGN_LOG_ISSUE_PATTERNS)
+    if diagnostic == "errors":
+        return ("[error]" in lowered or "[fatal]" in lowered) and not any(
+            pattern in lowered for pattern in BENIGN_LOG_ISSUE_PATTERNS
+        )
+    if diagnostic == "auth":
+        return any(pattern in lowered for pattern in LOG_AUTH_FAILURE_PATTERNS)
+    if diagnostic == "interface":
+        return any(pattern in lowered for pattern in LOG_INTERFACE_FAILURE_PATTERNS)
+    if diagnostic == "tls":
+        return any(pattern in lowered for pattern in LOG_TLS_FAILURE_PATTERNS)
+    if diagnostic == "rrd":
+        return any(pattern in lowered for pattern in LOG_RRD_FAILURE_PATTERNS)
+    return False
+
+
+def build_statistics_diagnostic_view(
+        diagnostic: str,
+        diagnostics: Dict[str, Any],
+        peer_runtime: Dict[str, Any],
+) -> Dict[str, Any]:
+    selected = normalize_statistics_diagnostic(diagnostic)
+    if not selected:
+        return {
+            "selected": "",
+            "kind": "none",
+            "title": "",
+            "subtitle": "",
+            "entries": [],
+            "count": 0,
+            "displayed_count": 0,
+        }
+
+    title = LOG_DIAGNOSTIC_LABELS[selected]
+    if selected == "handshake":
+        rows = [
+            row for row in peer_runtime["rows"]
+            if row["handshake_state"] in ("stale", "offline", "never")
+        ]
+        handshake_order = {"never": 0, "offline": 1, "stale": 2}
+        rows.sort(key=lambda row: (handshake_order.get(row["handshake_state"], 3), row["peer_name"].lower()))
+        entries = [{
+            "peer_uuid": row["peer_uuid"],
+            "peer_name": row["peer_name"],
+            "interface_name": row["interface_name"],
+            "handshake_state": row["handshake_state"],
+            "handshake_label": row["handshake_state"].title(),
+            "handshake_ago": row["handshake_ago"] or "Never",
+            "seconds_since_handshake": row["seconds_since_handshake"],
+            "message": f"{row['peer_name']} is {row['handshake_state']}.",
+            "badge": "warning" if row["handshake_state"] == "stale" else "danger",
+        } for row in rows]
+        return {
+            "selected": selected,
+            "kind": "peers",
+            "title": title,
+            "subtitle": f"{len(entries)} peer(s) with stale, offline, or never-seen handshakes.",
+            "entries": entries,
+            "count": len(entries),
+            "displayed_count": len(entries),
+        }
+
+    if selected == "bans":
+        entries = []
+        now = datetime.now()
+        for client in sorted(clients.values(), key=lambda item: str(item.ip)):
+            if not client.is_banned():
+                continue
+            remaining_seconds = max(int((client.banned_until - now).total_seconds()), 0)
+            entries.append({
+                "ip": str(client.ip),
+                "login_attempts": client.login_attempts,
+                "banned_for_seconds": remaining_seconds,
+                "banned_until": client.banned_until.isoformat(),
+            })
+        return {
+            "selected": selected,
+            "kind": "bans",
+            "title": title,
+            "subtitle": f"{len(entries)} active login ban(s).",
+            "entries": entries,
+            "count": len(entries),
+            "displayed_count": len(entries),
+        }
+
+    tail_entries = diagnostics.get("tail_entries", [])
+    matched_entries = [
+        entry for entry in tail_entries
+        if matches_statistics_log_filter(entry, selected)
+    ]
+    if selected == "all":
+        display_entries = matched_entries[-STATISTICS_DIAGNOSTIC_DISPLAY_LIMIT:]
+        subtitle = (
+            f"Showing the most recent {len(display_entries)} of {len(matched_entries)} log lines."
+            if matched_entries else "No log lines available yet."
+        )
+    else:
+        display_entries = matched_entries[-STATISTICS_DIAGNOSTIC_DISPLAY_LIMIT:]
+        subtitle = (
+            f"Showing {len(display_entries)} matching log line(s) from the inspected tail."
+            if matched_entries else "No matching log lines found in the inspected tail."
+        )
+    start_line = max(int(diagnostics.get("total_lines", 0)) - len(tail_entries) + 1, 1)
+    entries = []
+    for index, entry in enumerate(tail_entries, start=start_line):
+        if not matches_statistics_log_filter(entry, selected):
+            continue
+        entries.append({
+            "line_number": index,
+            "line": entry,
+            "category": categorize_log_entry(entry),
+        })
+    entries = entries[-STATISTICS_DIAGNOSTIC_DISPLAY_LIMIT:]
+    return {
+        "selected": selected,
+        "kind": LOG_DIAGNOSTIC_KINDS[selected],
+        "title": title,
+        "subtitle": subtitle,
+        "entries": entries,
+        "count": len(matched_entries),
+        "displayed_count": len(entries),
+    }
+
+
+def build_statistics_payload(include_log_issues: bool = False, diagnostic_filter: str = "") -> Dict[str, Any]:
+    diagnostics = build_log_diagnostics()
     if traffic_config.enabled:
         traffic = traffic_config.driver.get_session_and_stored_data()
     else:
@@ -1028,8 +1246,36 @@ def build_statistics_payload(include_log_issues: bool = False) -> Dict[str, Any]
     rollup_rows = build_connection_rollups(statistics_rows, history_by_uuid)
     rollup_totals = summarize_rollups(rollup_rows)
     rollup_index = {row["uuid"]: row["windows"] for row in rollup_rows}
-    log_summary = get_log_summary(include_recent_issues=include_log_issues)
-    failure_metrics = get_failure_metrics()
+    log_summary = {
+        "available": diagnostics["available"],
+        "logfile": diagnostics["logfile"],
+        "total_lines": diagnostics["total_lines"],
+        "tail_lines": diagnostics["tail_lines"],
+        "warning_lines": diagnostics["warning_lines"],
+        "error_lines": diagnostics["error_lines"],
+        "suppressed_issue_lines": diagnostics["suppressed_issue_lines"],
+        "recent_issues": list(reversed(diagnostics["issue_entries"]))[:8] if include_log_issues else [],
+        "read_error": diagnostics["read_error"],
+    }
+    failure_metrics = {
+        "auth_failures": diagnostics["auth_failures"],
+        "interface_failures": diagnostics["interface_failures"],
+        "tls_failures": diagnostics["tls_failures"],
+        "rrd_failures": diagnostics["rrd_failures"],
+        "active_login_bans": diagnostics["active_login_bans"],
+        "inspected_log_lines": diagnostics["tail_lines"],
+        "log_available": diagnostics["available"],
+        "total": diagnostics["total"],
+    }
+    diagnostic_view = build_statistics_diagnostic_view(diagnostic_filter, diagnostics, peer_runtime) if include_log_issues else {
+        "selected": "",
+        "kind": "none",
+        "title": "",
+        "subtitle": "",
+        "entries": [],
+        "count": 0,
+        "displayed_count": 0,
+    }
 
     peer_totals = peer_runtime["totals"]
     handshake_failures = peer_totals["stale_peers"] + peer_totals["offline_peers"] + peer_totals["never_seen_peers"]
@@ -1053,6 +1299,7 @@ def build_statistics_payload(include_log_issues: bool = False) -> Dict[str, Any]
         "handshake_failures": handshake_failures,
         "log_summary": log_summary,
         "failure_metrics": failure_metrics,
+        "diagnostic_view": diagnostic_view,
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "scope": "staff" if current_user.has_role(*STAFF_ROLES) else "client",
     }
@@ -1063,7 +1310,25 @@ def build_statistics_payload(include_log_issues: bool = False) -> Dict[str, Any]
 @setup_required
 def statistics():
     is_staff_view = current_user.has_role(*STAFF_ROLES)
-    payload = build_statistics_payload(include_log_issues=is_staff_view)
+    selected_diagnostic = normalize_statistics_diagnostic(request.args.get("diagnostic")) if is_staff_view else ""
+    payload = build_statistics_payload(
+        include_log_issues=is_staff_view,
+        diagnostic_filter=selected_diagnostic,
+    )
+    diagnostic_links = {}
+    if is_staff_view:
+        diagnostic_links = {
+            "clear": url_for("router.statistics"),
+            "handshake": url_for("router.statistics", diagnostic="handshake"),
+            "auth": url_for("router.statistics", diagnostic="auth"),
+            "interface": url_for("router.statistics", diagnostic="interface"),
+            "tls": url_for("router.statistics", diagnostic="tls"),
+            "rrd": url_for("router.statistics", diagnostic="rrd"),
+            "bans": url_for("router.statistics", diagnostic="bans"),
+            "warnings": url_for("router.statistics", diagnostic="warnings"),
+            "errors": url_for("router.statistics", diagnostic="errors"),
+            "all": url_for("router.statistics", diagnostic="all"),
+        }
     context = {
         "title": "Statistics",
         "statistics_rows": payload["statistics_rows"],
@@ -1078,6 +1343,8 @@ def statistics():
         "rollup_totals": payload["rollup_totals"],
         "failure_metrics": payload["failure_metrics"],
         "log_summary": payload["log_summary"],
+        "diagnostic_view": payload["diagnostic_view"],
+        "diagnostic_links": diagnostic_links,
         "is_staff_view": is_staff_view,
         "last_update": datetime.now().strftime("%H:%M"),
         "traffic_config": traffic_config
@@ -1401,55 +1668,18 @@ def get_connection_sample_counts() -> Dict[str, int]:
 
 
 def get_log_summary(max_tail_lines: int = 5000, include_recent_issues: bool = False) -> Dict[str, Any]:
-    logfile = logger_config.logfile
+    diagnostics = build_log_diagnostics(max_tail_lines=max_tail_lines)
     summary: Dict[str, Any] = {
-        "available": False,
-        "logfile": logfile,
-        "total_lines": 0,
-        "tail_lines": 0,
-        "warning_lines": 0,
-        "error_lines": 0,
-        "suppressed_issue_lines": 0,
-        "recent_issues": [],
-        "read_error": None,
+        "available": diagnostics["available"],
+        "logfile": diagnostics["logfile"],
+        "total_lines": diagnostics["total_lines"],
+        "tail_lines": diagnostics["tail_lines"],
+        "warning_lines": diagnostics["warning_lines"],
+        "error_lines": diagnostics["error_lines"],
+        "suppressed_issue_lines": diagnostics["suppressed_issue_lines"],
+        "recent_issues": list(reversed(diagnostics["issue_entries"]))[:8] if include_recent_issues else [],
+        "read_error": diagnostics["read_error"],
     }
-    if not os.path.exists(logfile):
-        return summary
-
-    tail: deque[str] = deque(maxlen=max_tail_lines)
-    try:
-        with open(logfile, "r", encoding="utf-8", errors="ignore") as handle:
-            for line in handle:
-                summary["total_lines"] += 1
-                entry = line.strip()
-                if not entry:
-                    continue
-                tail.append(entry)
-    except OSError as e:
-        summary["read_error"] = str(e)
-        return summary
-
-    issue_entries: List[str] = []
-    for entry in tail:
-        is_error = "[ERROR]" in entry or "[FATAL]" in entry
-        is_warning = "[WARNING]" in entry
-        if not is_error and not is_warning:
-            continue
-
-        lowered_entry = entry.lower()
-        if any(pattern in lowered_entry for pattern in BENIGN_LOG_ISSUE_PATTERNS):
-            summary["suppressed_issue_lines"] += 1
-            continue
-
-        if is_error:
-            summary["error_lines"] += 1
-        elif is_warning:
-            summary["warning_lines"] += 1
-        issue_entries.append(entry)
-    summary["tail_lines"] = len(tail)
-    if include_recent_issues:
-        summary["recent_issues"] = list(reversed(issue_entries))[:8]
-    summary["available"] = True
     return summary
 
 

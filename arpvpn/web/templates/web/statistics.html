@@ -77,13 +77,52 @@
                     Failure diagnostics
                 </div>
                 <div class="card-body">
+                    {% if is_staff_view %}
+                        <div class="small text-muted mb-3">Click a count to filter the diagnostics view below.</div>
+                    {% endif %}
                     <div class="row">
-                        <div class="col-md-4 mb-2"><strong>Handshake failures:</strong> {{ handshake_failures }}</div>
-                        <div class="col-md-4 mb-2"><strong>Auth failures (log tail):</strong> {{ failure_metrics["auth_failures"] }}</div>
-                        <div class="col-md-4 mb-2"><strong>Interface failures (log tail):</strong> {{ failure_metrics["interface_failures"] }}</div>
-                        <div class="col-md-4 mb-2"><strong>TLS failures (log tail):</strong> {{ failure_metrics["tls_failures"] }}</div>
-                        <div class="col-md-4 mb-2"><strong>RRD failures (log tail):</strong> {{ failure_metrics["rrd_failures"] }}</div>
-                        <div class="col-md-4 mb-2"><strong>Active login bans:</strong> {{ failure_metrics["active_login_bans"] }}</div>
+                        <div class="col-md-4 mb-2">
+                            {% if is_staff_view %}
+                                <a class="text-reset" href="{{ diagnostic_links["handshake"] }}"><strong>Handshake failures:</strong> {{ handshake_failures }}</a>
+                            {% else %}
+                                <strong>Handshake failures:</strong> {{ handshake_failures }}
+                            {% endif %}
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            {% if is_staff_view %}
+                                <a class="text-reset" href="{{ diagnostic_links["auth"] }}"><strong>Auth failures (log tail):</strong> {{ failure_metrics["auth_failures"] }}</a>
+                            {% else %}
+                                <strong>Auth failures (log tail):</strong> {{ failure_metrics["auth_failures"] }}
+                            {% endif %}
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            {% if is_staff_view %}
+                                <a class="text-reset" href="{{ diagnostic_links["interface"] }}"><strong>Interface failures (log tail):</strong> {{ failure_metrics["interface_failures"] }}</a>
+                            {% else %}
+                                <strong>Interface failures (log tail):</strong> {{ failure_metrics["interface_failures"] }}
+                            {% endif %}
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            {% if is_staff_view %}
+                                <a class="text-reset" href="{{ diagnostic_links["tls"] }}"><strong>TLS failures (log tail):</strong> {{ failure_metrics["tls_failures"] }}</a>
+                            {% else %}
+                                <strong>TLS failures (log tail):</strong> {{ failure_metrics["tls_failures"] }}
+                            {% endif %}
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            {% if is_staff_view %}
+                                <a class="text-reset" href="{{ diagnostic_links["rrd"] }}"><strong>RRD failures (log tail):</strong> {{ failure_metrics["rrd_failures"] }}</a>
+                            {% else %}
+                                <strong>RRD failures (log tail):</strong> {{ failure_metrics["rrd_failures"] }}
+                            {% endif %}
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            {% if is_staff_view %}
+                                <a class="text-reset" href="{{ diagnostic_links["bans"] }}"><strong>Active login bans:</strong> {{ failure_metrics["active_login_bans"] }}</a>
+                            {% else %}
+                                <strong>Active login bans:</strong> {{ failure_metrics["active_login_bans"] }}
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -98,9 +137,15 @@
                         <span class="text-muted">Detailed runtime logs are only visible to administrators.</span>
                     {% elif log_summary["available"] %}
                         <div class="row">
-                            <div class="col-md-4 mb-2"><strong>Total lines:</strong> {{ log_summary["total_lines"] }}</div>
-                            <div class="col-md-4 mb-2"><strong>Warnings (tail):</strong> {{ log_summary["warning_lines"] }}</div>
-                            <div class="col-md-4 mb-2"><strong>Errors/Fatal (tail):</strong> {{ log_summary["error_lines"] }}</div>
+                            <div class="col-md-4 mb-2">
+                                <a class="text-reset" href="{{ diagnostic_links["all"] }}"><strong>Total lines:</strong> {{ log_summary["total_lines"] }}</a>
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <a class="text-reset" href="{{ diagnostic_links["warnings"] }}"><strong>Warnings (tail):</strong> {{ log_summary["warning_lines"] }}</a>
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <a class="text-reset" href="{{ diagnostic_links["errors"] }}"><strong>Errors/Fatal (tail):</strong> {{ log_summary["error_lines"] }}</a>
+                            </div>
                         </div>
                         {% if log_summary.get("suppressed_issue_lines", 0) > 0 %}
                             <div class="small text-muted mb-2">
@@ -134,6 +179,109 @@
                     {% endif %}
                 </div>
             </div>
+
+            {% if is_staff_view and diagnostic_view["selected"] %}
+                <div class="card mb-4 panel-glass">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>
+                            <i class="fas fa-filter mr-1"></i>
+                            Filtered diagnostics: {{ diagnostic_view["title"] }}
+                        </span>
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ diagnostic_links["clear"] }}">Clear filter</a>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted mb-3">{{ diagnostic_view["subtitle"] }}</p>
+                        {% if diagnostic_view["kind"] == "logs" %}
+                            {% if diagnostic_view["entries"] %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th style="width: 8rem;">Line</th>
+                                                <th style="width: 10rem;">Type</th>
+                                                <th>Message</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for entry in diagnostic_view["entries"] %}
+                                                <tr>
+                                                    <td><code>{{ entry["line_number"] }}</code></td>
+                                                    <td>
+                                                        <span class="badge badge-{% if entry['category'] == 'error' %}danger{% elif entry['category'] == 'warning' %}warning{% else %}secondary{% endif %}">
+                                                            {{ entry["category"] }}
+                                                        </span>
+                                                    </td>
+                                                    <td><code>{{ entry["line"] }}</code></td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% else %}
+                                <span class="text-muted">No matching log entries found.</span>
+                            {% endif %}
+                        {% elif diagnostic_view["kind"] == "peers" %}
+                            {% if diagnostic_view["entries"] %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>Peer</th>
+                                                <th>Interface</th>
+                                                <th>Status</th>
+                                                <th>Last handshake</th>
+                                                <th>Details</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for entry in diagnostic_view["entries"] %}
+                                                <tr>
+                                                    <td><a href="{{ url_for('router.connection_rrd_graph', uuid=entry['peer_uuid']) }}">{{ entry["peer_name"] }}</a></td>
+                                                    <td>{{ entry["interface_name"] }}</td>
+                                                    <td>
+                                                        <span class="badge badge-{{ entry['badge'] }}">{{ entry["handshake_label"] }}</span>
+                                                    </td>
+                                                    <td>{{ entry["handshake_ago"] }}</td>
+                                                    <td>{{ entry["message"] }}</td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% else %}
+                                <span class="text-muted">No handshake failures found.</span>
+                            {% endif %}
+                        {% elif diagnostic_view["kind"] == "bans" %}
+                            {% if diagnostic_view["entries"] %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>Client IP</th>
+                                                <th>Remaining</th>
+                                                <th>Attempts</th>
+                                                <th>Banned until</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for entry in diagnostic_view["entries"] %}
+                                                <tr>
+                                                    <td>{{ entry["ip"] }}</td>
+                                                    <td>{{ entry["banned_for_seconds"] }} seconds</td>
+                                                    <td>{{ entry["login_attempts"] }}</td>
+                                                    <td><code>{{ entry["banned_until"] }}</code></td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            {% else %}
+                                <span class="text-muted">No active login bans.</span>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
 
             <div class="card mb-4 panel-glass">
                 <div class="card-header">
