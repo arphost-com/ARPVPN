@@ -6,7 +6,7 @@ This project publishes Docker images to GitLab Container Registry using ``.gitla
 Prerequisites
 -------------
 
-1. GitLab project exists at your instance URL (for you: ``http://10.10.10.96:8929/``).
+1. GitLab project exists at your instance URL.
 2. Container Registry is enabled at instance and project level.
 3. A GitLab Runner is attached to the project and uses Docker executor in ``privileged`` mode.
 
@@ -21,7 +21,7 @@ Minimal ``config.toml`` example:
 
     [[runners]]
       name = "arpvpn-docker"
-      url = "http://10.10.10.96:8929/"
+      url = "https://<gitlab-host>/"
       token = "REDACTED"
       executor = "docker"
 
@@ -81,22 +81,11 @@ On your deployment host:
 .. code-block:: bash
 
     docker login <your-registry>
-    docker compose -f docker/docker-compose.yaml up -d
+    docker compose -f docker/docker-compose.yaml up -d --build
 
 Set ``ARPVPN_IMAGE`` in compose ``.env`` when using a non-default registry path.
 
 docker02 clean validation workflow
 ----------------------------------
 
-Use only these two ARPVPN clone paths on ``docker02``:
-
-- ``/home/debian/docker/arpvpn``
-- ``/home/debian/docker/arpvpn-mutlitenant``
-
-For a full validation run:
-
-1. Delete the target clone directory.
-2. Re-clone the repository into one of the two paths above.
-3. Run validation from that fresh clone with a unique container name, cookie suffix, data directory, and test ports.
-
-Fresh standalone multitenant validation was completed on ``2026-03-26`` from the clean ``docker02`` clone at ``/home/debian/docker/arpvpn-mutlitenant``.
+For a full validation run, use a fresh checkout or an extracted release archive and keep a unique container name, cookie suffix, data directory, and test ports.

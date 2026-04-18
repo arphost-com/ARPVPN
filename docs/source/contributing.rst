@@ -14,8 +14,8 @@ Do not work directly on ``main``. Create a feature branch from ``main`` and open
 
 .. code-block:: bash
 
-    git clone ssh://git@10.10.10.96:2424/arphost/arpvpn-multitenant.git
-    cd arpvpn-multitenant
+    git clone <your-fork-or-local-path>
+    cd arpvpn
     git checkout -b your-feature-branch
 
 Requirements
