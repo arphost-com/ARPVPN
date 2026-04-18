@@ -54,6 +54,8 @@ RUN mkdir -p "$EXPORTED_PATH" && \
     chown -R arpvpn:arpvpn "$EXPORTED_PATH" && \
     rm -rf /tmp/arpvpn*
 
+ENV PATH="/var/www/arpvpn/venv/bin:$PATH"
+
 WORKDIR /data
 
 COPY --chown=arpvpn:arpvpn --chmod=755 docker/entrypoint.sh /entrypoint.sh
