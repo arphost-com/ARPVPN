@@ -2,6 +2,7 @@ import pytest
 
 from arpvpn.common.models.user import User, users
 from arpvpn.core.models import Interface, interfaces, Peer
+from arpvpn.web import router as web_router
 from arpvpn.tests.utils import default_cleanup, is_http_success, get_testing_app
 
 
@@ -94,6 +95,32 @@ def test_client_can_open_owned_interface_rrd_page(client):
 
     response = client.get(f"/traffic/rrd/{iface.uuid}")
     assert is_http_success(response.status_code)
+
+
+def test_rrd_png_is_cached_for_three_hours(client, monkeypatch):
+    create_user("admin", "admin", User.ROLE_ADMIN)
+    _, peer = setup_connection()
+    login(client, "admin", "admin")
+
+    render_calls = {"count": 0}
+
+    def fake_render(uuid: str, window_seconds: int):
+        render_calls["count"] += 1
+        assert uuid == peer.uuid
+        assert window_seconds == 24 * 60 * 60
+        return b"fake-png"
+
+    monkeypatch.setattr(web_router, "_render_rrd_graph_png", fake_render)
+
+    response = client.get(f"/traffic/rrd/{peer.uuid}.png?window=24h")
+    assert is_http_success(response.status_code)
+    assert response.data == b"fake-png"
+    assert response.headers["Cache-Control"] == "private, max-age=10800"
+
+    response = client.get(f"/traffic/rrd/{peer.uuid}.png?window=24h")
+    assert is_http_success(response.status_code)
+    assert response.data == b"fake-png"
+    assert render_calls["count"] == 1
 
 
 def test_admin_dashboard_contains_rrd_links_for_connections(client):

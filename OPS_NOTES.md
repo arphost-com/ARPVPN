@@ -36,16 +36,12 @@
 
 ```bash
 ssh docker03 '
-  cd /home/debian/docker/vpn1 &&
-  git fetch origin &&
-  git checkout main &&
-  git reset --hard origin/main &&
-  cd docker &&
+  cd /home/debian/docker/arpvpn &&
   docker login http://10.10.10.96:5050 -u <gitlab-user> &&
   docker compose pull arpvpn &&
   docker compose up -d --force-recreate arpvpn &&
   docker compose ps &&
-  docker logs --tail 120 vpn1
+  docker logs --tail 120 arpvpn
 '
 ```
 
@@ -53,29 +49,28 @@ ssh docker03 '
 
 ```bash
 ssh docker03 '
-  cd /home/debian/docker/vpn1/docker &&
+  cd /home/debian/docker/arpvpn &&
   sed -i "s|^ARPVPN_IMAGE=.*|ARPVPN_IMAGE=<previous-tag>|" .env &&
   docker compose up -d --force-recreate arpvpn &&
   docker compose ps &&
-  docker logs --tail 120 vpn1
+  docker logs --tail 120 arpvpn
 '
 ```
 
 ### docker03 ARPVPN paths
 
-- Legacy/stable stack path: `/home/debian/docker/arpvpn`
-- Multitenant test stack path: `/home/debian/docker/vpn1`
-- Multitenant compose working dir: `/home/debian/docker/vpn1/docker`
-- Multitenant data path: `/home/debian/docker/vpn1/docker/data`
+- Active production stack path: `/home/debian/docker/arpvpn`
+- Active compose working dir: `/home/debian/docker/arpvpn`
+- Active data path: `/home/debian/docker/arpvpn/data`
 
 ### docker03 runtime checks
 
 - Ensure the target container is the active one:
-  - `ssh docker03 'docker ps --format "{{.Names}}\t{{.Image}}\t{{.Status}}" | grep -E "vpn1|arpvpn"'`
+  - `ssh docker03 'docker ps --format "{{.Names}}\t{{.Image}}\t{{.Status}}" | grep -E "^arpvpn\b"'`
 - Verify code version inside container:
-  - `ssh docker03 'docker exec vpn1 sh -lc "cat /var/www/arpvpn/arpvpn/__version__.py"'`
+  - `ssh docker03 'docker exec arpvpn sh -lc "cat /var/www/arpvpn/arpvpn/__version__.py"'`
 - Check CSRF/login events:
-  - `ssh docker03 'tail -n 200 /home/debian/docker/vpn1/docker/data/arpvpn.log'`
+  - `ssh docker03 'tail -n 200 /home/debian/docker/arpvpn/data/arpvpn.log'`
 
 ### Production guardrail (docker03)
 
@@ -83,7 +78,7 @@ ssh docker03 '
 - Reproduce and validate fixes on `docker02`, then ship via GitLab image/tag and pull on `docker03`.
 - Use read-only diagnostics on `docker03`:
   - `ssh docker03 'docker compose logs --tail=200'`
-  - `ssh docker03 'tail -n 200 /home/debian/docker/vpn1/docker/data/arpvpn.log'`
+  - `ssh docker03 'tail -n 200 /home/debian/docker/arpvpn/data/arpvpn.log'`
 
 ### CSRF troubleshooting (docker03)
 

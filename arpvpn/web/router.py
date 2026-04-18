@@ -11,14 +11,15 @@ import re
 import signal
 import secrets
 import subprocess
+import tempfile
 from collections import deque
 from datetime import datetime, timezone
 from functools import wraps
 from http.client import BAD_REQUEST, NOT_FOUND, INTERNAL_SERVER_ERROR, UNAUTHORIZED, NO_CONTENT, FORBIDDEN, CONFLICT, ACCEPTED
 from ipaddress import IPv4Address
 from logging import warning, debug, error, info
-from threading import Thread
-from time import sleep
+from threading import Thread, Lock
+from time import sleep, time
 from typing import List, Dict, Any, Union, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
@@ -116,6 +117,10 @@ RRD_GRAPH_WINDOWS_SECONDS = {
     "7d": 7 * 24 * 60 * 60,
     "30d": 30 * 24 * 60 * 60,
 }
+RRD_GRAPH_CACHE_TTL_SECONDS = get_env_int("ARPVPN_RRD_GRAPH_CACHE_TTL_SECONDS", 3 * 60 * 60)
+RRD_GRAPH_CACHE_DIRNAME = "rrd_graph_cache"
+RRD_GRAPH_CACHE_LOCKS: Dict[str, Lock] = {}
+RRD_GRAPH_CACHE_LOCKS_LOCK = Lock()
 TRAFFIC_ROLLUP_WINDOWS_SECONDS = {
     "hour": 60 * 60,
     "day": 24 * 60 * 60,
@@ -1915,7 +1920,7 @@ def request_process_restart(reason: str, requested_mode: str = "auto", delay_sec
     }
 
 
-def generate_rrd_graph_png(uuid: str, window_seconds: int) -> Optional[bytes]:
+def _render_rrd_graph_png(uuid: str, window_seconds: int) -> Optional[bytes]:
     points = get_connection_traffic_points(uuid)
     if len(points) < 1:
         return None
@@ -2011,6 +2016,69 @@ def generate_rrd_graph_png(uuid: str, window_seconds: int) -> Optional[bytes]:
                     os.remove(file_path)
             except OSError:
                 pass
+
+
+def _rrd_graph_cache_path(uuid: str, window_seconds: int) -> str:
+    cache_dir = global_properties.join_workdir(RRD_GRAPH_CACHE_DIRNAME)
+    os.makedirs(cache_dir, exist_ok=True)
+    return os.path.join(cache_dir, f"{uuid}-{window_seconds}.png")
+
+
+def _rrd_graph_cache_lock(cache_path: str) -> Lock:
+    with RRD_GRAPH_CACHE_LOCKS_LOCK:
+        lock = RRD_GRAPH_CACHE_LOCKS.get(cache_path)
+        if lock is None:
+            lock = Lock()
+            RRD_GRAPH_CACHE_LOCKS[cache_path] = lock
+        return lock
+
+
+def _load_rrd_graph_cache(cache_path: str) -> Optional[bytes]:
+    if not os.path.exists(cache_path):
+        return None
+    if RRD_GRAPH_CACHE_TTL_SECONDS > 0:
+        age_seconds = max(0.0, time() - os.path.getmtime(cache_path))
+        if age_seconds > RRD_GRAPH_CACHE_TTL_SECONDS:
+            return None
+    with open(cache_path, "rb") as handle:
+        return handle.read()
+
+
+def _store_rrd_graph_cache(cache_path: str, png_data: bytes):
+    cache_dir = os.path.dirname(cache_path)
+    os.makedirs(cache_dir, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=cache_dir, suffix=".tmp", delete=False) as handle:
+        handle.write(png_data)
+        temp_path = handle.name
+    os.replace(temp_path, cache_path)
+
+
+def generate_rrd_graph_png(uuid: str, window_seconds: int) -> Optional[bytes]:
+    if RRD_GRAPH_CACHE_TTL_SECONDS <= 0:
+        return _render_rrd_graph_png(uuid, window_seconds)
+
+    cache_path = _rrd_graph_cache_path(uuid, window_seconds)
+    cached_png = _load_rrd_graph_cache(cache_path)
+    if cached_png is not None:
+        return cached_png
+
+    lock = _rrd_graph_cache_lock(cache_path)
+    with lock:
+        cached_png = _load_rrd_graph_cache(cache_path)
+        if cached_png is not None:
+            return cached_png
+        try:
+            png_data = _render_rrd_graph_png(uuid, window_seconds)
+        except RuntimeError:
+            if os.path.exists(cache_path):
+                warning(f"Serving stale cached RRD graph for {uuid} ({window_seconds}s) after render failure.")
+                with open(cache_path, "rb") as handle:
+                    return handle.read()
+            raise
+        if png_data is None:
+            return None
+        _store_rrd_graph_cache(cache_path, png_data)
+        return png_data
 
 
 def serialize_peer_runtime_row(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -5846,10 +5914,15 @@ def connection_rrd_graph_png(uuid: str):
 
     if png_data is None:
         abort(NOT_FOUND, "No traffic data available for this connection yet.")
+    cache_control = (
+        "no-store, max-age=0"
+        if RRD_GRAPH_CACHE_TTL_SECONDS <= 0
+        else f"private, max-age={RRD_GRAPH_CACHE_TTL_SECONDS}"
+    )
     return Response(
         png_data,
         mimetype="image/png",
-        headers={"Cache-Control": "no-store, max-age=0"}
+        headers={"Cache-Control": cache_control}
     )
 
 

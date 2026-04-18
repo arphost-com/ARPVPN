@@ -265,6 +265,8 @@
                                         </div>
                                         <img
                                           class="img-fluid border rounded"
+                                          loading="lazy"
+                                          decoding="async"
                                           src="{{ url_for('router.connection_rrd_graph_png', uuid=item.peer.uuid, window='24h') }}"
                                           alt="RRD graph for {{ item.peer.name }}"
                                           onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"

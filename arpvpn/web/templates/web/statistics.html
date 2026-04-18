@@ -182,6 +182,8 @@
                                                 <img
                                                   class="img-fluid border rounded mb-2"
                                                   style="max-width: 240px;"
+                                                  loading="lazy"
+                                                  decoding="async"
                                                   src="{{ url_for('router.connection_rrd_graph_png', uuid=row['uuid'], window=default_window) }}"
                                                   alt="RRD graph for {{ row['name'] }}"
                                                   onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"
