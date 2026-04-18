@@ -80,12 +80,15 @@ def is_http_success(code: int):
     return code < http.HTTPStatus.BAD_REQUEST
 
 
-def login(client):
+def login(client, mfa_code=None):
     u = User(username)
     u.password = password
     users[u.id] = u
 
-    response = client.post("/login", data={"username": username, "password": password, "remember_me": False})
+    payload = {"username": username, "password": password, "remember_me": False}
+    if mfa_code is not None:
+        payload["mfa_code"] = mfa_code
+    response = client.post("/login", data=payload)
     assert is_http_success(response.status_code), default_cleanup()
     assert current_user.name == "admin", default_cleanup()
 

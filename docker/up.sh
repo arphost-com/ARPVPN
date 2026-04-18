@@ -5,9 +5,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${ENV_FILE:-$SCRIPT_DIR/.env}"
 
 if [ ! -f "$ENV_FILE" ]; then
-  echo "ERROR: missing env file: $ENV_FILE"
-  echo "Copy $SCRIPT_DIR/.env.example to $SCRIPT_DIR/.env and configure values."
-  exit 1
+  ENV_DIR="$(cd "$(dirname "$ENV_FILE")" && pwd)"
+  EXAMPLE_FILE="$ENV_DIR/.env.example"
+  if [ -f "$EXAMPLE_FILE" ]; then
+    cp "$EXAMPLE_FILE" "$ENV_FILE"
+    echo "Seeded missing env file from $EXAMPLE_FILE"
+  else
+    echo "ERROR: missing env file: $ENV_FILE"
+    echo "Copy $EXAMPLE_FILE to $ENV_FILE and configure values."
+    exit 1
+  fi
 fi
 
 # Load DATA_FOLDER from .env

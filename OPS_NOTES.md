@@ -2,12 +2,12 @@
 
 ## Release Line Status
 
-- `main` (multitenant line): `2.0.4`
+- `main` release line: `2.0.4`
 
 ## Image Tags
 
-- latest: `10.10.10.96:5050/arphost/arpvpn-multitenant:latest`
-- compatibility: `10.10.10.96:5050/arphost/arpvpn-multitenant:2.x`
+- latest: `10.10.10.96:5050/arphost/arpvpn:latest`
+- compatibility: `10.10.10.96:5050/arphost/arpvpn:2.x`
 
 ## Deployment Host Notes
 
@@ -16,11 +16,11 @@
 
 ## docker02 ARPVPN Paths
 
-- Keep the multitenant working clone at `/home/debian/docker/arpvpn-mutlitenant`.
+- Keep the release working clone at `/home/debian/docker/arpvpn`.
 - Keep the public-line working clone at `/home/debian/docker/arpvpn`.
 - Do not keep ad-hoc ARPVPN test or stage clones under `/home/debian/docker`.
-- If a full multitenant validation run needs a clean checkout, delete `/home/debian/docker/arpvpn-mutlitenant` and `git clone` a fresh copy back into that path.
-- Fresh docker02 multitenant validation completed on `2026-03-26`.
+- If a full validation run needs a clean checkout, delete `/home/debian/docker/arpvpn` and `git clone` a fresh copy back into that path.
+- Fresh docker02 validation completed on `2026-03-26`.
 - Result: generated OpenAPI validated, the focused hard-gate subset passed, the package build passed, and the Docker image build passed.
 - Only observed log warning on fresh boot: `No endpoint specified. Retrieving public IP address...`
 
@@ -68,11 +68,11 @@ ssh docker03 '
 - Multitenant compose working dir: `/home/debian/docker/vpn1/docker`
 - Multitenant data path: `/home/debian/docker/vpn1/docker/data`
 
-### docker03 multitenant runtime checks
+### docker03 runtime checks
 
-- Ensure the multitenant container is the active one:
+- Ensure the target container is the active one:
   - `ssh docker03 'docker ps --format "{{.Names}}\t{{.Image}}\t{{.Status}}" | grep -E "vpn1|arpvpn"'`
-- Verify multitenant code version inside container:
+- Verify code version inside container:
   - `ssh docker03 'docker exec vpn1 sh -lc "cat /var/www/arpvpn/arpvpn/__version__.py"'`
 - Check CSRF/login events:
   - `ssh docker03 'tail -n 200 /home/debian/docker/vpn1/docker/data/arpvpn.log'`
@@ -85,7 +85,7 @@ ssh docker03 '
   - `ssh docker03 'docker compose logs --tail=200'`
   - `ssh docker03 'tail -n 200 /home/debian/docker/vpn1/docker/data/arpvpn.log'`
 
-### CSRF troubleshooting (docker03 multitenant)
+### CSRF troubleshooting (docker03)
 
 - Use one origin consistently during setup/login (`http://<same-host>:1085`).
 - Do not switch hostnames/IPs between loading and submitting forms (host-only cookies).

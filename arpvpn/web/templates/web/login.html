@@ -44,6 +44,15 @@
                                                 {% endfor %}
                                                 {{ form.password(class="form-control py-4 mt-1") }}
                                             </div>
+                                            <div class="form-group">
+                                                {{ form.mfa_code.label(class="small") }}
+                                                <br>
+                                                {% for error in form.mfa_code.errors %}
+                                                    <span style="color: red;" class="small">{{ error }}</span>
+                                                {% endfor %}
+                                                {{ form.mfa_code(class="form-control py-4 mt-1") }}
+                                                <small class="form-text text-muted">If your account uses multi-factor authentication, enter the 6-digit code here.</small>
+                                            </div>
                                             <div class="custom-control custom-checkbox">
                                                 {{ form.remember_me(class="custom-control-input") }}
                                                 {{ form.remember_me.label(class="custom-control-label") }}

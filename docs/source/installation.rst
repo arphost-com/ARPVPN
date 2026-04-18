@@ -40,7 +40,7 @@ Using docker
    * ``ARPVPN_HTTPS_PORT`` (HTTPS bind port, default ``8086``)
    * ``DATA_FOLDER`` (host path mounted to ``/data``)
 
-   The default ``ARPVPN_IMAGE=arpvpn:local`` builds and runs a local image from the bundle.
+   The default ``ARPVPN_IMAGE=arpvpn:local`` builds and runs a local image from the bundle. The wrapper script seeds ``.env`` from ``.env.example`` automatically on first run.
 
 3. Build and start:
 
@@ -55,4 +55,4 @@ Using docker
         sudo chown -R "$(id -u):$(id -g)" ./data
 
 .. note::
-    For side-by-side multitenant installs, use separate ``DATA_FOLDER`` paths, container names, cookie suffixes, and host ports.
+    For side-by-side installs, use separate ``DATA_FOLDER`` paths, container names, cookie suffixes, and host ports.

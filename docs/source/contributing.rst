@@ -3,7 +3,7 @@ Contributing
 
 .. note::
 
-    This repository is the private multitenant ARPVPN line.
+    This repository is the private ARPVPN line.
 
 You may contribute by opening issues, commenting on existing ones, and creating merge requests with new features and bug fixes.
 
@@ -60,4 +60,4 @@ GitLab CI is used to implement the pipeline. When merge requests targeting ``mai
 
 .. warning::
 
-    The ``main`` branch is used to publish multitenant images and should only receive reviewed merge requests.
+    The ``main`` branch is used to publish release images and should only receive reviewed merge requests.

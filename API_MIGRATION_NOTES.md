@@ -46,6 +46,6 @@ This document maps legacy UI flows to the API surface so automation and future U
 
 ## Release guidance
 
-- Land API changes in this repository when they apply to the multitenant line.
-- If a matching change is needed in the public single-tenant repository, port it there after the multitenant validation path is green.
+- Land API changes in this repository when they apply here.
+- If a matching change is needed in the public single-tenant repository, port it there after validation is green.
 - Keep this repository on the `latest` and `2.x` image tags.

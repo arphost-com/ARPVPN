@@ -8,6 +8,7 @@ from yamlable import YamlAble, yaml_info, Y
 
 from arpvpn.common.models.encrypted_yamlable import EncryptedYamlAble
 from arpvpn.common.models.enhanced_dict import EnhancedDict, K, V
+from arpvpn.common.utils.mfa import build_mfa_provisioning_uri, hash_recovery_code, verify_mfa_code
 
 
 @yaml_info(yaml_tag='user')
@@ -32,6 +33,9 @@ class User(UserMixin, YamlAble):
         self.tenant_id = None
         self.__password = None
         self.__authenticated = False
+        self.mfa_enabled = False
+        self.mfa_secret = None
+        self.mfa_recovery_code_hashes = []
 
     def __str__(self):
         return {
@@ -58,6 +62,9 @@ class User(UserMixin, YamlAble):
             "role": self.role,
             "tenant_id": self.tenant_id,
             "password": self.password,
+            "mfa_enabled": self.mfa_enabled,
+            "mfa_secret": self.mfa_secret,
+            "mfa_recovery_code_hashes": list(self.mfa_recovery_code_hashes),
         }
 
     @classmethod
@@ -69,6 +76,14 @@ class User(UserMixin, YamlAble):
         u.id = dct["id"]
         u.tenant_id = dct.get("tenant_id", None)
         u.__password = str(dct["password"])
+        u.mfa_enabled = bool(dct.get("mfa_enabled", False))
+        u.mfa_secret = dct.get("mfa_secret", None)
+        recovery_hashes = dct.get("mfa_recovery_code_hashes", [])
+        if recovery_hashes is None:
+            recovery_hashes = []
+        if isinstance(recovery_hashes, str):
+            recovery_hashes = [recovery_hashes]
+        u.mfa_recovery_code_hashes = list(recovery_hashes)
         return u
 
     def login(self, password: str) -> bool:
@@ -85,6 +100,43 @@ class User(UserMixin, YamlAble):
     def check_password(self, password: str) -> bool:
         """Check if the specified password matches the user's password without triggering a proper login."""
         return check_password_hash(self.password, password)
+
+    def has_mfa(self) -> bool:
+        return bool(self.mfa_enabled and self.mfa_secret)
+
+    def mfa_provisioning_uri(self, issuer: str) -> str:
+        if not self.mfa_secret:
+            return ""
+        return build_mfa_provisioning_uri(self.mfa_secret, self.name, issuer)
+
+    def verify_mfa(self, code: str, allow_recovery_codes: bool = True) -> tuple[bool, bool]:
+        if not self.mfa_secret:
+            return False, False
+
+        normalized_code = str(code or "").strip()
+        if not normalized_code:
+            return False, False
+
+        if allow_recovery_codes:
+            code_hash = hash_recovery_code(normalized_code)
+            if code_hash in self.mfa_recovery_code_hashes:
+                self.mfa_recovery_code_hashes = [
+                    stored_hash for stored_hash in self.mfa_recovery_code_hashes
+                    if stored_hash != code_hash
+                ]
+                return True, True
+
+        return verify_mfa_code(self.mfa_secret, normalized_code), False
+
+    def enable_mfa(self, secret: str, recovery_code_hashes: list[str]):
+        self.mfa_secret = secret
+        self.mfa_recovery_code_hashes = list(recovery_code_hashes)
+        self.mfa_enabled = True
+
+    def disable_mfa(self):
+        self.mfa_enabled = False
+        self.mfa_secret = None
+        self.mfa_recovery_code_hashes = []
 
     def logout(self):
         self.__authenticated = False

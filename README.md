@@ -1,6 +1,6 @@
-# ARPVPN MultiTenant
+# ARPVPN
 
-Private multitenant ARPVPN release line for tenant-scoped WireGuard management, tenant runtime planning, site-to-site mesh control, and customer-facing observability.
+Private ARPVPN release line for tenant-scoped WireGuard management, tenant runtime planning, site-to-site mesh control, and customer-facing observability.
 
 Project:
 - Source bundle: the repository itself or a release archive produced by `build.sh`
@@ -16,6 +16,7 @@ Docs live in `docs/` inside this repository.
 - Display general network information.
 - Encrypted user credentials (AES).
 - Multi-user roles (`admin`, `support`, `tenant_admin`, `client`) with impersonation and tenant-scoped controls.
+- Optional multi-factor authentication with TOTP codes and recovery codes.
 - API v1 with cookie/session and bearer token auth modes, plus mesh control-plane APIs.
 - Dedicated Mesh page for site-to-site and full-mesh planning, route/policy controls, diagnostics, and signed mesh event review.
 - Dedicated tenant runtime planning for separate customer VPN stacks and ports.
@@ -76,7 +77,7 @@ python3 scripts/generate_sdk.py
    - `ARPVPN_HTTP_PORT` (HTTP bind port, defaults to `8085`)
    - `ARPVPN_HTTPS_PORT` (HTTPS bind port, defaults to `8086`)
    - `DATA_FOLDER` (host path mounted to `/data`)
-   The default `ARPVPN_IMAGE=arpvpn:local` builds and runs a local image from the bundle.
+   The default `ARPVPN_IMAGE=arpvpn:local` builds and runs a local image from the bundle. `up.sh` seeds `.env` from `.env.example` automatically if it is missing.
 3. Build and start:
    ```bash
    ./up.sh up -d --build --force-recreate arpvpn
@@ -100,7 +101,7 @@ TLS can be configured from the UI (`Settings -> Web`):
 
 For Let's Encrypt issuance, your hostname must resolve publicly to the host and inbound port `80/tcp` must be reachable.
 
-### Deploy this multitenant repo
+### Deploy with docker
 
 1. Use the repository checkout or a release archive:
    ```bash
@@ -113,7 +114,7 @@ For Let's Encrypt issuance, your hostname must resolve publicly to the host and 
 3. Set these required values in `.env`:
    ```env
    ARPVPN_IMAGE=arpvpn:local
-   ARPVPN_CONTAINER_NAME=arpvpn-multitenant
+   ARPVPN_CONTAINER_NAME=arpvpn
    DATA_FOLDER=./data
    ARPVPN_HTTP_PORT=8085
    ARPVPN_HTTPS_PORT=8086
@@ -133,7 +134,7 @@ Important behavior:
 - Keep `ARPVPN_SECURE_COOKIES=0` if you want HTTP login to work when redirect is disabled.
 - If you enable strict HTTPS behavior, use HTTPS URLs consistently and avoid switching between hostnames and IPs mid-session.
 
-Running multiple multitenant stacks on one host:
+Running multiple stacks on one host:
 - Give each stack unique values for:
   - `ARPVPN_CONTAINER_NAME`
   - `ARPVPN_COOKIE_SUFFIX` (or explicit cookie names)
@@ -143,7 +144,7 @@ Running multiple multitenant stacks on one host:
   - optional explicit cookie names (`ARPVPN_SESSION_COOKIE_NAME`, `ARPVPN_REMEMBER_COOKIE_NAME`) if you keep the same hostname
 - Example second stack:
   ```env
-  ARPVPN_CONTAINER_NAME=arpvpn-multitenant-b
+  ARPVPN_CONTAINER_NAME=arpvpn-b
   DATA_FOLDER=./data-b
   ARPVPN_HTTP_PORT=18085
   ARPVPN_HTTPS_PORT=18086
@@ -151,7 +152,7 @@ Running multiple multitenant stacks on one host:
 
 ### GitLab CI/CD and registry setup
 
-Project CI builds and publishes the standalone multitenant image to the configured registry.
+Project CI builds and publishes the standalone image to the configured registry.
 
 1. Ensure the project runner uses Docker executor with `privileged = true`.
 2. Ensure the target registry is enabled and reachable from the runner.

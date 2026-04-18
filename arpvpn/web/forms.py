@@ -34,6 +34,7 @@ class LoginForm(FlaskForm):
                            render_kw={"placeholder": "Enter username", "autocomplete": "username"})
     password = PasswordField('Password', validators=[DataRequired(), LoginPasswordValidator()],
                              render_kw={"placeholder": "Enter password", "autocomplete": "current-password"})
+    mfa_code = StringField('MFA code', render_kw={"placeholder": "123456", "autocomplete": "one-time-code"})
     remember_me = BooleanField('Remember me')
     submit = SubmitField('Log in')
     next = StringField()
@@ -652,3 +653,13 @@ class PasswordResetForm(FlaskForm):
     confirm = PasswordField("Confirm password", validators=[DataRequired()],
                             render_kw={"placeholder": "A strong new password"})
     submit = SubmitField('Save')
+
+
+class MfaForm(FlaskForm):
+    mfa_code = StringField(
+        "Authenticator code",
+        render_kw={"placeholder": "123456", "autocomplete": "one-time-code"},
+    )
+    generate_secret = SubmitField("Generate MFA secret")
+    enable = SubmitField("Enable MFA")
+    disable = SubmitField("Disable MFA")

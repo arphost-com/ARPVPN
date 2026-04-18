@@ -121,6 +121,79 @@
                     </div>
                 </div>
             </form>
+
+            <form action="{{ request.url }}" method="post" novalidate>
+                {{ mfa_form.hidden_tag() }}
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="fas fa-shield-alt mr-1"></i>
+                        Multi-factor authentication
+                    </div>
+                    <div class="card-body">
+                        <div id="alerts">
+                            {% for error in mfa_form.mfa_code.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ mfa_form.mfa_code.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                        </div>
+
+                        {% if mfa_enabled %}
+                            <div class="alert alert-success">
+                                MFA is enabled for this account.
+                            </div>
+                        {% elif mfa_secret %}
+                            <div class="alert alert-warning">
+                                MFA setup is in progress. Confirm a code from your authenticator app to finish enabling it.
+                            </div>
+                        {% else %}
+                            <div class="alert alert-secondary">
+                                MFA is not configured yet.
+                            </div>
+                        {% endif %}
+
+                        <div class="form-row">
+                            <div class="form-group col-md-4">
+                                {{ mfa_form.mfa_code.label() }}
+                                {{ mfa_form.mfa_code(class="form-control") }}
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            {% if mfa_secret %}
+                                <p class="mb-2">Scan this QR code or enter the provisioning URI manually in your authenticator app.</p>
+                                <div class="mb-3">
+                                    <img class="img-fluid" src="{{ qrcode(mfa_provisioning_uri) }}" alt="MFA provisioning QR code">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="small font-weight-bold">Provisioning URI</label>
+                                    <div><code style="word-break: break-all;">{{ mfa_provisioning_uri }}</code></div>
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        {% if mfa_recovery_codes %}
+                            <div class="alert alert-info">
+                                Save these recovery codes now. Each can be used once if you lose access to your authenticator app.
+                            </div>
+                            <div class="mb-3">
+                                <ul class="mb-0">
+                                    {% for code in mfa_recovery_codes %}
+                                        <li><code>{{ code }}</code></li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% endif %}
+
+                        <div class="form-group mb-0">
+                            {{ mfa_form.generate_secret(class="btn btn-outline-primary mr-2") }}
+                            {{ mfa_form.enable(class="btn btn-warning mr-2") }}
+                            {{ mfa_form.disable(class="btn btn-outline-danger") }}
+                        </div>
+                    </div>
+                </div>
+            </form>
         </div>
     </main>
 {% endblock %}

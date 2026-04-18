@@ -1,10 +1,10 @@
 # Release Strategy
 
-This repository is the private multitenant ARPVPN line.
+This repository is the private ARPVPN line.
 
 ## Branch Roles
 
-- `main`: current multitenant release line (`2.x`).
+- `main`: current release line (`2.x`).
 - `codex/*`: temporary working branches used for implementation and review.
 
 ## API Docs and Changelog Discipline
@@ -22,7 +22,7 @@ This repository is the private multitenant ARPVPN line.
 
 ## CI Publish Rules
 
-GitLab CI is configured so images are published for the multitenant line:
+GitLab CI is configured so images are published for the release line:
 
 - Publish jobs run only after the `unit_tests` job succeeds.
 - Full-suite environment/integration tests run only when `RUN_ENV_INTEGRATION_TESTS=1` and are non-blocking.

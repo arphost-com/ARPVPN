@@ -4,10 +4,10 @@
 
 ### 2.0.4
 
-* Repo split: multitenant is now tracked as a standalone private GitLab project at `arphost/arpvpn-multitenant`.
-* CI Changed: the multitenant repo now publishes only multitenant images and no longer carries the public `stable` / `1.2.x` publish jobs.
-* Docs Changed: installation, deployment, and repository metadata now point to the dedicated multitenant repo and registry image path.
-* Validation: standalone multitenant repo bootstrap, package build, and Docker build were revalidated on 2026-03-26 after the split cleanup.
+* Repo split: the release line is now tracked as a standalone private GitLab project at `arphost/arpvpn`.
+* CI Changed: the standalone repo now publishes only release images and no longer carries the public `stable` / `1.2.x` publish jobs.
+* Docs Changed: installation, deployment, and repository metadata now point to the dedicated release repo and registry image path.
+* Validation: standalone repo bootstrap, package build, and Docker build were revalidated on 2026-03-26 after the split cleanup.
 
 ### 2.0.3
 
@@ -15,7 +15,7 @@
 * Mesh API Added: `GET /api/v1/mesh/diagnostics` for route propagation, plan rollups, policy summary, and recent mesh audit events.
 * Security: mesh and ACL rollout flags are now separated with `ARPVPN_FEATURE_MESH_V1` and `ARPVPN_FEATURE_ACL_V1`.
 * Security: mesh/config audit records now include signed event payloads and immediate in-memory availability for fresh installs and test runs.
-* Validation: docker02 multitenant mesh/system/UI regression subset passed on 2026-03-15 (`21 passed, 1 warning`), and generated OpenAPI now covers `115` live operations.
+* Validation: docker02 mesh/system/UI regression subset passed on 2026-03-15 (`21 passed, 1 warning`), and generated OpenAPI now covers `115` live operations.
 
 ### 2.0.2
 
@@ -24,7 +24,7 @@
 * API Changed: global TLS mutation is now super-admin only, with tenant-scoped TLS settings available under `/api/v1/tenants/<tenant_id>/tls`.
 * API Added: tenant runtime allocation/status endpoints for separate tenant VPN stacks under `/api/v1/tenants/<tenant_id>/runtime`.
 * CI/Docs: added API contract test job, endpoint-group feature flags, OpenAPI examples for auth/system/TLS flows, migration notes, and a threat-model review.
-* Validation: docker02 multitenant full-suite verification passed on 2026-03-13 (`154 passed, 1 warning`).
+* Validation: docker02 full-suite verification passed on 2026-03-13 (`154 passed, 1 warning`).
 
 ### 2.0.1
 
@@ -32,14 +32,14 @@
 * API Added: admin-only system backup/restore endpoints for config, credentials, tenant, and invitation metadata.
 * API Changed: global TLS mutation is now super-admin only, with tenant-scoped TLS settings available under `/api/v1/tenants/<tenant_id>/tls`.
 * CI/Docs: added API contract test job, OpenAPI examples for auth/system/TLS flows, migration notes, and a threat-model review.
-* Validation: docker02 multitenant full-suite verification passed on 2026-03-10 (`150 passed, 1 warning`).
+* Validation: docker02 full-suite verification passed on 2026-03-10 (`150 passed, 1 warning`).
 
 ### 2.0.0
 
-* Release line: first multitenant release cut before the later standalone private repo split.
+* Release line: first release cut before the later standalone private repo split.
 * API Added: tenant, user, tenant-member, and invitation endpoints for `/api/v1/tenants`, `/api/v1/users`, and `/api/v1/invitations`.
 * API Changed: tenant-admin user management is tenant-scoped, and support users are now blocked from tenant CRUD.
-* Docs: added docker02 clean-clone validation guidance and aligned release metadata/docs with the shipped multitenant line.
+* Docs: added docker02 clean-clone validation guidance and aligned release metadata/docs with the shipped release line.
 * Tests: removed redundant legacy dashboard/login checks while preserving equivalent coverage in the statistics and login suites.
 * Validation: fresh end-to-end verification passed on `docker02` on 2026-03-08 for both release lines using clean clones and full signup/setup/auth/tenant/user/invitation flows.
 * Known note: a fresh boot without an explicit WireGuard endpoint logs one startup warning while ARPVPN attempts automatic endpoint discovery.

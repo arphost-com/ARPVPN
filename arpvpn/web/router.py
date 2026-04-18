@@ -32,6 +32,7 @@ from werkzeug.exceptions import HTTPException
 from arpvpn.common.models.user import users, User
 from arpvpn.common.models.tenant import Tenant, Invitation, tenants, invitations, slugify_name
 from arpvpn.common.properties import global_properties
+from arpvpn.common.utils.mfa import generate_mfa_secret, generate_recovery_codes, recovery_code_hashes
 from arpvpn.common.utils.logs import log_exception
 from arpvpn.common.utils.network import get_routing_table, get_system_interfaces
 from arpvpn.common.utils.strings import list_to_str
@@ -3745,9 +3746,29 @@ def login_post():
     del clients[client.ip]
     session.pop(IMPERSONATOR_SESSION_KEY, None)
     u = users.get_value_by_attr("name", form.username.data)
+    mfa_recovery_consumed = False
+    if u and u.has_mfa():
+        mfa_verified, mfa_recovery_consumed = u.verify_mfa(form.mfa_code.data)
+        if not mfa_verified:
+            u.set_authenticated(False)
+            error("Unable to log user in.")
+            form.mfa_code.errors.append("Invalid MFA code.")
+            context = {
+                "title": "Login",
+                "form": form,
+            }
+            max_attempts = int(web_config.login_attempts)
+            if max_attempts > 0:
+                client.login_attempts += 1
+                if client.login_attempts > max_attempts:
+                    client.ban()
+                    context["banned_for"] = (client.banned_until - datetime.now()).seconds
+            return ViewController("web/login.html", **context).load()
     if not login_user(u, form.remember_me.data):
         error(f"Unable to log user in.")
         abort(INTERNAL_SERVER_ERROR)
+    if mfa_recovery_consumed:
+        config_manager.save_credentials()
     info(f"Successfully logged user '{u.name}' in!")
     router.web_login_attempts = 1
     return redirect_to_next_or_default(request.args.get("next", None))
@@ -7161,18 +7182,25 @@ def about():
 @login_required
 @setup_required
 def profile():
-    from arpvpn.web.forms import ProfileForm, PasswordResetForm
+    from arpvpn.web.forms import MfaForm, ProfileForm, PasswordResetForm
     profile_form = ProfileForm()
     profile_form.username.data = current_user.name
     if request.form:
         password_reset_form = PasswordResetForm(request.form)
     else:
         password_reset_form = PasswordResetForm()
+    mfa_form = MfaForm()
+    mfa_provisioning_uri = current_user.mfa_provisioning_uri(APP_NAME) if current_user.mfa_secret else None
     view = "web/profile.html"
     context = {
         "title": "Profile",
         "profile_form": profile_form,
         "password_reset_form": password_reset_form,
+        "mfa_form": mfa_form,
+        "mfa_enabled": current_user.mfa_enabled,
+        "mfa_secret": current_user.mfa_secret,
+        "mfa_provisioning_uri": mfa_provisioning_uri,
+        "mfa_recovery_codes": [],
         "login_ago": get_time_ago(current_user.login_date),
     }
     return ViewController(view, **context).load()
@@ -7182,16 +7210,24 @@ def profile():
 @login_required
 @setup_required
 def save_profile():
+    if "generate_secret" in request.form or "enable" in request.form or "disable" in request.form:
+        return update_profile_mfa()
     if "new_password" in request.form:
         return password_reset()
-    from arpvpn.web.forms import ProfileForm, PasswordResetForm
+    from arpvpn.web.forms import MfaForm, ProfileForm, PasswordResetForm
     view = "web/profile.html"
     profile_form = ProfileForm(request.form)
     password_reset_form = PasswordResetForm()
+    mfa_form = MfaForm()
     context = {
         "title": "Profile",
         "profile_form": profile_form,
         "password_reset_form": password_reset_form,
+        "mfa_form": mfa_form,
+        "mfa_enabled": current_user.mfa_enabled,
+        "mfa_secret": current_user.mfa_secret,
+        "mfa_provisioning_uri": current_user.mfa_provisioning_uri(APP_NAME) if current_user.mfa_secret else None,
+        "mfa_recovery_codes": [],
         "login_ago": get_time_ago(current_user.login_date),
     }
     if not profile_form.validate():
@@ -7212,16 +7248,88 @@ def save_profile():
     return ViewController(view, **context).load()
 
 
-def password_reset():
+def update_profile_mfa():
+    from arpvpn.web.forms import MfaForm, ProfileForm, PasswordResetForm
     view = "web/profile.html"
-    from arpvpn.web.forms import PasswordResetForm, ProfileForm
     profile_form = ProfileForm()
     profile_form.username.data = current_user.name
-    password_reset_form = PasswordResetForm(request.form)
+    password_reset_form = PasswordResetForm()
+    mfa_form = MfaForm(request.form)
     context = {
         "title": "Profile",
         "profile_form": profile_form,
         "password_reset_form": password_reset_form,
+        "mfa_form": mfa_form,
+        "mfa_enabled": current_user.mfa_enabled,
+        "mfa_secret": current_user.mfa_secret,
+        "mfa_provisioning_uri": current_user.mfa_provisioning_uri(APP_NAME) if current_user.mfa_secret else None,
+        "mfa_recovery_codes": [],
+        "login_ago": get_time_ago(current_user.login_date),
+    }
+    if mfa_form.generate_secret.data:
+        secret = generate_mfa_secret()
+        recovery_codes = generate_recovery_codes()
+        current_user.mfa_secret = secret
+        current_user.mfa_enabled = False
+        current_user.mfa_recovery_code_hashes = recovery_code_hashes(recovery_codes)
+        config_manager.save_credentials()
+        context["success"] = True
+        context["success_details"] = "MFA setup secret generated. Scan it and confirm with a code from your authenticator app."
+        context["mfa_secret"] = secret
+        context["mfa_provisioning_uri"] = current_user.mfa_provisioning_uri(APP_NAME)
+        context["mfa_recovery_codes"] = recovery_codes
+        return ViewController(view, **context).load()
+    if mfa_form.enable.data:
+        if not current_user.mfa_secret:
+            mfa_form.mfa_code.errors.append("Generate a setup secret first.")
+            error("Unable to enable MFA: no setup secret.")
+            return ViewController(view, **context).load()
+        verified, consumed = current_user.verify_mfa(mfa_form.mfa_code.data, allow_recovery_codes=False)
+        if not verified:
+            mfa_form.mfa_code.errors.append("Invalid authenticator code.")
+            error("Unable to enable MFA: invalid code.")
+            return ViewController(view, **context).load()
+        current_user.mfa_enabled = True
+        config_manager.save_credentials()
+        context["success"] = True
+        context["success_details"] = "MFA enabled!"
+        context["mfa_enabled"] = True
+        if consumed:
+            context["mfa_recovery_codes"] = []
+        return ViewController(view, **context).load()
+    if mfa_form.disable.data:
+        if not current_user.mfa_enabled and not current_user.mfa_secret:
+            context["warning"] = True
+            context["warning_details"] = "MFA is already disabled."
+            return ViewController(view, **context).load()
+        current_user.disable_mfa()
+        config_manager.save_credentials()
+        context["success"] = True
+        context["success_details"] = "MFA disabled!"
+        context["mfa_enabled"] = False
+        context["mfa_secret"] = None
+        context["mfa_provisioning_uri"] = None
+        context["mfa_recovery_codes"] = []
+        return ViewController(view, **context).load()
+    return ViewController(view, **context).load()
+
+
+def password_reset():
+    view = "web/profile.html"
+    from arpvpn.web.forms import MfaForm, PasswordResetForm, ProfileForm
+    profile_form = ProfileForm()
+    profile_form.username.data = current_user.name
+    password_reset_form = PasswordResetForm(request.form)
+    mfa_form = MfaForm()
+    context = {
+        "title": "Profile",
+        "profile_form": profile_form,
+        "password_reset_form": password_reset_form,
+        "mfa_form": mfa_form,
+        "mfa_enabled": current_user.mfa_enabled,
+        "mfa_secret": current_user.mfa_secret,
+        "mfa_provisioning_uri": current_user.mfa_provisioning_uri(APP_NAME) if current_user.mfa_secret else None,
+        "mfa_recovery_codes": [],
         "login_ago": get_time_ago(current_user.login_date),
     }
     if not password_reset_form.validate():
