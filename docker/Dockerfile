@@ -1,6 +1,8 @@
-FROM python:3.12-slim-trixie as python-base
+FROM python:3.12-slim-trixie
+
 ARG ARPVPN_UID=1000
 ARG ARPVPN_GID=1000
+
 ENV PYTHONFAULTHANDLER=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -11,35 +13,58 @@ ENV PYTHONFAULTHANDLER=1 \
     INSTALL_PATH="/var/www/arpvpn" \
     DATA_PATH="/var/www/arpvpn/data" \
     EXPORTED_PATH="/data"
-ENV PATH="$POETRY_HOME/bin:$VENV_PATH/bin:$PATH"
 
-# Create non-root user early
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      iproute2 \
+      iptables \
+      openssl \
+      rrdtool \
+      sudo \
+      wireguard-tools \
+      uwsgi \
+      uwsgi-plugin-python3 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create the runtime user early so install.sh can reuse the same account.
 RUN groupadd -g "${ARPVPN_GID}" arpvpn && \
     useradd -u "${ARPVPN_UID}" -g arpvpn -s /bin/bash -m arpvpn
 
-COPY dist/*.tar.gz /tmp/arpvpn.tar.gz
-RUN mkdir /tmp/arpvpn && tar -xf /tmp/arpvpn.tar.gz -C /tmp/arpvpn
 WORKDIR /tmp/arpvpn
-RUN chmod +x ./install.sh && ./install.sh
+COPY . /tmp/arpvpn
+
+RUN set -eu; \
+    if [ ! -f requirements.txt ] && [ -f pyproject.toml ]; then \
+      python3 -m pip install --no-cache-dir poetry==1.8.3; \
+      poetry export --without-hashes -f requirements.txt -o requirements.txt; \
+    fi; \
+    if [ -x ./install.sh ]; then \
+      install_script="./install.sh"; \
+    elif [ -x ./scripts/install.sh ]; then \
+      install_script="./scripts/install.sh"; \
+    else \
+      echo "Unable to locate install.sh in the build context." >&2; \
+      exit 1; \
+    fi; \
+    chmod +x "$install_script"; \
+    "$install_script"
 
 # Create data directory with correct ownership
-RUN mkdir -p $EXPORTED_PATH && \
-    chown -R arpvpn:arpvpn $EXPORTED_PATH && \
+RUN mkdir -p "$EXPORTED_PATH" && \
+    chown -R arpvpn:arpvpn "$EXPORTED_PATH" && \
     rm -rf /tmp/arpvpn*
 
 WORKDIR /data
 
 COPY --chown=arpvpn:arpvpn --chmod=755 docker/entrypoint.sh /entrypoint.sh
 
-# Switch to non-root user
 USER arpvpn
 
 EXPOSE 8085 8086
 
-# Add healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python3 -c "import os, urllib.request; p = os.environ.get('ARPVPN_HTTP_PORT', '8085'); urllib.request.urlopen(f'http://localhost:{p}', timeout=5).read()" \
     || python3 -c "import os, ssl, urllib.request; p = os.environ.get('ARPVPN_HTTPS_PORT', '8086'); ctx = ssl._create_unverified_context(); urllib.request.urlopen(f'https://localhost:{p}', context=ctx, timeout=5).read()" \
     || exit 1
 
-CMD /bin/bash /entrypoint.sh
+CMD ["/bin/bash", "/entrypoint.sh"]

@@ -1,11 +1,9 @@
 [tool.poetry]
 name = "arpvpn"
-version = "1.2.12"
+version = "2.0.4"
 description = "WireGuard management with client and site-to-site VPN support"
 authors = ["Jose <joseantoniomazon@gmail.com>"]
 license = "GPL-3.0"
-homepage = "https://github.com/arphost-com/ARPVPN"
-repository = "https://github.com/arphost-com/ARPVPN"
 keywords = ["wireguard", "gui", "webserver", "flask", "vpn", "site-to-site", "observability"]
 
 [tool.poetry.dependencies]

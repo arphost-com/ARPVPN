@@ -2,12 +2,12 @@
 
 ## Release Line Status
 
-- `main` (public single-tenant line): `1.2.12`
+- `main` (multitenant line): `2.0.4`
 
 ## Image Tags
 
-- stable: `10.10.10.96:5050/arphost/arpvpn:stable`
-- compatibility: `10.10.10.96:5050/arphost/arpvpn:1.2.x`
+- latest: `10.10.10.96:5050/arphost/arpvpn-multitenant:latest`
+- compatibility: `10.10.10.96:5050/arphost/arpvpn-multitenant:2.x`
 
 ## Deployment Host Notes
 
@@ -16,10 +16,11 @@
 
 ## docker02 ARPVPN Paths
 
+- Keep the multitenant working clone at `/home/debian/docker/arpvpn-mutlitenant`.
 - Keep the public-line working clone at `/home/debian/docker/arpvpn`.
 - Do not keep ad-hoc ARPVPN test or stage clones under `/home/debian/docker`.
-- If a full validation run needs a clean checkout, delete `/home/debian/docker/arpvpn` and `git clone` a fresh copy back into that path.
-- Fresh docker02 public-line validation completed on `2026-03-26`.
+- If a full multitenant validation run needs a clean checkout, delete `/home/debian/docker/arpvpn-mutlitenant` and `git clone` a fresh copy back into that path.
+- Fresh docker02 multitenant validation completed on `2026-03-26`.
 - Result: generated OpenAPI validated, the focused hard-gate subset passed, the package build passed, and the Docker image build passed.
 - Only observed log warning on fresh boot: `No endpoint specified. Retrieving public IP address...`
 
@@ -35,7 +36,7 @@
 
 ```bash
 ssh docker03 '
-  cd /home/debian/docker/arpvpn &&
+  cd /home/debian/docker/vpn1 &&
   git fetch origin &&
   git checkout main &&
   git reset --hard origin/main &&
@@ -62,9 +63,19 @@ ssh docker03 '
 
 ### docker03 ARPVPN paths
 
-- Stable stack path: `/home/debian/docker/arpvpn`
-- Stable compose working dir: `/home/debian/docker/arpvpn/docker`
-- Stable data path: `/home/debian/docker/arpvpn/docker/data`
+- Legacy/stable stack path: `/home/debian/docker/arpvpn`
+- Multitenant test stack path: `/home/debian/docker/vpn1`
+- Multitenant compose working dir: `/home/debian/docker/vpn1/docker`
+- Multitenant data path: `/home/debian/docker/vpn1/docker/data`
+
+### docker03 multitenant runtime checks
+
+- Ensure the multitenant container is the active one:
+  - `ssh docker03 'docker ps --format "{{.Names}}\t{{.Image}}\t{{.Status}}" | grep -E "vpn1|arpvpn"'`
+- Verify multitenant code version inside container:
+  - `ssh docker03 'docker exec vpn1 sh -lc "cat /var/www/arpvpn/arpvpn/__version__.py"'`
+- Check CSRF/login events:
+  - `ssh docker03 'tail -n 200 /home/debian/docker/vpn1/docker/data/arpvpn.log'`
 
 ### Production guardrail (docker03)
 
@@ -72,7 +83,24 @@ ssh docker03 '
 - Reproduce and validate fixes on `docker02`, then ship via GitLab image/tag and pull on `docker03`.
 - Use read-only diagnostics on `docker03`:
   - `ssh docker03 'docker compose logs --tail=200'`
-  - `ssh docker03 'tail -n 200 /home/debian/docker/arpvpn/docker/data/arpvpn.log'`
+  - `ssh docker03 'tail -n 200 /home/debian/docker/vpn1/docker/data/arpvpn.log'`
+
+### CSRF troubleshooting (docker03 multitenant)
+
+- Use one origin consistently during setup/login (`http://<same-host>:1085`).
+- Do not switch hostnames/IPs between loading and submitting forms (host-only cookies).
+- If `redirect_http_to_https` is enabled later, continue with HTTPS only.
+
+### Multi-stack runtime notes
+
+- Keep these values unique per stack on the same host:
+  - `ARPVPN_CONTAINER_NAME`
+  - `ARPVPN_COOKIE_SUFFIX` (or explicit cookie names)
+  - `DATA_FOLDER`
+  - `ARPVPN_HTTP_PORT`
+  - `ARPVPN_HTTPS_PORT`
+- Compose now auto-creates `DATA_FOLDER` bind paths on first startup (`create_host_path: true`).
+- `./docker/up.sh` remains the recommended wrapper because it validates host-path ownership before launch.
 
 ## Local Service Endpoints (Always Use)
 

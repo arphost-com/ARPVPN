@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-python3 scripts/validate_openapi.py
-./scripts/check_api_artifacts.sh
+PYTHON_BIN="${PYTHON_BIN:-python3}"
 
-pytest -q \
+"$PYTHON_BIN" scripts/validate_openapi.py
+PYTHON_BIN="$PYTHON_BIN" ./scripts/check_api_artifacts.sh
+
+"$PYTHON_BIN" -m pytest -q \
   arpvpn/tests/default/test_api_auth.py \
   arpvpn/tests/default/test_api_cookie_csrf.py \
   arpvpn/tests/default/test_api_feature_flags.py \

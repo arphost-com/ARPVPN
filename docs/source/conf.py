@@ -22,7 +22,7 @@ copyright = '2021, José Antonio Mazón San Bartolomé'
 author = 'José Antonio Mazón San Bartolomé'
 
 # The full version, including alpha/beta/rc tags
-release = '1.2.12'
+release = '2.0.4'
 
 
 # -- General configuration ---------------------------------------------------

@@ -1,6 +1,6 @@
 # ARPVPN API Changelog Process
 
-This process applies to the public ARPVPN line in this repository.
+This process applies to the private multitenant ARPVPN line in this repository.
 
 ## Required updates per API change
 
@@ -11,7 +11,7 @@ This process applies to the public ARPVPN line in this repository.
 
 ## Cross-repo guidance
 
-- If a change also belongs in the private multitenant repository, cherry-pick it there explicitly.
+- If a change also belongs in the public single-tenant repository, cherry-pick it there explicitly.
 - Keep this repository's release notes and OpenAPI document accurate even when the same change ships elsewhere.
 
 ## Entry format

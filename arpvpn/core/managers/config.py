@@ -27,6 +27,13 @@ class ConfigManager:
             self.config_filepath = global_properties.join_workdir(self.CONFIG_FILENAME)
             self.__load_config__()
             self.save(apply=False)
+            from arpvpn.core.managers.tenancy import tenancy_manager
+            tenancy_manager.initialize(
+                legacy_users=users,
+                legacy_interfaces=wireguard_config.interfaces,
+                web_config=web_config,
+                wireguard_config=wireguard_config,
+            )
         except Exception as e:
             log_exception(e, is_fatal=True)
             exit(1)

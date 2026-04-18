@@ -1,12 +1,12 @@
 GitLab Deployment
 =================
 
-This project is configured to publish Docker images to GitLab Container Registry using ``.gitlab-ci.yml``.
+This project publishes Docker images to GitLab Container Registry using ``.gitlab-ci.yml``.
 
 Prerequisites
 -------------
 
-1. GitLab project exists at your instance URL (for you: ``http://10.10.10.96:8929/``).
+1. GitLab project exists at your instance URL.
 2. Container Registry is enabled at instance and project level.
 3. A GitLab Runner is attached to the project and uses Docker executor in ``privileged`` mode.
 
@@ -21,7 +21,7 @@ Minimal ``config.toml`` example:
 
     [[runners]]
       name = "arpvpn-docker"
-      url = "http://10.10.10.96:8929/"
+      url = "https://<gitlab-host>/"
       token = "REDACTED"
       executor = "docker"
 
@@ -47,12 +47,12 @@ CI publish behavior
 4. Push branch or tag specific image tags:
 
    * default branch builds:
-      * ``$CI_REGISTRY_IMAGE:stable``
-      * ``$CI_REGISTRY_IMAGE:1.2.x``
+      * ``$CI_REGISTRY_IMAGE:latest``
+      * ``$CI_REGISTRY_IMAGE:2.x``
       * ``$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA``
-   * ``v1.*`` tags:
-      * ``$CI_REGISTRY_IMAGE:stable``
-      * ``$CI_REGISTRY_IMAGE:1.2.x``
+   * ``v2.*`` tags:
+      * ``$CI_REGISTRY_IMAGE:latest``
+      * ``$CI_REGISTRY_IMAGE:2.x``
       * ``$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG``
 
 Optional environment or integration suite
@@ -81,13 +81,11 @@ On your deployment host:
 .. code-block:: bash
 
     docker login <your-registry>
-    docker compose -f docker/docker-compose.yaml up -d
+    docker compose -f docker/docker-compose.yaml up -d --build
 
 Set ``ARPVPN_IMAGE`` in compose ``.env`` when using a non-default registry path.
 
 docker02 clean validation workflow
 ----------------------------------
 
-Use ``/home/debian/docker/arpvpn`` for fresh public-line validation on ``docker02``.
-
-Fresh public-line validation was completed on ``2026-03-26`` from the clean ``docker02`` clone at ``/home/debian/docker/arpvpn``.
+For a full validation run, use a fresh checkout or an extracted release archive and keep a unique container name, cookie suffix, data directory, and test ports.

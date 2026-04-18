@@ -1,6 +1,12 @@
 services:
   arpvpn:
-    image: "${ARPVPN_IMAGE:-10.10.10.96:5050/arphost/arpvpn:stable}"
+    image: "${ARPVPN_IMAGE:-arpvpn:local}"
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        ARPVPN_UID: "${ARPVPN_UID:-1000}"
+        ARPVPN_GID: "${ARPVPN_GID:-1000}"
     container_name: "${ARPVPN_CONTAINER_NAME:-arpvpn}"
     # Run as the image's application user by default (preserves sudo policy
     # needed by WireGuard commands invoked by the UI).

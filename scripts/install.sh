@@ -1,6 +1,17 @@
 #!/bin/bash
 
-source ./log.sh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ -f "$SCRIPT_DIR/log.sh" ]]; then
+    # shellcheck disable=SC1090
+    source "$SCRIPT_DIR/log.sh"
+elif [[ -f ./log.sh ]]; then
+    # shellcheck disable=SC1090
+    source ./log.sh
+else
+    echo "Unable to locate log.sh."
+    exit 1
+fi
 
 if [[ $EUID -ne 0 ]]; then
    fatal "This script must be run as superuser! Try using sudo."
@@ -21,11 +32,10 @@ if [[ -d "$INSTALL_DIR" ]]; then
     while true; do
     warn -n "'$INSTALL_DIR' already exists. Shall I overwrite it? [y/n] "
       read yn
-      case $yn in
+        case $yn in
           [Yy]* ) rm -rf "$INSTALL_DIR"; break;;
           [Nn]* )
             info "Aborting...";
-            rm -rf "$ETC_DIR"
             exit;;
           * ) echo "Please answer yes or no.";;
       esac

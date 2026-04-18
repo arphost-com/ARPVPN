@@ -1,0 +1,11 @@
+.git
+.gitignore
+.pytest_cache
+.mypy_cache
+.ruff_cache
+__pycache__
+**/__pycache__
+dist
+docs/source/_build
+*.pyc
+*.pyo
