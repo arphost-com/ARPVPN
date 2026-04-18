@@ -25,6 +25,11 @@ if [[ $# -gt 0 ]]; then
 fi
 
 INSTALL_DIR="/var/www/arpvpn"
+PYTHON_BIN="${PYTHON_BIN:-/usr/bin/python3}"
+
+if [[ ! -x "$PYTHON_BIN" ]]; then
+    PYTHON_BIN="$(command -v python3)"
+fi
 
 info "Creating '$INSTALL_DIR'..."
 
@@ -92,7 +97,11 @@ fi
 rm -rf /var/lib/apt/lists/*
 
 info "Setting up virtual environment..."
-python3 -m venv "$INSTALL_DIR/venv"
+if [[ ! -x "$PYTHON_BIN" ]]; then
+    fatal "Unable to locate python3 for virtualenv creation."
+    exit 1
+fi
+"$PYTHON_BIN" -m venv "$INSTALL_DIR/venv"
 source "$INSTALL_DIR/venv/bin/activate"
 if [ $? -ne 0 ]; then
     fatal "Unable to activate virtual environment."
