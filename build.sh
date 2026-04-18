@@ -60,13 +60,13 @@ CONFIG_DIR="$DIST_DIR/config"
 mkdir "$CONFIG_DIR"
 find config -type f | grep -E "[^.]+\.sample\.yaml" | xargs -i cp {} "$CONFIG_DIR"
 
-info "Exporting python requirements..."
-poetry export --without-hashes -f requirements.txt -o requirements.txt
-if [ $? -ne 0 ]; then
-  fatal "Unable to export requirements."
+if [[ ! -f requirements.txt ]]; then
+  fatal "Missing root requirements.txt."
   exit 1
 fi
-mv requirements.txt "$DIST_DIR"
+
+info "Copying python requirements..."
+cp requirements.txt "$DIST_DIR"
 
 info "Copying scripts..."
 cp scripts/install.sh "$DIST_DIR"
