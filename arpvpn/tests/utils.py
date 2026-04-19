@@ -100,16 +100,43 @@ def get_testing_app():
     global_properties.dev_env = True
     if shutil.which("ip") is None:
         from arpvpn.common.utils import network as network_utils
+        from arpvpn.web import router as router_module
 
         fake_interfaces = {
-            "lo": {"ifname": "lo", "addr_info": []},
-            "eth0": {"ifname": "eth0", "addr_info": []},
-            "eth1": {"ifname": "eth1", "addr_info": []},
+            "lo": {
+                "ifname": "lo",
+                "flags": ["LOOPBACK", "UP", "LOWER_UP"],
+                "operstate": "UNKNOWN",
+                "address": "00:00:00:00:00:00",
+                "addr_info": [],
+            },
+            "eth0": {
+                "ifname": "eth0",
+                "flags": ["BROADCAST", "MULTICAST", "UP", "LOWER_UP"],
+                "operstate": "UP",
+                "address": "02:00:00:00:00:00",
+                "addr_info": [],
+            },
+            "eth1": {
+                "ifname": "eth1",
+                "flags": ["BROADCAST", "MULTICAST", "UP", "LOWER_UP"],
+                "operstate": "UP",
+                "address": "02:00:00:00:00:01",
+                "addr_info": [],
+            },
         }
 
         network_utils.get_system_interfaces = lambda: fake_interfaces
         network_utils.get_default_gateway = lambda: "eth1"
+        network_utils.get_routing_table = lambda: [
+            {"dst": "default", "gateway": "192.0.2.1", "dev": "eth1"},
+        ]
         globals()["get_system_interfaces"] = lambda: fake_interfaces
+        router_module.get_system_interfaces = lambda: fake_interfaces
+        router_module.get_default_gateway = lambda: "eth1"
+        router_module.get_routing_table = lambda: [
+            {"dst": "default", "gateway": "192.0.2.1", "dev": "eth1"},
+        ]
     from arpvpn.__main__ import app
     from arpvpn.core.config.wireguard import config as wireguard_config
     wireguard_config.wg_bin = "/bin/echo"
