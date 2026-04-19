@@ -74,6 +74,13 @@
                 </div>
                 <div class="col-sm-6 col-xl-2 mb-3">
                     <div class="stat-tile">
+                        <div class="stat-label">Disabled peers</div>
+                        <div class="stat-value text-secondary">{{ wireguard_stats["disabled_peers"] }}</div>
+                        <div class="stat-subtle">not in server config</div>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-xl-2 mb-3">
+                    <div class="stat-tile">
                         <div class="stat-label">Alerts</div>
                         <div class="stat-value text-danger">{{ wireguard_stats["alerts"] }}</div>
                         <div class="stat-subtle">review routing alerts</div>
@@ -231,6 +238,7 @@
                                         <th>Description</th>
                                         <th>IPv4</th>
                                         <th>Mode</th>
+                                        <th>Status</th>
                                         <th>Remote subnets</th>
                                         <th>Primary DNS</th>
                                         <th>Secondary DNS</th>
@@ -258,6 +266,13 @@
                                             {% else %}
                                                 <td>Client</td>
                                             {% endif %}
+                                            <td>
+                                                {% if peer.enabled %}
+                                                    <span class="badge badge-success">enabled</span>
+                                                {% else %}
+                                                    <span class="badge badge-secondary">disabled</span>
+                                                {% endif %}
+                                            </td>
                                             {% if peer.site_to_site_subnets %}
                                                 <td>{{ peer.site_to_site_subnets | join(", ") }}</td>
                                             {% else %}

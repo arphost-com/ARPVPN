@@ -4,7 +4,6 @@ import pytest
 
 from arpvpn.common.models.tenant import Tenant, tenants
 from arpvpn.common.models.user import User, users
-from arpvpn.common.utils.network import get_default_gateway
 from arpvpn.core.models import Interface, Peer, interfaces
 from arpvpn.tests.utils import default_cleanup, get_testing_app, is_http_success
 
@@ -48,7 +47,7 @@ def create_interface(name: str, ipv4: str, port: int, tenant_id: str = "") -> In
     iface = Interface(
         name=name,
         description="",
-        gw_iface=get_default_gateway(),
+        gw_iface="eth1",
         ipv4_address=ipv4,
         listen_port=port,
         auto=False,
@@ -97,7 +96,7 @@ def test_admin_can_crud_wireguard_interface_and_peer_via_api(client):
         "/api/v1/wireguard/interfaces",
         json={
             "name": "wgapi1",
-            "gateway": get_default_gateway(),
+            "gateway": "eth1",
             "ipv4": "10.44.0.1/24",
             "listen_port": 51001,
             "auto": False,
@@ -120,17 +119,48 @@ def test_admin_can_crud_wireguard_interface_and_peer_via_api(client):
         },
     )
     assert peer_response.status_code == 201
-    peer_id = peer_response.get_json()["data"]["peer"]["id"]
+    peer_payload = peer_response.get_json()["data"]["peer"]
+    assert peer_payload["enabled"] is True
+    peer_id = peer_payload["id"]
+    peer_public_key = peer_payload["public_key"]
 
     qr_response = client.get(f"/api/v1/wireguard/peers/{peer_id}/qr")
     assert qr_response.status_code == 200
     assert qr_response.get_json()["data"]["qr_data_uri"].startswith("data:image/png;base64,")
 
+    disable_response = client.put(
+        f"/api/v1/wireguard/peers/{peer_id}",
+        json={
+            "name": "client01",
+            "interface_uuid": interface_id,
+            "ipv4": "10.44.0.2/24",
+            "dns1": "8.8.8.8",
+            "enabled": False,
+        },
+    )
+    assert disable_response.status_code == 200
+    assert disable_response.get_json()["data"]["peer"]["enabled"] is False
+    assert peer_public_key not in interfaces[interface_id].generate_conf()
+
+    enable_response = client.put(
+        f"/api/v1/wireguard/peers/{peer_id}",
+        json={
+            "name": "client01",
+            "interface_uuid": interface_id,
+            "ipv4": "10.44.0.2/24",
+            "dns1": "8.8.8.8",
+            "enabled": True,
+        },
+    )
+    assert enable_response.status_code == 200
+    assert enable_response.get_json()["data"]["peer"]["enabled"] is True
+    assert peer_public_key in interfaces[interface_id].generate_conf()
+
     update_response = client.put(
         f"/api/v1/wireguard/interfaces/{interface_id}",
         json={
             "name": "wgapi1",
-            "gateway": get_default_gateway(),
+            "gateway": "eth1",
             "ipv4": "10.44.0.1/24",
             "listen_port": 51001,
             "auto": False,

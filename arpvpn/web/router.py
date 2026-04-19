@@ -1402,6 +1402,7 @@ def get_peer_runtime_summary() -> Dict[str, Any]:
         "peers": 0,
         "site_to_site_peers": 0,
         "client_peers": 0,
+        "disabled_peers": 0,
         "active_peers": 0,
         "stale_peers": 0,
         "offline_peers": 0,
@@ -1420,11 +1421,15 @@ def get_peer_runtime_summary() -> Dict[str, Any]:
         totals["session_rx"] += traffic.rx
         totals["session_tx"] += traffic.tx
         handshake_ago = None
-        handshake_state = "never"
-        handshake_badge = "secondary"
         last_handshake = traffic.last_handshake
         seconds_ago = None
-        if traffic.last_handshake:
+        if not peer.enabled:
+            handshake_state = "disabled"
+            handshake_badge = "secondary"
+            totals["disabled_peers"] += 1
+        elif traffic.last_handshake:
+            handshake_state = "never"
+            handshake_badge = "secondary"
             seconds_ago = int((now - traffic.last_handshake).total_seconds())
             handshake_ago = get_time_ago(traffic.last_handshake)
             if seconds_ago <= ACTIVE_PEER_MAX_AGE_SECONDS:
@@ -1440,6 +1445,8 @@ def get_peer_runtime_summary() -> Dict[str, Any]:
                 handshake_badge = "danger"
                 totals["offline_peers"] += 1
         else:
+            handshake_state = "never"
+            handshake_badge = "secondary"
             totals["never_seen_peers"] += 1
         total_traffic = traffic.rx + traffic.tx
         high_traffic = total_traffic >= HIGH_TRAFFIC_THRESHOLD_BYTES
@@ -1455,6 +1462,7 @@ def get_peer_runtime_summary() -> Dict[str, Any]:
             "interface_name": peer.interface.name if peer.interface else EMPTY_FIELD,
             "mode": peer.mode,
             "mode_label": "Site-to-site" if peer.mode == Peer.MODE_SITE_TO_SITE else "Client",
+            "enabled": peer.enabled,
             "handshake_state": handshake_state,
             "handshake_badge": handshake_badge,
             "handshake_ago": handshake_ago,
@@ -1470,7 +1478,7 @@ def get_peer_runtime_summary() -> Dict[str, Any]:
             "session_total_human": to_human_filesize(total_traffic)
         })
 
-        if peer.mode == Peer.MODE_SITE_TO_SITE and handshake_state in ("never", "offline", "stale"):
+        if peer.enabled and peer.mode == Peer.MODE_SITE_TO_SITE and handshake_state in ("never", "offline", "stale"):
             if handshake_state == "stale":
                 level = "warning"
                 title = "Site-to-site link is stale"
@@ -1484,7 +1492,7 @@ def get_peer_runtime_summary() -> Dict[str, Any]:
                 "peer_name": peer.name,
                 "message": f"{peer.name} is {handshake_state}."
             })
-        elif peer.mode != Peer.MODE_SITE_TO_SITE and handshake_state == "offline":
+        elif peer.enabled and peer.mode != Peer.MODE_SITE_TO_SITE and handshake_state == "offline":
             alerts.append({
                 "level": "warning",
                 "title": "Client peer appears offline",
@@ -1493,7 +1501,7 @@ def get_peer_runtime_summary() -> Dict[str, Any]:
                 "message": f"{peer.name} has not handshaken recently."
             })
 
-        if high_traffic:
+        if peer.enabled and high_traffic:
             alerts.append({
                 "level": "info",
                 "title": "High traffic peer",
@@ -1528,6 +1536,7 @@ def calculate_peer_runtime_totals(rows: List[Dict[str, Any]], alerts: List[Dict[
         "peers": len(rows),
         "site_to_site_peers": 0,
         "client_peers": 0,
+        "disabled_peers": 0,
         "active_peers": 0,
         "stale_peers": 0,
         "offline_peers": 0,
@@ -1541,7 +1550,9 @@ def calculate_peer_runtime_totals(rows: List[Dict[str, Any]], alerts: List[Dict[
             totals["site_to_site_peers"] += 1
         else:
             totals["client_peers"] += 1
-        if row["handshake_state"] == "active":
+        if not row.get("enabled", True):
+            totals["disabled_peers"] += 1
+        elif row["handshake_state"] == "active":
             totals["active_peers"] += 1
         elif row["handshake_state"] == "stale":
             totals["stale_peers"] += 1
@@ -2319,6 +2330,7 @@ def serialize_peer_runtime_row(row: Dict[str, Any]) -> Dict[str, Any]:
         "interface_name": row["interface_name"],
         "mode": row["mode"],
         "mode_label": row["mode_label"],
+        "enabled": row["enabled"],
         "handshake_state": row["handshake_state"],
         "handshake_ago": row["handshake_ago"],
         "last_handshake_iso": row["last_handshake_iso"],
@@ -3670,6 +3682,7 @@ def peer_to_api_dict(peer: Peer) -> Dict[str, Any]:
         "mode": peer.mode,
         "full_tunnel": bool(peer.full_tunnel),
         "site_to_site_subnets": list(peer.site_to_site_subnets),
+        "enabled": bool(peer.enabled),
         "dns1": peer.dns1,
         "dns2": peer.dns2,
         "tenant_id": resolve_peer_tenant_id(peer),
@@ -3901,6 +3914,7 @@ def parse_peer_payload(payload: Dict[str, Any], existing: Optional[Peer] = None)
         "dns1": dns1,
         "dns2": dns2,
         "mode": mode,
+        "enabled": parse_boolean_value(payload.get("enabled", existing.enabled if existing else True), True),
         "full_tunnel": parse_boolean_value(payload.get("full_tunnel", existing.full_tunnel if existing else False), False)
         if mode == Peer.MODE_SITE_TO_SITE else False,
         "site_to_site_subnets": site_to_site_subnets,
@@ -4164,6 +4178,7 @@ def wireguard():
             "interfaces_up": interface_totals["up"],
             "interfaces_down": interface_totals["down"],
             "peers_total": peer_runtime["totals"]["peers"],
+            "disabled_peers": peer_runtime["totals"]["disabled_peers"],
             "site_to_site_peers": peer_runtime["totals"]["site_to_site_peers"],
             "active_peers": peer_runtime["totals"]["active_peers"],
             "alerts": peer_runtime["totals"]["alerts"]
@@ -5311,6 +5326,7 @@ def api_create_wireguard_peer():
             full_tunnel=payload["full_tunnel"],
             tenant_id=payload["tenant_id"] or "",
             owner_user_id=payload["owner_user_id"] or "",
+            enabled=payload["enabled"],
         )
         payload["interface"].add_peer(peer)
         config_manager.save()
@@ -5362,6 +5378,7 @@ def api_update_wireguard_peer(peer_id: str):
             full_tunnel=payload["full_tunnel"],
             tenant_id=payload["tenant_id"] or "",
             owner_user_id=payload["owner_user_id"] or "",
+            enabled=payload["enabled"],
         )
         config_manager.save()
         return {"peer": peer_to_api_dict(peer)}

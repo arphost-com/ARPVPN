@@ -529,6 +529,7 @@ class AddPeerForm(FlaskForm):
     name = StringField("Name", validators=[DataRequired(), PeerNameValidator()])
     mode = SelectField("Mode", choices=[(Peer.MODE_CLIENT, "Client"), (Peer.MODE_SITE_TO_SITE, "Site-to-site")],
                        default=Peer.MODE_CLIENT)
+    enabled = BooleanField("Enabled", default=True)
     nat = BooleanField("NAT", default=False)
     full_tunnel = BooleanField("Full tunnel", default=False)
     description = TextAreaField("Description", render_kw={"placeholder": "Some details..."})
@@ -564,6 +565,7 @@ class AddPeerForm(FlaskForm):
         new_form = AddPeerForm()
         new_form.name.data = form.name.data
         new_form.mode.data = form.mode.data or Peer.MODE_CLIENT
+        new_form.enabled.data = form.enabled.data
         new_form.nat.data = form.nat.data
         new_form.full_tunnel.data = form.full_tunnel.data
         new_form.description.data = form.description.data
@@ -579,6 +581,7 @@ class AddPeerForm(FlaskForm):
     def populate(cls, form: "AddPeerForm", iface: Interface = None) -> "AddPeerForm":
         form.name.data = Peer.generate_valid_name()
         form.mode.data = Peer.MODE_CLIENT
+        form.enabled.data = True
         form.full_tunnel.data = False
         form.site_to_site_subnets.data = ""
         form.interface.choices = cls.get_choices()
@@ -607,6 +610,7 @@ class EditPeerForm(AddPeerForm):
         new_form.peer = peer
         new_form.name.data = form.name.data
         new_form.mode.data = form.mode.data or Peer.MODE_CLIENT
+        new_form.enabled.data = form.enabled.data
         new_form.full_tunnel.data = form.full_tunnel.data
         new_form.ipv4.data = form.ipv4.data
         new_form.dns1.data = form.dns1.data
@@ -626,6 +630,7 @@ class EditPeerForm(AddPeerForm):
         form.peer = peer
         form.name.data = peer.name
         form.mode.data = peer.mode
+        form.enabled.data = peer.enabled
         form.full_tunnel.data = peer.full_tunnel
         form.description.data = peer.description
         form.ipv4.data = peer.ipv4_address

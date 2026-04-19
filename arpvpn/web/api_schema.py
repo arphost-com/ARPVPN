@@ -363,6 +363,7 @@ PEER_PAYLOAD_FIELD = object_field(
         "mode": string_field(enum=("client", "site_to_site"), example="client"),
         "full_tunnel": boolean_field(example=False),
         "site_to_site_subnets": string_list_field(),
+        "enabled": boolean_field(example=True),
         "owner_user_id": string_field(example="user-123"),
         "owner_username": string_field(example="client1"),
         "username": string_field(example="client1"),

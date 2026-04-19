@@ -4645,6 +4645,7 @@ paths:
               full_tunnel: false
               site_to_site_subnets:
               - example
+              enabled: true
               owner_user_id: user-123
               owner_username: client1
               username: client1
@@ -4828,6 +4829,7 @@ paths:
               full_tunnel: false
               site_to_site_subnets:
               - example
+              enabled: true
               owner_user_id: user-123
               owner_username: client1
               username: client1
@@ -5446,6 +5448,9 @@ components:
               type: string
           example:
           - example
+        enabled:
+          type: boolean
+          example: true
         owner_user_id:
           type: string
           example: user-123
@@ -5479,6 +5484,7 @@ components:
         full_tunnel: false
         site_to_site_subnets:
         - example
+        enabled: true
         owner_user_id: user-123
         owner_username: client1
         username: client1
@@ -7640,6 +7646,9 @@ components:
               type: string
           example:
           - example
+        enabled:
+          type: boolean
+          example: true
         owner_user_id:
           type: string
           example: user-123
@@ -7669,6 +7678,7 @@ components:
         full_tunnel: false
         site_to_site_subnets:
         - example
+        enabled: true
         owner_user_id: user-123
         owner_username: client1
         username: client1

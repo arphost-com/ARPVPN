@@ -36,6 +36,11 @@
                                   Error in field <strong>{{ form.mode.label.text }}</strong>: {{ error }}
                                 </div>
                             {% endfor %}
+                            {% for error in form.enabled.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ form.enabled.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
                             {% for error in form.nat.errors %}
                                 <div class="alert alert-danger" role="alert">
                                   Error in field <strong>{{ form.nat.label.text }}</strong>: {{ error }}
@@ -91,6 +96,19 @@
                             <div class="form-group col-md-4">
                                 {{ form.mode.label() }}
                                 {{ form.mode(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-4">
+                                <div class="custom-control custom-checkbox">
+                                    {{ form.enabled(class="custom-control-input") }}
+                                    {{ form.enabled.label(class="custom-control-label") }}
+                                    <span type="button" class="ml-1" data-toggle="popover"
+                                        data-placement="top"
+                                        data-content="Disable this peer to omit it from generated WireGuard server configs without deleting it.">
+                                        <i class="fas fa-question-circle"></i>
+                                    </span>
+                                </div>
                             </div>
                         </div>
                         <div class="form-row">

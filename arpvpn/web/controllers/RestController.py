@@ -78,7 +78,8 @@ class RestController:
                     dns1=form.dns1.data, dns2=form.dns2.data, nat=form.nat.data,
                     mode=mode, site_to_site_subnets=site_to_site_subnets, full_tunnel=full_tunnel,
                     tenant_id=(owner.tenant_id if owner else getattr(iface, "tenant_id", "")) or "",
-                    owner_user_id=(owner.id if owner else ""))
+                    owner_user_id=(owner.id if owner else ""),
+                    enabled=form.enabled.data)
         iface.add_peer(peer)
         config_manager.save()
         return peer
@@ -104,7 +105,8 @@ class RestController:
                   ipv4_address=form.ipv4.data, nat=form.nat.data, dns1=form.dns1.data, dns2=form.dns2.data,
                   mode=mode, site_to_site_subnets=site_to_site_subnets, full_tunnel=full_tunnel,
                   tenant_id=(owner.tenant_id if owner else getattr(iface, "tenant_id", "")) or "",
-                  owner_user_id=(owner.id if owner else ""))
+                  owner_user_id=(owner.id if owner else ""),
+                  enabled=form.enabled.data)
         config_manager.save()
 
     def download_peer(self, peer: Peer) -> Response:

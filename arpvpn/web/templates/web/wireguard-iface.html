@@ -242,6 +242,7 @@
                                         <th>Description</th>
                                         <th>IPv4</th>
                                         <th>Mode</th>
+                                        <th>Status</th>
                                         <th>Remote subnets</th>
                                         <th>Primary DNS</th>
                                         <th>Secondary DNS</th>
@@ -269,6 +270,13 @@
                                             {% else %}
                                                 <td>Client</td>
                                             {% endif %}
+                                            <td>
+                                                {% if peer.enabled %}
+                                                    <span class="badge badge-success">enabled</span>
+                                                {% else %}
+                                                    <span class="badge badge-secondary">disabled</span>
+                                                {% endif %}
+                                            </td>
                                             {% if peer.site_to_site_subnets %}
                                                 <td>{{ peer.site_to_site_subnets | join(", ") }}</td>
                                             {% else %}

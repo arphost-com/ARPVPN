@@ -40,26 +40,59 @@ def test_post_edit_ok(client):
     interfaces[iface.uuid] = iface
 
     response = client.post(f"{url}/{peer.uuid}", data={
-        "name": peer.name, "nat": peer.nat, "description": peer.description, "ipv4": "10.0.0.10/24", "dns1": peer.dns1,
-        "dns2": "10.10.4.4", "interface": peer.interface.name
+        "name": peer.name, "enabled": "y", "nat": peer.nat, "description": peer.description, "ipv4": "10.0.0.10/24",
+        "dns1": peer.dns1, "dns2": "10.10.4.4", "interface": peer.interface.name
     })
     assert is_http_success(response.status_code)
     assert "Error".encode() not in response.data
 
     response = client.post(f"{url}/{peer.uuid}", data={
         "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "nat": peer.nat, "description": peer.description, "ipv4": "10.0.0.254/24", "dns1": peer.dns1,
-        "dns2": "10.10.4.4", "interface": peer.interface.name
+        "enabled": "y", "nat": peer.nat, "description": peer.description, "ipv4": "10.0.0.254/24",
+        "dns1": peer.dns1, "dns2": "10.10.4.4", "interface": peer.interface.name
     })
     assert is_http_success(response.status_code)
     assert "Error".encode() not in response.data
 
     response = client.post(f"{url}/{peer.uuid}", data={
-        "name": peer.name, "nat": peer.nat, "description": peer.description, "ipv4": "10.0.0.10/24", "dns1": peer.dns1,
-        "dns2": "", "interface": peer.interface.name
+        "name": peer.name, "enabled": "y", "nat": peer.nat, "description": peer.description, "ipv4": "10.0.0.10/24",
+        "dns1": peer.dns1, "dns2": "", "interface": peer.interface.name
     })
     assert is_http_success(response.status_code)
     assert "Error".encode() not in response.data
+
+
+def test_post_edit_can_disable_and_enable_peer(client):
+    login(client)
+    iface = create_test_iface("iface1", "10.0.0.1/24", 50000)
+    peer = Peer(name="peer1", description="", ipv4_address="10.0.0.2/24", nat=False, interface=iface, dns1="8.8.8.8")
+    iface.add_peer(peer)
+    interfaces[iface.uuid] = iface
+
+    response = client.post(f"{url}/{peer.uuid}", data={
+        "name": peer.name,
+        "description": peer.description,
+        "ipv4": "10.0.0.2/24",
+        "dns1": peer.dns1,
+        "dns2": "",
+        "interface": peer.interface.name,
+    })
+    assert is_http_success(response.status_code)
+    assert peer.enabled is False
+    assert peer.public_key not in iface.generate_conf()
+
+    response = client.post(f"{url}/{peer.uuid}", data={
+        "name": peer.name,
+        "enabled": "y",
+        "description": peer.description,
+        "ipv4": "10.0.0.2/24",
+        "dns1": peer.dns1,
+        "dns2": "",
+        "interface": peer.interface.name,
+    })
+    assert is_http_success(response.status_code)
+    assert peer.enabled is True
+    assert peer.public_key in iface.generate_conf()
 
 
 def test_post_edit_ko(client):
@@ -70,56 +103,56 @@ def test_post_edit_ko(client):
     interfaces[iface.uuid] = iface
 
     response = client.post(f"{url}/{peer.uuid}", data={
-        "name": peer.name, "nat": peer.nat, "description": peer.description, "ipv4": "10.0.0.1/24", "dns1": peer.dns1,
-        "dns2": "10.10.4.4", "interface": peer.interface.name
+        "name": peer.name, "enabled": "y", "nat": peer.nat, "description": peer.description, "ipv4": "10.0.0.1/24",
+        "dns1": peer.dns1, "dns2": "10.10.4.4", "interface": peer.interface.name
     })
     assert is_http_success(response.status_code)
     assert "Error".encode() in response.data
 
     response = client.post(f"{url}/{peer.uuid}", data={
-        "name": peer.name, "nat": peer.nat, "description": peer.description, "ipv4": "10.0.0.0/24", "dns1": peer.dns1,
-        "dns2": "10.10.4.4", "interface": peer.interface.name
+        "name": peer.name, "enabled": "y", "nat": peer.nat, "description": peer.description, "ipv4": "10.0.0.0/24",
+        "dns1": peer.dns1, "dns2": "10.10.4.4", "interface": peer.interface.name
     })
     assert is_http_success(response.status_code)
     assert "Error".encode() in response.data
 
     response = client.post(f"{url}/{peer.uuid}", data={
-        "name": peer.name, "nat": peer.nat, "description": peer.description, "ipv4": "10.0.0.255/24", "dns1": peer.dns1,
-        "dns2": "10.10.4.4", "interface": peer.interface.name
+        "name": peer.name, "enabled": "y", "nat": peer.nat, "description": peer.description, "ipv4": "10.0.0.255/24",
+        "dns1": peer.dns1, "dns2": "10.10.4.4", "interface": peer.interface.name
     })
     assert is_http_success(response.status_code)
     assert "Error".encode() in response.data
 
     response = client.post(f"{url}/{peer.uuid}", data={
-        "name": peer.name, "nat": peer.nat, "description": peer.description, "ipv4": "10.0.0.256/24", "dns1": peer.dns1,
-        "dns2": "10.10.4.4", "interface": peer.interface.name
+        "name": peer.name, "enabled": "y", "nat": peer.nat, "description": peer.description, "ipv4": "10.0.0.256/24",
+        "dns1": peer.dns1, "dns2": "10.10.4.4", "interface": peer.interface.name
     })
     assert is_http_success(response.status_code)
     assert "Error".encode() in response.data
 
     response = client.post(f"{url}/{peer.uuid}", data={
-        "name": peer.name, "nat": peer.nat, "description": peer.description, "ipv4": "10.0.1.2/24", "dns1": peer.dns1,
-        "dns2": "10.10.4.4", "interface": peer.interface.name
+        "name": peer.name, "enabled": "y", "nat": peer.nat, "description": peer.description, "ipv4": "10.0.1.2/24",
+        "dns1": peer.dns1, "dns2": "10.10.4.4", "interface": peer.interface.name
     })
     assert is_http_success(response.status_code)
     assert "Error".encode() in response.data
 
     response = client.post(f"{url}/{peer.uuid}", data={
-        "name": peer.name, "nat": peer.nat, "description": peer.description, "ipv4": "aaaa",
+        "name": peer.name, "enabled": "y", "nat": peer.nat, "description": peer.description, "ipv4": "aaaa",
         "dns1": peer.dns1, "dns2": peer.dns2, "interface": peer.interface.name
     })
     assert is_http_success(response.status_code)
     assert "Error".encode() in response.data
 
     response = client.post(f"{url}/{peer.uuid}", data={
-        "name": peer.name, "nat": peer.nat, "description": peer.description, "ipv4": "10.0.1",
+        "name": peer.name, "enabled": "y", "nat": peer.nat, "description": peer.description, "ipv4": "10.0.1",
         "dns1": peer.dns1, "dns2": peer.dns2, "interface": peer.interface.name
     })
     assert is_http_success(response.status_code)
     assert "Error".encode() in response.data
 
     response = client.post(f"{url}/{peer.uuid}", data={
-        "name": peer.name, "nat": peer.nat, "description": peer.description, "ipv4": "10.0.1.1/21/1.0",
+        "name": peer.name, "enabled": "y", "nat": peer.nat, "description": peer.description, "ipv4": "10.0.1.1/21/1.0",
         "dns1": peer.dns1, "dns2": peer.dns2, "interface": peer.interface.name
     })
     assert is_http_success(response.status_code)
@@ -127,15 +160,15 @@ def test_post_edit_ko(client):
 
     response = client.post(f"{url}/{peer.uuid}", data={
         "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaA",
-        "nat": peer.nat, "description": peer.description, "ipv4": peer.ipv4_address, "dns1": peer.dns1,
-        "dns2": "10.10.4.4", "interface": peer.interface.name
+        "enabled": "y", "nat": peer.nat, "description": peer.description, "ipv4": peer.ipv4_address,
+        "dns1": peer.dns1, "dns2": "10.10.4.4", "interface": peer.interface.name
     })
     assert is_http_success(response.status_code)
     assert "Error".encode() in response.data
 
     response = client.post(f"{url}/{peer.uuid}", data={
-        "name": peer.name, "nat": peer.nat, "description": peer.description, "ipv4": peer.ipv4_address, "dns1": "",
-        "dns2": peer.dns2, "interface": peer.interface.name
+        "name": peer.name, "enabled": "y", "nat": peer.nat, "description": peer.description, "ipv4": peer.ipv4_address,
+        "dns1": "", "dns2": peer.dns2, "interface": peer.interface.name
     })
     assert is_http_success(response.status_code)
     assert "Error".encode() in response.data
@@ -150,6 +183,7 @@ def test_post_edit_site_to_site_ok(client):
 
     response = client.post(f"{url}/{peer.uuid}", data={
         "name": peer.name,
+        "enabled": "y",
         "mode": Peer.MODE_SITE_TO_SITE,
         "nat": True,
         "description": "branch office",
@@ -177,6 +211,7 @@ def test_post_edit_site_to_site_full_tunnel_ok(client):
 
     response = client.post(f"{url}/{peer.uuid}", data={
         "name": peer.name,
+        "enabled": "y",
         "mode": Peer.MODE_SITE_TO_SITE,
         "full_tunnel": "y",
         "nat": True,
@@ -204,6 +239,7 @@ def test_post_edit_site_to_site_ko(client):
 
     response = client.post(f"{url}/{peer.uuid}", data={
         "name": peer.name,
+        "enabled": "y",
         "mode": Peer.MODE_SITE_TO_SITE,
         "nat": False,
         "description": "branch office",
