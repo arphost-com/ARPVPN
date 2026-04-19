@@ -25,6 +25,7 @@ class ApiTokenRecord:
     revoked: bool = False
     issued_ip: str = ""
     issued_user_agent: str = ""
+    mfa_verified: bool = False
 
     def is_expired(self, as_of: Optional[datetime] = None) -> bool:
         reference = as_of or now_utc()
@@ -115,6 +116,7 @@ class ApiTokenStore:
         ttl_seconds: int,
         issued_ip: str,
         issued_user_agent: str,
+        mfa_verified: bool,
     ) -> Dict[str, Any]:
         token_id, token_secret = self._new_token_parts()
         issued_at = now_utc()
@@ -128,6 +130,7 @@ class ApiTokenStore:
             expires_at=expires_at,
             issued_ip=str(issued_ip or ""),
             issued_user_agent=str(issued_user_agent or ""),
+            mfa_verified=bool(mfa_verified),
         )
         self._records[token_id] = record
         return {
@@ -146,6 +149,7 @@ class ApiTokenStore:
         refresh_ttl_seconds: int,
         issued_ip: str,
         issued_user_agent: str,
+        mfa_verified: bool = False,
     ) -> Dict[str, Any]:
         with self._lock:
             self._cleanup_locked()
@@ -155,6 +159,7 @@ class ApiTokenStore:
                 ttl_seconds=access_ttl_seconds,
                 issued_ip=issued_ip,
                 issued_user_agent=issued_user_agent,
+                mfa_verified=mfa_verified,
             )
             refresh = self._issue_token(
                 token_kind=self.TOKEN_KIND_REFRESH,
@@ -162,6 +167,7 @@ class ApiTokenStore:
                 ttl_seconds=refresh_ttl_seconds,
                 issued_ip=issued_ip,
                 issued_user_agent=issued_user_agent,
+                mfa_verified=mfa_verified,
             )
             return {
                 "access": access,

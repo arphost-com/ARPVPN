@@ -1,7 +1,9 @@
 import pytest
 
 from arpvpn.common.models.user import User, users
-from arpvpn.tests.utils import default_cleanup, get_testing_app, is_http_success
+from arpvpn.common.utils.mfa import generate_mfa_code, generate_mfa_secret, generate_recovery_codes, recovery_code_hashes
+from arpvpn.core.models import Interface, Peer, interfaces
+from arpvpn.tests.utils import default_cleanup, get_test_gateway, get_testing_app, is_http_success
 
 
 @pytest.fixture(autouse=True)
@@ -32,10 +34,15 @@ def login(client, username: str, password: str):
     assert is_http_success(response.status_code)
 
 
-def issue_token(client, username: str, password: str, scope: str = "all"):
+def issue_token(client, username: str, password: str, scope: str = "all", mfa_code: str = ""):
     response = client.post(
         "/api/v1/auth/token",
-        json={"username": username, "password": password, "scope": scope},
+        json={
+            "username": username,
+            "password": password,
+            "scope": scope,
+            "mfa_code": mfa_code,
+        },
     )
     assert response.status_code == 201
     body = response.get_json()
@@ -46,6 +53,37 @@ def issue_token(client, username: str, password: str, scope: str = "all"):
 def clear_client_session(client):
     with client.session_transaction() as session_data:
         session_data.clear()
+
+
+def create_owned_peer(user: User) -> Peer:
+    iface = Interface(
+        name="wgauth0",
+        description="",
+        gw_iface=get_test_gateway(),
+        ipv4_address="10.48.0.1/24",
+        listen_port=51031,
+        auto=False,
+        on_up=[],
+        on_down=[],
+        private_key="iface-private-key",
+        public_key="iface-public-key",
+    )
+    peer = Peer(
+        name=user.name,
+        description="",
+        interface=iface,
+        ipv4_address="10.48.0.2/24",
+        dns1="8.8.8.8",
+        dns2="",
+        nat=False,
+        private_key="peer-private-key",
+        public_key="peer-public-key",
+        owner_user_id=user.id,
+    )
+    iface.add_peer(peer)
+    interfaces[iface.uuid] = iface
+    interfaces.sort()
+    return peer
 
 
 def test_api_token_can_access_protected_stats_endpoint(client):
@@ -130,6 +168,43 @@ def test_api_force_logout_revokes_existing_tokens_only(client):
 
     # Keep admin referenced so role remains explicit in this test.
     assert admin.role == User.ROLE_ADMIN
+
+
+def test_api_token_requires_mfa_code_when_account_enabled(client):
+    user = create_user("client01", "clientpass", User.ROLE_CLIENT)
+    user.enable_mfa(generate_mfa_secret(), recovery_code_hashes(generate_recovery_codes(count=1)))
+
+    response = client.post(
+        "/api/v1/auth/token",
+        json={"username": "client01", "password": "clientpass", "scope": "client"},
+    )
+
+    assert response.status_code == 401
+    body = response.get_json()
+    assert body["error"]["code"] == "mfa_required"
+
+
+def test_api_token_with_mfa_can_access_wireguard_peer_download(client):
+    user = create_user("client01", "clientpass", User.ROLE_CLIENT)
+    user.enable_mfa(generate_mfa_secret(), recovery_code_hashes(generate_recovery_codes(count=1)))
+    peer = create_owned_peer(user)
+
+    token_data = issue_token(
+        client,
+        "client01",
+        "clientpass",
+        scope="client",
+        mfa_code=generate_mfa_code(user.mfa_secret),
+    )
+
+    clear_client_session(client)
+    response = client.get(
+        f"/api/v1/wireguard/peers/{peer.uuid}/download",
+        headers={"Authorization": f"Bearer {token_data['access_token']}"},
+    )
+
+    assert is_http_success(response.status_code)
+    assert b"AllowedIPs" in response.data
 
 
 def test_support_can_start_and_stop_impersonation_with_api(client):

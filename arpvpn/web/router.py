@@ -84,6 +84,8 @@ ALLOWED_NEXT_ENDPOINTS = {
     "/setup": "router.setup",
 }
 IMPERSONATOR_SESSION_KEY = "impersonator_user_id"
+MFA_VERIFIED_SESSION_USER_ID_KEY = "mfa_verified_user_id"
+MFA_VERIFIED_SESSION_AT_KEY = "mfa_verified_at"
 STAFF_ROLES = (User.ROLE_ADMIN, User.ROLE_SUPPORT)
 USER_MANAGEMENT_ROLES = (User.ROLE_ADMIN, User.ROLE_SUPPORT, User.ROLE_TENANT_ADMIN)
 API_AUTH_STAFF_ROLES = USER_MANAGEMENT_ROLES
@@ -558,6 +560,7 @@ def parse_auth_token_payload() -> Dict[str, Any]:
     username = str(payload.get("username", "") or "").strip()
     password = str(payload.get("password", "") or "")
     scope = normalize_auth_scope(payload.get("scope"))
+    mfa_code = parse_optional_string(payload.get("mfa_code", ""))
     if not username:
         abort(BAD_REQUEST, "username is required.")
     if not password:
@@ -566,6 +569,7 @@ def parse_auth_token_payload() -> Dict[str, Any]:
         "username": username,
         "password": password,
         "scope": scope,
+        "mfa_code": mfa_code,
     }
 
 
@@ -632,6 +636,7 @@ def resolve_api_actor_user_from_token(token_value: str) -> Optional[User]:
         return None
     user.set_authenticated(True)
     g.api_token_id = token_record.token_id
+    g.api_token_record = token_record
     g.api_actor_user = user
     login_user(user, remember=False, force=True)
     return user
@@ -793,6 +798,47 @@ def get_impersonator_user() -> Optional[User]:
         session.pop(IMPERSONATOR_SESSION_KEY, None)
         return None
     return impersonator
+
+
+def clear_session_mfa_verification():
+    session.pop(MFA_VERIFIED_SESSION_USER_ID_KEY, None)
+    session.pop(MFA_VERIFIED_SESSION_AT_KEY, None)
+
+
+def mark_session_mfa_verified(user: Optional[User] = None):
+    actor = user or current_actor()
+    if not actor:
+        clear_session_mfa_verification()
+        return
+    session[MFA_VERIFIED_SESSION_USER_ID_KEY] = actor.id
+    session[MFA_VERIFIED_SESSION_AT_KEY] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def current_request_has_mfa_verification(actor: Optional[User] = None) -> bool:
+    actor = actor or current_actor()
+    if not actor or not actor.has_mfa():
+        return False
+    token_record = getattr(g, "api_token_record", None)
+    if token_record and getattr(token_record, "user_id", "") == actor.id:
+        return bool(getattr(token_record, "mfa_verified", False))
+    session_user_id = str(session.get(MFA_VERIFIED_SESSION_USER_ID_KEY, "") or "").strip()
+    session_verified_at = str(session.get(MFA_VERIFIED_SESSION_AT_KEY, "") or "").strip()
+    return bool(session_user_id == actor.id and session_verified_at)
+
+
+def require_client_wireguard_config_mfa():
+    actor = current_actor()
+    if not actor:
+        abort(UNAUTHORIZED)
+    impersonator = get_impersonator_user()
+    if impersonator and impersonator.has_role(*STAFF_ROLES):
+        return
+    if not actor.has_role(User.ROLE_CLIENT):
+        return
+    if not actor.has_mfa():
+        abort(FORBIDDEN, "Enable MFA in Profile before viewing or downloading your WireGuard configuration.")
+    if not current_request_has_mfa_verification(actor):
+        abort(FORBIDDEN, "Complete an MFA-authenticated login before viewing or downloading your WireGuard configuration.")
 
 
 def is_impersonating() -> bool:
@@ -3963,6 +4009,7 @@ def operate_interface_action(iface: Interface, action: str) -> Dict[str, Any]:
 @setup_required
 def logout():
     session.pop(IMPERSONATOR_SESSION_KEY, None)
+    clear_session_mfa_verification()
     current_user.logout()
     return redirect(url_for("router.index"))
 
@@ -4057,6 +4104,7 @@ def login_post():
         return ViewController("web/login.html", **context).load()
     del clients[client.ip]
     session.pop(IMPERSONATOR_SESSION_KEY, None)
+    clear_session_mfa_verification()
     u = users.get_value_by_attr("name", form.username.data)
     mfa_recovery_consumed = False
     if u and u.has_mfa():
@@ -4079,6 +4127,8 @@ def login_post():
     if not login_user(u, form.remember_me.data):
         error(f"Unable to log user in.")
         abort(INTERNAL_SERVER_ERROR)
+    if u and u.has_mfa():
+        mark_session_mfa_verified(u)
     if mfa_recovery_consumed:
         config_manager.save_credentials()
     info(f"Successfully logged user '{u.name}' in!")
@@ -4285,13 +4335,57 @@ def api_auth_issue_token():
             f"Role '{user.role}' cannot request scope '{scope}'.",
         )
 
+    mfa_recovery_consumed = False
+    mfa_verified = False
+    if user.has_mfa():
+        if not payload["mfa_code"]:
+            remaining_attempts = api_auth_lockouts.register_failure(
+                lockout_key,
+                max_attempts=API_AUTH_MAX_ATTEMPTS,
+                window_seconds=API_AUTH_RATE_WINDOW_SECONDS,
+                lockout_seconds=API_AUTH_LOCKOUT_SECONDS,
+            )
+            log_audit_event(
+                "auth.token.issue",
+                status="failed_mfa",
+                details={"username": username, "remaining_attempts": remaining_attempts},
+            )
+            return api_error(
+                UNAUTHORIZED,
+                "mfa_required",
+                "A valid MFA code is required for this account.",
+                details={"remaining_attempts": remaining_attempts},
+            )
+        mfa_verified, mfa_recovery_consumed = user.verify_mfa(payload["mfa_code"])
+        if not mfa_verified:
+            remaining_attempts = api_auth_lockouts.register_failure(
+                lockout_key,
+                max_attempts=API_AUTH_MAX_ATTEMPTS,
+                window_seconds=API_AUTH_RATE_WINDOW_SECONDS,
+                lockout_seconds=API_AUTH_LOCKOUT_SECONDS,
+            )
+            log_audit_event(
+                "auth.token.issue",
+                status="failed_mfa",
+                details={"username": username, "remaining_attempts": remaining_attempts},
+            )
+            return api_error(
+                UNAUTHORIZED,
+                "invalid_mfa_code",
+                "Invalid MFA code.",
+                details={"remaining_attempts": remaining_attempts},
+            )
+
     api_auth_lockouts.clear_failures(lockout_key)
+    if mfa_recovery_consumed:
+        config_manager.save_credentials()
     token_pair = api_token_store.issue_pair(
         user_id=user.id,
         access_ttl_seconds=API_AUTH_ACCESS_TTL_SECONDS,
         refresh_ttl_seconds=API_AUTH_REFRESH_TTL_SECONDS,
         issued_ip=get_request_ip(),
         issued_user_agent=get_request_user_agent(),
+        mfa_verified=mfa_verified,
     )
     log_audit_event(
         "auth.token.issue",
@@ -4332,6 +4426,7 @@ def api_auth_refresh_token():
         refresh_ttl_seconds=API_AUTH_REFRESH_TTL_SECONDS,
         issued_ip=get_request_ip(),
         issued_user_agent=get_request_user_agent(),
+        mfa_verified=record.mfa_verified,
     )
     log_audit_event(
         "auth.token.refresh",
@@ -5259,6 +5354,7 @@ def api_operate_wireguard_interface(interface_id: str, action: str):
 
 @router.route("/api/v1/wireguard/interfaces/<interface_id>/download", methods=["GET"])
 @login_required
+@role_required(*USER_MANAGEMENT_ROLES)
 @setup_required
 def api_download_wireguard_interface(interface_id: str):
     iface = get_interface_or_404(interface_id)
@@ -5269,6 +5365,7 @@ def api_download_wireguard_interface(interface_id: str):
 
 @router.route("/api/v1/wireguard/interfaces/<interface_id>/qr", methods=["GET"])
 @login_required
+@role_required(*USER_MANAGEMENT_ROLES)
 @setup_required
 def api_wireguard_interface_qr(interface_id: str):
     iface = get_interface_or_404(interface_id)
@@ -5420,6 +5517,7 @@ def api_download_wireguard_peer(peer_id: str):
     peer = get_peer_or_404(peer_id)
     if not peer_visible_to_actor(peer):
         abort(FORBIDDEN, "Insufficient permissions.")
+    require_client_wireguard_config_mfa()
     return RestController().download_peer(peer)
 
 
@@ -5430,6 +5528,7 @@ def api_wireguard_peer_qr(peer_id: str):
     peer = get_peer_or_404(peer_id)
     if not peer_visible_to_actor(peer):
         abort(FORBIDDEN, "Insufficient permissions.")
+    require_client_wireguard_config_mfa()
     return api_success({
         "peer_id": peer.uuid,
         "qr_data_uri": build_qr_data_uri(peer.generate_conf()),
@@ -6418,7 +6517,6 @@ def remove_wireguard_peer(uuid: str):
 
 @router.route("/wireguard/peers/<uuid>", methods=['GET', "POST"])
 @login_required
-@role_required(*USER_MANAGEMENT_ROLES)
 @setup_required
 def get_wireguard_peer(uuid: str):
     peer = get_all_peers().get(uuid, None)
@@ -6428,6 +6526,8 @@ def get_wireguard_peer(uuid: str):
         abort(FORBIDDEN, "Insufficient permissions.")
     if request.method == "POST" and not can_manage_wireguard_peer(peer):
         abort(FORBIDDEN, "Insufficient permissions.")
+    if request.method == "GET":
+        require_client_wireguard_config_mfa()
     view = "web/wireguard-peer.html"
     data = load_traffic_data(peer)
     session_data = traffic_config.driver.get_session_data().get(peer.uuid, TrafficData(0, 0))
@@ -6447,10 +6547,20 @@ def get_wireguard_peer(uuid: str):
     from arpvpn.web.forms import EditPeerForm
     if request.method == 'GET':
         form = EditPeerForm.from_peer(peer)
+        can_manage_peer = can_manage_wireguard_peer(peer)
+        if not can_manage_peer:
+            for field_name, field in form._fields.items():
+                if field_name in ("csrf_token", "submit"):
+                    continue
+                render_kw = dict(field.render_kw or {})
+                render_kw["disabled"] = True
+                field.render_kw = render_kw
         context["form"] = form
+        context["can_manage_peer"] = can_manage_peer
         return ViewController(view, **context).load()
     form = EditPeerForm.from_form(EditPeerForm(request.form), peer)
     context["form"] = form
+    context["can_manage_peer"] = True
     if not form.validate():
         error("Unable to validate form.")
         return ViewController(view, **context).load()
@@ -6467,7 +6577,6 @@ def get_wireguard_peer(uuid: str):
 
 @router.route("/wireguard/peers/<uuid>/download", methods=['GET'])
 @login_required
-@role_required(*USER_MANAGEMENT_ROLES)
 @setup_required
 def download_wireguard_peer(uuid: str):
     peer = get_all_peers().get(uuid, None)
@@ -6477,6 +6586,7 @@ def download_wireguard_peer(uuid: str):
         abort(NOT_FOUND, msg)
     if not peer_visible_to_actor(peer):
         abort(FORBIDDEN, "Insufficient permissions.")
+    require_client_wireguard_config_mfa()
     return RestController().download_peer(peer)
 
 
@@ -7611,6 +7721,7 @@ def update_profile_mfa():
             error("Unable to enable MFA: invalid code.")
             return ViewController(view, **context).load()
         current_user.mfa_enabled = True
+        mark_session_mfa_verified(current_user)
         config_manager.save_credentials()
         context["success"] = True
         context["success_details"] = "MFA enabled!"
@@ -7624,6 +7735,7 @@ def update_profile_mfa():
             context["warning_details"] = "MFA is already disabled."
             return ViewController(view, **context).load()
         current_user.disable_mfa()
+        clear_session_mfa_verification()
         config_manager.save_credentials()
         context["success"] = True
         context["success_details"] = "MFA disabled!"

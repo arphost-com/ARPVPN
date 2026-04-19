@@ -24,6 +24,11 @@
                     This peer is disabled and is omitted from generated WireGuard server configs until you re-enable it.
                 </div>
             {% endif %}
+            {% if not can_manage_peer %}
+                <div class="alert alert-info">
+                    This connection is read-only for your account. Use the download or QR actions to provision your WireGuard client.
+                </div>
+            {% endif %}
             <div id="global-alerts">
                 {% if success %}
                     <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -223,7 +228,9 @@
                             </div>
                         </div>
                         <div class="form-group mt-4 mb-0">
-                            {{ form.submit(class="btn btn-warning") }}
+                            {% if can_manage_peer %}
+                                {{ form.submit(class="btn btn-warning") }}
+                            {% endif %}
                             <a href="{{ url_for('router.download_wireguard_peer', uuid=peer.uuid) }}" type="button" class="btn btn-outline-info">Download</a>
                             <a href="{{ url_for('router.connection_rrd_graph', uuid=peer.uuid) }}" type="button" class="btn btn-outline-primary">RRD graph</a>
                             <button type="button" class="btn btn-outline-secondary"

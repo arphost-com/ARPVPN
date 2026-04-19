@@ -4,6 +4,7 @@ import pytest
 
 from arpvpn.common.models.tenant import Tenant, tenants
 from arpvpn.common.models.user import User, users
+from arpvpn.common.utils.mfa import generate_mfa_code, generate_mfa_secret, generate_recovery_codes, recovery_code_hashes
 from arpvpn.core.models import Interface, Peer, interfaces
 from arpvpn.tests.utils import default_cleanup, get_test_gateway, get_testing_app, is_http_success
 
@@ -34,10 +35,15 @@ def create_tenant(name: str) -> Tenant:
     return tenant
 
 
-def login(client, username: str, password: str):
+def login(client, username: str, password: str, mfa_code: str = ""):
     response = client.post(
         "/login",
-        data={"username": username, "password": password, "remember_me": False},
+        data={
+            "username": username,
+            "password": password,
+            "remember_me": False,
+            "mfa_code": mfa_code,
+        },
         follow_redirects=True,
     )
     assert is_http_success(response.status_code)
@@ -242,10 +248,11 @@ def test_tenant_admin_is_scoped_to_own_wireguard_objects(client):
 def test_client_can_only_view_owned_wireguard_peer_via_api(client):
     client_one = create_user("client01", "clientpass", User.ROLE_CLIENT)
     client_two = create_user("client02", "clientpass", User.ROLE_CLIENT)
+    client_one.enable_mfa(generate_mfa_secret(), recovery_code_hashes(generate_recovery_codes(count=1)))
     iface = create_interface("wgclient1", "10.47.0.1/24", 51021)
     peer_one = add_peer(iface, "client01", "10.47.0.2/24", owner_user_id=client_one.id)
     peer_two = add_peer(iface, "client02", "10.47.0.3/24", owner_user_id=client_two.id)
-    login(client, "client01", "clientpass")
+    login(client, "client01", "clientpass", generate_mfa_code(client_one.mfa_secret))
 
     peers_response = client.get("/api/v1/wireguard/peers")
     assert peers_response.status_code == 200
@@ -264,3 +271,16 @@ def test_client_can_only_view_owned_wireguard_peer_via_api(client):
 
     own_download = client.get(f"/api/v1/wireguard/peers/{peer_one.uuid}/download")
     assert own_download.status_code == 200
+
+
+def test_client_wireguard_api_download_requires_profile_mfa(client):
+    client_one = create_user("client01", "clientpass", User.ROLE_CLIENT)
+    iface = create_interface("wgclient2", "10.48.0.1/24", 51022)
+    peer_one = add_peer(iface, "client01", "10.48.0.2/24", owner_user_id=client_one.id)
+    login(client, "client01", "clientpass")
+
+    own_download = client.get(f"/api/v1/wireguard/peers/{peer_one.uuid}/download")
+    assert own_download.status_code == 403
+    assert own_download.get_json()["error"]["message"] == (
+        "Enable MFA in Profile before viewing or downloading your WireGuard configuration."
+    )

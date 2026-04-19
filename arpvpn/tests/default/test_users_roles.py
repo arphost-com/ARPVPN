@@ -145,6 +145,11 @@ def test_client_dashboard_hides_staff_controls_and_other_clients(client):
     assert is_http_success(response.status_code)
     assert b"client01" in response.data
     assert b"client02" not in response.data
+    assert b"/wireguard/interfaces/add" not in response.data
+    assert b"/wireguard/peers/add" not in response.data
+    assert b"removeIfaceBtn" not in response.data
+    assert b"removePeerBtn" not in response.data
+    assert b"Enable MFA in" in response.data
 
 
 def test_admin_can_edit_user_name_role_and_password(client):

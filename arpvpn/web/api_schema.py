@@ -437,6 +437,7 @@ API_REQUEST_SCHEMAS: Dict[str, ApiRequestSchema] = {
         "username": string_field(required=True, example="admin"),
         "password": string_field(required=True, example="change-me"),
         "scope": string_field(example="staff"),
+        "mfa_code": string_field(example="123456"),
     }),
     "api_auth_refresh_token": ApiRequestSchema(fields={
         "refresh_token": string_field(required=True, example="refresh-token"),

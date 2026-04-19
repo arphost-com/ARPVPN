@@ -25,6 +25,11 @@
                 </div>
             </div>
             <div id="global_alerts"></div>
+            {% if current_user.has_role('client') and not current_user.has_mfa() %}
+                <div class="alert alert-warning" role="alert">
+                    Enable MFA in <a href="/profile">Profile</a> before viewing or downloading your WireGuard configuration.
+                </div>
+            {% endif %}
             {% if peer_runtime["alerts"] %}
                 <div class="card mb-4 panel-glass">
                     <div class="card-header">
@@ -336,7 +341,9 @@
                 <div class="card-header">
                     <i class="fas fa-ethernet mr-1"></i>
                     Interfaces
-                    <a href="/wireguard/interfaces/add" class="float-right" title="Add"><i class="fas fa-plus mr-1"></i></a>
+                    {% if not current_user.has_role('client') %}
+                        <a href="/wireguard/interfaces/add" class="float-right" title="Add"><i class="fas fa-plus mr-1"></i></a>
+                    {% endif %}
                 </div>
                 <div class="card-body">
                     <div id="wgIfaces">
@@ -370,39 +377,40 @@
                                                 <a href="/traffic/rrd/{{ iface.uuid }}" title="RRD graph"
                                                    class="mr-2"><i class="fas fa-chart-line"></i>
                                                 </a>
-                                                <a href="/wireguard/interfaces/{{ iface.uuid }}/download" title="Download"
-                                                   class="mr-2"><i class="fa fa-download"></i>
-                                                </a>
-                                                <a href="/wireguard/interfaces/{{ iface.uuid }}" title="Edit" class="mr-2">
-                                                    <i class="fas fa-pen"></i>
-                                                </a>
-                                                <span data-toggle="modal" data-target="#removeModal-{{ iface.uuid }}"
-                                                      type="button" class="btn-link removal-link">
-                                                    <i title="Remove" class="fas fa-trash"></i>
-                                                </span>
-                                                <!-- Modal -->
-                                                <div class="modal fade" id="removeModal-{{ iface.uuid }}" tabindex="-1" role="dialog"
-                                                     aria-labelledby="removeIfaceTitle" aria-hidden="true">
-                                                  <div class="modal-dialog" role="document">
-                                                    <div class="modal-content">
-                                                      <div class="modal-header">
-                                                        <h5 class="modal-title" id="removeModalTitle">Delete interface</h5>
-                                                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                                          <span aria-hidden="true">&times;</span>
-                                                        </button>
-                                                      </div>
-                                                      <div class="modal-body">
-                                                          Do you really want to remove <strong>{{ iface.name }}</strong>?
-                                                          This cannot be undone.
-                                                      </div>
-                                                      <div class="modal-footer">
-                                                          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                                                          <button type="button" id="removeIfaceBtn-{{ iface.uuid }}"
-                                                                class="btn btn-danger removeIfaceBtn">Remove</button>
+                                                {% if not current_user.has_role('client') %}
+                                                    <a href="/wireguard/interfaces/{{ iface.uuid }}/download" title="Download"
+                                                       class="mr-2"><i class="fa fa-download"></i>
+                                                    </a>
+                                                    <a href="/wireguard/interfaces/{{ iface.uuid }}" title="Edit" class="mr-2">
+                                                        <i class="fas fa-pen"></i>
+                                                    </a>
+                                                    <span data-toggle="modal" data-target="#removeModal-{{ iface.uuid }}"
+                                                          type="button" class="btn-link removal-link">
+                                                        <i title="Remove" class="fas fa-trash"></i>
+                                                    </span>
+                                                    <div class="modal fade" id="removeModal-{{ iface.uuid }}" tabindex="-1" role="dialog"
+                                                         aria-labelledby="removeIfaceTitle" aria-hidden="true">
+                                                      <div class="modal-dialog" role="document">
+                                                        <div class="modal-content">
+                                                          <div class="modal-header">
+                                                            <h5 class="modal-title" id="removeModalTitle">Delete interface</h5>
+                                                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                                              <span aria-hidden="true">&times;</span>
+                                                            </button>
+                                                          </div>
+                                                          <div class="modal-body">
+                                                              Do you really want to remove <strong>{{ iface.name }}</strong>?
+                                                              This cannot be undone.
+                                                          </div>
+                                                          <div class="modal-footer">
+                                                              <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                                                              <button type="button" id="removeIfaceBtn-{{ iface.uuid }}"
+                                                                    class="btn btn-danger removeIfaceBtn">Remove</button>
+                                                          </div>
+                                                        </div>
                                                       </div>
                                                     </div>
-                                                  </div>
-                                                </div>
+                                                {% endif %}
                                             </td>
                                         </tr>
                                     {% endfor %}
@@ -420,7 +428,9 @@
                 <div class="card-header">
                     <i class="fas fa-user-friends mr-1"></i>
                     Peers
-                    <a href="/wireguard/peers/add" class="float-right" title="Add"><i class="fas fa-plus mr-1"></i></a>
+                    {% if not current_user.has_role('client') %}
+                        <a href="/wireguard/peers/add" class="float-right" title="Add"><i class="fas fa-plus mr-1"></i></a>
+                    {% endif %}
                 </div>
                 <div class="card-body">
                     <div id="wgIfacePeers">
@@ -445,7 +455,11 @@
                                     {% for peer in iface.peers.values() %}
                                         <tr>
                                             <td><a href="/traffic/rrd/{{ peer.uuid }}">{{ peer.name }}</a></td>
-                                            <td><a href="/wireguard/interfaces/{{ iface.uuid }}">{{ iface.name }}</a></td>
+                                            {% if current_user.has_role('client') %}
+                                                <td>{{ iface.name }}</td>
+                                            {% else %}
+                                                <td><a href="/wireguard/interfaces/{{ iface.uuid }}">{{ iface.name }}</a></td>
+                                            {% endif %}
                                             {% if peer.description %}
                                                 <td>{{ peer.description }}</td>
                                             {% else %}
@@ -490,36 +504,37 @@
                                                 <a href="/wireguard/peers/{{ peer.uuid }}/download" title="Download"
                                                    class="mr-2"><i class="fa fa-download"></i>
                                                 </a>
-                                                <a href="/wireguard/peers/{{ peer.uuid }}" title="Edit" class="mr-2">
-                                                    <i class="fas fa-pen"></i>
+                                                <a href="/wireguard/peers/{{ peer.uuid }}" title="{% if current_user.has_role('client') %}Open{% else %}Edit{% endif %}" class="mr-2">
+                                                    <i class="fas {% if current_user.has_role('client') %}fa-eye{% else %}fa-pen{% endif %}"></i>
                                                 </a>
-                                                <span data-toggle="modal" data-target="#removeModal-{{ peer.uuid }}"
-                                                      type="button" class="btn-link removal-link">
-                                                    <i title="Remove" class="fas fa-trash"></i>
-                                                </span>
-                                                <!-- Modal -->
-                                                <div class="modal fade" id="removeModal-{{ peer.uuid }}" tabindex="-1" role="dialog"
-                                                     aria-labelledby="removePeerTitle" aria-hidden="true">
-                                                  <div class="modal-dialog" role="document">
-                                                    <div class="modal-content">
-                                                      <div class="modal-header">
-                                                        <h5 class="modal-title" id="removeModalTitle">Delete peer</h5>
-                                                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                                          <span aria-hidden="true">&times;</span>
-                                                        </button>
-                                                      </div>
-                                                      <div class="modal-body">
-                                                          Do you really want to remove <strong>{{ peer.name }}</strong>?
-                                                          This cannot be undone.
-                                                      </div>
-                                                      <div class="modal-footer">
-                                                          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                                                          <button type="button" id="removePeerBtn-{{ peer.uuid }}"
-                                                                class="btn btn-danger removePeerBtn">Remove</button>
+                                                {% if not current_user.has_role('client') %}
+                                                    <span data-toggle="modal" data-target="#removeModal-{{ peer.uuid }}"
+                                                          type="button" class="btn-link removal-link">
+                                                        <i title="Remove" class="fas fa-trash"></i>
+                                                    </span>
+                                                    <div class="modal fade" id="removeModal-{{ peer.uuid }}" tabindex="-1" role="dialog"
+                                                         aria-labelledby="removePeerTitle" aria-hidden="true">
+                                                      <div class="modal-dialog" role="document">
+                                                        <div class="modal-content">
+                                                          <div class="modal-header">
+                                                            <h5 class="modal-title" id="removeModalTitle">Delete peer</h5>
+                                                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                                              <span aria-hidden="true">&times;</span>
+                                                            </button>
+                                                          </div>
+                                                          <div class="modal-body">
+                                                              Do you really want to remove <strong>{{ peer.name }}</strong>?
+                                                              This cannot be undone.
+                                                          </div>
+                                                          <div class="modal-footer">
+                                                              <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                                                              <button type="button" id="removePeerBtn-{{ peer.uuid }}"
+                                                                    class="btn btn-danger removePeerBtn">Remove</button>
+                                                          </div>
+                                                        </div>
                                                       </div>
                                                     </div>
-                                                  </div>
-                                                </div>
+                                                {% endif %}
                                             </td>
                                         </tr>
                                     {% endfor %}

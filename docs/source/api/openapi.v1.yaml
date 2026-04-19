@@ -384,6 +384,7 @@ paths:
               username: admin
               password: change-me
               scope: staff
+              mfa_code: '123456'
   /api/v1/config/global:
     get:
       tags:
@@ -5015,6 +5016,9 @@ components:
         scope:
           type: string
           example: staff
+        mfa_code:
+          type: string
+          example: '123456'
       additionalProperties: false
       required:
       - username
@@ -5023,6 +5027,7 @@ components:
         username: admin
         password: change-me
         scope: staff
+        mfa_code: '123456'
     api_auth_refresh_tokenRequest:
       type: object
       properties:
