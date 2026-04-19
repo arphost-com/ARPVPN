@@ -148,8 +148,17 @@ def get_testing_app():
     return app
 
 
+def get_test_gateway(preferred: str = "eth1") -> str:
+    gateways = [name for name in get_system_interfaces().keys() if name != "lo"]
+    if preferred in gateways:
+        return preferred
+    if gateways:
+        return gateways[0]
+    return preferred
+
+
 def create_test_iface(name, ipv4, port):
-    gw = list(filter(lambda i: i != "lo", get_system_interfaces().keys()))[1]
+    gw = get_test_gateway()
     from arpvpn.core.config.wireguard import config
     on_up = [
         f"{config.iptables_bin} -I FORWARD -i {name} -j ACCEPT\n" +

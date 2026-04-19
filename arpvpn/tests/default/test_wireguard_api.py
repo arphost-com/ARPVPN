@@ -5,7 +5,7 @@ import pytest
 from arpvpn.common.models.tenant import Tenant, tenants
 from arpvpn.common.models.user import User, users
 from arpvpn.core.models import Interface, Peer, interfaces
-from arpvpn.tests.utils import default_cleanup, get_testing_app, is_http_success
+from arpvpn.tests.utils import default_cleanup, get_test_gateway, get_testing_app, is_http_success
 
 
 @pytest.fixture(autouse=True)
@@ -47,7 +47,7 @@ def create_interface(name: str, ipv4: str, port: int, tenant_id: str = "") -> In
     iface = Interface(
         name=name,
         description="",
-        gw_iface="eth1",
+        gw_iface=get_test_gateway(),
         ipv4_address=ipv4,
         listen_port=port,
         auto=False,
@@ -96,7 +96,7 @@ def test_admin_can_crud_wireguard_interface_and_peer_via_api(client):
         "/api/v1/wireguard/interfaces",
         json={
             "name": "wgapi1",
-            "gateway": "eth1",
+            "gateway": get_test_gateway(),
             "ipv4": "10.44.0.1/24",
             "listen_port": 51001,
             "auto": False,
@@ -161,7 +161,7 @@ def test_admin_can_crud_wireguard_interface_and_peer_via_api(client):
         f"/api/v1/wireguard/interfaces/{interface_id}",
         json={
             "name": "wgapi1",
-            "gateway": "eth1",
+            "gateway": get_test_gateway(),
             "ipv4": "10.44.0.1/24",
             "listen_port": 51001,
             "auto": False,
