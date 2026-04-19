@@ -270,6 +270,7 @@ curl -X POST /api/v1/mesh/policies \
                             <ul class="mb-3">
                                 <li>Cookie-authenticated API writes require a CSRF token from <code>GET /api/v1/auth/csrf</code>.</li>
                                 <li>Bearer-token clients use <code>POST /api/v1/auth/token</code> and do not need API CSRF headers.</li>
+                                <li>Account MFA is configured once from <a href="/profile">Profile</a> and used for web login; ARPVPN does not maintain a separate WireGuard-specific 2FA stack.</li>
                                 <li>Super admins can export or restore snapshots with <code>/api/v1/system/backup</code> and <code>/api/v1/system/restore</code>.</li>
                                 <li>Setup, profile, about, network inventory, and restart flows also have API parity under <code>/api/v1/setup/*</code>, <code>/api/v1/profile</code>, <code>/api/v1/about</code>, <code>/api/v1/network/inventory</code>, and <code>/api/v1/system/restart</code>.</li>
                                 <li>API groups can be feature-flagged with environment variables like <code>ARPVPN_FEATURE_API_MESH=0</code>.</li>

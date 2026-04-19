@@ -16,7 +16,7 @@ Docs live in `docs/` inside this repository.
 - Display general network information.
 - Encrypted user credentials (AES).
 - Multi-user roles (`admin`, `support`, `tenant_admin`, `client`) with impersonation and tenant-scoped controls.
-- Optional multi-factor authentication with TOTP codes and recovery codes.
+- Optional multi-factor authentication with TOTP codes and recovery codes, managed once per account in Profile and reused for web login.
 - API v1 with cookie/session and bearer token auth modes, plus mesh control-plane APIs.
 - Dedicated Mesh page for site-to-site and full-mesh planning, route/policy controls, diagnostics, and signed mesh event review.
 - Dedicated tenant runtime planning for separate customer VPN stacks and ports.

@@ -13,6 +13,7 @@ Key features
 * Display stored and real time traffic data using charts.
 * Display general network information.
 * Encrypted user credentials (AES).
+* Optional account MFA with TOTP and recovery codes, configured once in Profile for web login.
 * Tenant-scoped user, invitation, TLS, and runtime management.
 * Easy management through the ``arpvpn`` systemd service.
 
