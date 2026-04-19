@@ -2448,7 +2448,7 @@ def csv_response(filename: str, fieldnames: List[str], rows: List[Dict[str, Any]
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
     for row in rows:
-        writer.writerow(row)
+        writer.writerow({field: row.get(field) for field in fieldnames})
     return Response(
         output.getvalue(),
         mimetype="text/csv",
@@ -5983,6 +5983,7 @@ def api_stats_peers_csv():
     rows = [serialize_peer_runtime_row(row) for row in runtime["rows"]]
     fields = [
         "peer_uuid", "peer_name", "interface_uuid", "interface_name", "mode", "mode_label",
+        "enabled",
         "handshake_state", "handshake_ago", "last_handshake_iso", "seconds_since_handshake",
         "high_traffic", "session_rx_bytes", "session_tx_bytes", "session_total_bytes",
         "session_rx_human", "session_tx_human", "session_total_human"

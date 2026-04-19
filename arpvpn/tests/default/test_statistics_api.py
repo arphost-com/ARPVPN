@@ -174,7 +174,7 @@ def test_stats_peers_csv_available(client):
 
     response = client.get("/api/v1/stats/peers.csv")
     assert is_http_success(response.status_code)
-    assert b"peer_uuid,peer_name,interface_uuid" in response.data
+    assert b"peer_uuid,peer_name,interface_uuid,interface_name,mode,mode_label,enabled" in response.data
     assert peers[0].name.encode() in response.data
 
 

@@ -116,6 +116,7 @@ def test_admin_can_crud_wireguard_interface_and_peer_via_api(client):
             "ipv4": "10.44.0.2/24",
             "dns1": "8.8.8.8",
             "owner_user_id": client_user.id,
+            "enabled": True,
         },
     )
     assert peer_response.status_code == 201
