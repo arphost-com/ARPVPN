@@ -341,7 +341,7 @@
                 <div class="card-header">
                     <i class="fas fa-ethernet mr-1"></i>
                     Interfaces
-                    {% if not current_user.has_role('client') %}
+                    {% if current_user.has_role('admin') %}
                         <a href="/wireguard/interfaces/add" class="float-right" title="Add"><i class="fas fa-plus mr-1"></i></a>
                     {% endif %}
                 </div>

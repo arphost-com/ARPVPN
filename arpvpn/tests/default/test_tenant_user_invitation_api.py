@@ -2,7 +2,8 @@ import pytest
 
 from arpvpn.common.models.tenant import Tenant, tenants, invitations
 from arpvpn.common.models.user import User, users
-from arpvpn.tests.utils import default_cleanup, get_testing_app, is_http_success
+from arpvpn.core.models import Interface, interfaces
+from arpvpn.tests.utils import default_cleanup, get_test_gateway, get_testing_app, is_http_success
 
 
 @pytest.fixture(autouse=True)
@@ -38,6 +39,25 @@ def create_tenant_fixture(name: str) -> Tenant:
     tenant = Tenant(name)
     tenants[tenant.id] = tenant
     return tenant
+
+
+def create_interface(name: str, ipv4: str, port: int, tenant_id: str = "") -> Interface:
+    iface = Interface(
+        name=name,
+        description="",
+        gw_iface=get_test_gateway(),
+        ipv4_address=ipv4,
+        listen_port=port,
+        auto=False,
+        on_up=[],
+        on_down=[],
+        private_key="iface-private-key",
+        public_key="iface-public-key",
+        tenant_id=tenant_id,
+    )
+    interfaces[iface.uuid] = iface
+    interfaces.sort()
+    return iface
 
 
 def test_admin_can_crud_tenant_and_create_tenant_admin_user(client):
@@ -81,6 +101,7 @@ def test_admin_can_crud_tenant_and_create_tenant_admin_user(client):
 def test_tenant_admin_is_scoped_to_own_tenant_for_user_crud(client):
     tenant_one = create_tenant_fixture("Tenant One")
     tenant_two = create_tenant_fixture("Tenant Two")
+    create_interface("wgtenant1", "10.52.0.1/24", 51051, tenant_one.id)
     create_user("tenant-admin", "tenantpass", User.ROLE_TENANT_ADMIN, tenant_id=tenant_one.id)
     create_user("other-client", "clientpass", User.ROLE_CLIENT, tenant_id=tenant_two.id)
 
@@ -114,6 +135,25 @@ def test_tenant_admin_is_scoped_to_own_tenant_for_user_crud(client):
     assert allowed_create.status_code == 201
     created_body = allowed_create.get_json()
     assert created_body["data"]["tenant_id"] == tenant_one.id
+
+    peer_create = client.post(
+        "/api/v1/users",
+        json={
+            "username": "tenant-client-peer",
+            "password": "clientpass",
+            "role": User.ROLE_CLIENT,
+            "create_peer": True,
+            "peer_interface": "wgtenant1",
+            "peer_ipv4": "10.52.0.2/24",
+            "peer_dns1": "8.8.8.8",
+            "peer_mode": "client",
+        },
+    )
+    assert peer_create.status_code == 201
+    peer_body = peer_create.get_json()["data"]
+    assert peer_body["tenant_id"] == tenant_one.id
+    assert peer_body["peer"] is not None
+    assert peer_body["peer"]["owner_user_id"] == peer_body["id"]
 
 
 def test_support_cannot_create_tenant_admin_or_admin_via_api(client):

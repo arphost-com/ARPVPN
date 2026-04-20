@@ -106,6 +106,67 @@ def test_support_can_impersonate_client_and_return(client):
     assert is_http_success(response.status_code)
 
 
+def test_support_can_create_client_with_vpn_connection(client):
+    create_user("support", "support", User.ROLE_SUPPORT)
+    iface = setup_iface_with_peers([])
+    login(client, "support", "support")
+
+    response = client.post(
+        "/users",
+        data={
+            "username": "clientvpn",
+            "password": "clientpass",
+            "confirm": "clientpass",
+            "role": User.ROLE_CLIENT,
+            "create_peer": "y",
+            "peer_interface": iface.name,
+            "peer_mode": "client",
+            "peer_enabled": "y",
+            "peer_nat": "",
+            "peer_full_tunnel": "",
+            "peer_description": "Support-provisioned connection",
+            "peer_ipv4": "10.200.0.2/24",
+            "peer_dns1": "8.8.8.8",
+            "peer_dns2": "",
+            "peer_site_to_site_subnets": "",
+        },
+        follow_redirects=True,
+    )
+    assert is_http_success(response.status_code)
+    created = users.get_value_by_attr("name", "clientvpn")
+    assert created is not None
+    assert created.role == User.ROLE_CLIENT
+    assert len(iface.peers) == 1
+    peer = next(iter(iface.peers.values()))
+    assert peer.owner_user_id == created.id
+    assert peer.name == "clientvpn"
+    assert peer.interface.name == iface.name
+    assert b"clientvpn" in response.data
+    assert b"No connection provisioned" not in response.data
+
+
+def test_support_cannot_create_network_interfaces(client):
+    create_user("support", "support", User.ROLE_SUPPORT)
+    login(client, "support", "support")
+
+    response = client.get("/wireguard/interfaces/add")
+    assert response.status_code == 403
+
+    response = client.post(
+        "/api/v1/wireguard/interfaces",
+        json={
+            "name": "wgblocked",
+            "gateway": "eth0",
+            "ipv4": "10.201.0.1/24",
+            "listen_port": 51099,
+            "auto": False,
+            "on_up": [],
+            "on_down": [],
+        },
+    )
+    assert response.status_code == 403
+
+
 def test_client_forbidden_on_staff_routes(client):
     create_user("client01", "clientpass", User.ROLE_CLIENT)
     login(client, "client01", "clientpass")

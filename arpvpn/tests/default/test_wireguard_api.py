@@ -128,6 +128,8 @@ def test_admin_can_crud_wireguard_interface_and_peer_via_api(client):
     assert peer_response.status_code == 201
     peer_payload = peer_response.get_json()["data"]["peer"]
     assert peer_payload["enabled"] is True
+    assert peer_payload["owner_user_id"] == client_user.id
+    assert peer_payload["owner_username"] == client_user.name
     peer_id = peer_payload["id"]
     peer_public_key = peer_payload["public_key"]
 
@@ -200,6 +202,46 @@ def test_admin_can_crud_wireguard_interface_and_peer_via_api(client):
     assert delete_interface.status_code == 200
 
     assert admin.role == User.ROLE_ADMIN
+
+
+def test_admin_can_create_client_user_with_wireguard_peer_via_api(client):
+    create_user("admin", "admin", User.ROLE_ADMIN)
+    iface = create_interface("wgapi2", "10.44.1.1/24", 51002)
+    login(client, "admin", "admin")
+
+    response = client.post(
+        "/api/v1/users",
+        json={
+            "username": "client-api",
+            "password": "clientpass",
+            "role": User.ROLE_CLIENT,
+            "create_peer": True,
+            "peer_interface": iface.name,
+            "peer_mode": Peer.MODE_CLIENT,
+            "peer_enabled": True,
+            "peer_nat": False,
+            "peer_full_tunnel": False,
+            "peer_description": "Provisioned via API",
+            "peer_ipv4": "10.44.1.2/24",
+            "peer_dns1": "8.8.8.8",
+            "peer_dns2": "",
+            "peer_site_to_site_subnets": "",
+        },
+    )
+    assert response.status_code == 201
+    body = response.get_json()["data"]
+    assert body["role"] == User.ROLE_CLIENT
+    assert body["peer"] is not None
+    assert body["peer"]["owner_user_id"] == body["id"]
+    assert body["peer"]["owner_username"] == body["username"]
+
+    created_user = users.get_value_by_attr("name", "client-api")
+    assert created_user is not None
+    assert created_user.role == User.ROLE_CLIENT
+    assert len(iface.peers) == 1
+    peer = next(iter(iface.peers.values()))
+    assert peer.owner_user_id == created_user.id
+    assert peer.name == "client-api"
 
 
 def test_tenant_admin_is_scoped_to_own_wireguard_objects(client):

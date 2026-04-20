@@ -6,10 +6,9 @@
             <div class="page-header my-4">
                 <div>
                     <h1 class="mb-1">{{ title }}</h1>
-                    <p class="text-muted mb-0">Operational guide for setup, users, WireGuard, mesh VPNs, TLS, statistics, and API use.</p>
+                    <p class="text-muted mb-0">Operational guide for setup, users, WireGuard, TLS, statistics, and API use.</p>
                 </div>
                 <div class="page-header-actions">
-                    <a href="#mesh-vpns" class="btn btn-outline-primary btn-sm">Mesh VPNs</a>
                     <a href="#tls-access" class="btn btn-outline-secondary btn-sm">TLS and access</a>
                     <a href="#api-automation" class="btn btn-outline-secondary btn-sm">API</a>
                 </div>
@@ -99,117 +98,6 @@
             </div>
             {% endif %}
 
-            <div class="card mb-4 panel-glass" id="mesh-vpns">
-                <div class="card-header">
-                    <i class="fas fa-project-diagram mr-1"></i>
-                    Mesh VPNs
-                </div>
-                <div class="card-body">
-                    <div class="alert alert-info" role="alert">
-                        Mesh support in ARPVPN is currently a control-plane and planning feature with a dedicated
-                        <a href="/mesh">Mesh</a> page plus matching API endpoints. It stores topology, link, route,
-                        and access-policy intent, but it does not yet auto-apply host routes and firewall ACLs on the
-                        underlying OS for you.
-                    </div>
-
-                    <h5 class="mb-3">What works today</h5>
-                    <ul>
-                        <li>Point-to-point, hub-and-spoke, and full-mesh topology modeling.</li>
-                        <li>Link metadata between ARPVPN servers.</li>
-                        <li>Route advertisements with overlap and duplicate-ownership validation.</li>
-                        <li>Access policies describing allowed or denied destination CIDRs.</li>
-                        <li>Staff-facing mesh page for quick site-to-site and full-mesh creation, diagnostics, and event review.</li>
-                        <li>Import, export, dry-run validation, deterministic mesh planning, and policy simulation through the API.</li>
-                    </ul>
-
-                    <h5 class="mb-3">Practical setup path</h5>
-                    <ol class="pl-3">
-                        <li>Build the real traffic plane first: create site-to-site peers between ARPVPN servers in the WireGuard UI on each server.</li>
-                        <li>Make sure every server has a stable public endpoint, reachable UDP port, and a saved interface.</li>
-                        <li>Open each interface page and note the interface UUID from the browser URL.</li>
-                        <li>Choose a server naming convention such as <code>edge-a</code>, <code>edge-b</code>, and <code>core-hub</code>.</li>
-                        <li>Create the mesh topology and links from the Mesh page or API.</li>
-                        <li>Add route advertisements for each LAN behind each server.</li>
-                        <li>Add access policies for the networks or server identities that should reach those routes.</li>
-                        <li>Run dry-run validation before import/apply updates.</li>
-                    </ol>
-
-                    <h5 class="mb-3">Topology presets</h5>
-                    <div class="table-responsive mb-4">
-                        <table class="table table-bordered table-sm mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Preset</th>
-                                    <th>API value</th>
-                                    <th>Use case</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for preset in mesh_presets %}
-                                    <tr>
-                                        <td>{{ preset.name }}</td>
-                                        <td><code>{{ preset.value }}</code></td>
-                                        <td>{{ preset.description }}</td>
-                                    </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {% if current_user_is_staff and not is_impersonating %}
-                    <h5 class="mb-3">Mesh API example</h5>
-<pre class="site-guide-snippet rounded p-3"><code>curl -X POST /api/v1/mesh/topologies \
-  -H "Authorization: Bearer &lt;token&gt;" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "core-mesh",
-    "preset": "full_mesh",
-    "server_ids": ["edge-a", "edge-b", "edge-c"],
-    "description": "Primary inter-site mesh"
-  }'
-
-curl -X POST /api/v1/mesh/links \
-  -H "Authorization: Bearer &lt;token&gt;" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "source_server": "edge-a",
-    "target_server": "edge-b",
-    "interface_uuid": "&lt;wireguard-interface-uuid&gt;",
-    "status": "active",
-    "enabled": true
-  }'
-
-curl -X POST /api/v1/mesh/routes \
-  -H "Authorization: Bearer &lt;token&gt;" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "owner_server": "edge-a",
-    "cidr": "10.55.0.0/24",
-    "via_link_uuid": "&lt;link-uuid&gt;",
-    "enabled": true
-  }'
-
-curl -X POST /api/v1/mesh/policies \
-  -H "Authorization: Bearer &lt;token&gt;" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "allow-edge-a-lan",
-    "source_kind": "server",
-    "source_id": "edge-a",
-    "destinations": ["10.55.0.0/24"],
-    "action": "allow",
-    "priority": 100
-  }'</code></pre>
-                    <p class="mb-0 text-muted">
-                        Supported access policy source kinds: {% for item in mesh_policy_source_kinds %}<code>{{ item }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
-                    </p>
-                    <p class="mt-3 mb-0 text-muted">
-                        Use <code>GET /api/v1/mesh/plan</code> to preview deterministic peer/link names and rendered <code>AllowedIPs</code>, <code>GET /api/v1/mesh/diagnostics</code> for route propagation and recent signed mesh events, and <code>POST /api/v1/mesh/policy-simulate</code> to test access-policy matches before rollout.
-                    </p>
-                    {% endif %}
-                </div>
-            </div>
-
             <div class="row">
                 <div class="col-xl-6">
                     <div class="card mb-4 panel-glass" id="tls-access">
@@ -265,7 +153,7 @@ curl -X POST /api/v1/mesh/policies \
                         <div class="card-body">
                             <p>
                                 ARPVPN exposes a versioned API under <code>/api/v1</code>. The current API is strongest for
-                                auth, tenant/user lifecycle, WireGuard control, mesh planning, statistics, RRD access, themes, and TLS management.
+                                auth, tenant/user lifecycle, WireGuard control, statistics, RRD access, themes, and TLS management.
                             </p>
                             <ul class="mb-3">
                                 <li>Cookie-authenticated API writes require a CSRF token from <code>GET /api/v1/auth/csrf</code>.</li>
@@ -273,11 +161,11 @@ curl -X POST /api/v1/mesh/policies \
                                 <li>Account MFA is configured once from <a href="/profile">Profile</a> and used for web login; ARPVPN does not maintain a separate WireGuard-specific 2FA stack.</li>
                                 <li>Super admins can export or restore snapshots with <code>/api/v1/system/backup</code> and <code>/api/v1/system/restore</code>.</li>
                                 <li>Setup, profile, about, network inventory, and restart flows also have API parity under <code>/api/v1/setup/*</code>, <code>/api/v1/profile</code>, <code>/api/v1/about</code>, <code>/api/v1/network/inventory</code>, and <code>/api/v1/system/restart</code>.</li>
-                                <li>API groups can be feature-flagged with environment variables like <code>ARPVPN_FEATURE_API_MESH=0</code>.</li>
+                                <li>API groups can be feature-flagged with environment variables such as <code>ARPVPN_FEATURE_API_AUTH=0</code> or <code>ARPVPN_FEATURE_API_SYSTEM=0</code>.</li>
                                 <li>The repository now ships a generated Python client in <code>sdk/python</code> from the live OpenAPI contract.</li>
                             </ul>
                             <p class="mb-0">
-                                Host-level mesh route installs, ACL enforcement, and some rollout/operations pieces are still in progress.
+                                Host-level route installs, ACL enforcement, and some rollout/operations pieces are still in progress.
                             </p>
                         </div>
                     </div>

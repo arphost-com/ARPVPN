@@ -57,6 +57,41 @@
                                   Error in field <strong>{{ create_form.role.label.text }}</strong>: {{ error }}
                                 </div>
                             {% endfor %}
+                            {% for error in create_form.create_peer.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ create_form.create_peer.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in create_form.peer_interface.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ create_form.peer_interface.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in create_form.peer_mode.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ create_form.peer_mode.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in create_form.peer_ipv4.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ create_form.peer_ipv4.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in create_form.peer_dns1.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ create_form.peer_dns1.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in create_form.peer_dns2.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ create_form.peer_dns2.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in create_form.peer_site_to_site_subnets.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ create_form.peer_site_to_site_subnets.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
                         </div>
                         <div class="form-row">
                             <div class="form-group col-md-3">
@@ -81,6 +116,83 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="fas fa-network-wired mr-1"></i>
+                        WireGuard connection
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted mb-3">
+                            Optional. Provision a WireGuard client connection when you create a client account.
+                        </p>
+                        <div class="form-row">
+                            <div class="form-group col-md-4">
+                                <div class="custom-control custom-checkbox">
+                                    {{ create_form.create_peer(class="custom-control-input") }}
+                                    {{ create_form.create_peer.label(class="custom-control-label") }}
+                                </div>
+                            </div>
+                            <div class="form-group col-md-4">
+                                {{ create_form.peer_interface.label() }}
+                                {{ create_form.peer_interface(class="form-control") }}
+                            </div>
+                            <div class="form-group col-md-4">
+                                {{ create_form.peer_mode.label() }}
+                                {{ create_form.peer_mode(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-4">
+                                {{ create_form.peer_ipv4.label() }}
+                                {{ create_form.peer_ipv4(class="form-control") }}
+                            </div>
+                            <div class="form-group col-md-4">
+                                {{ create_form.peer_dns1.label() }}
+                                {{ create_form.peer_dns1(class="form-control") }}
+                            </div>
+                            <div class="form-group col-md-4">
+                                {{ create_form.peer_dns2.label() }}
+                                {{ create_form.peer_dns2(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-8">
+                                {{ create_form.peer_description.label() }}
+                                {{ create_form.peer_description(class="form-control", rows="2") }}
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-4">
+                                <div class="custom-control custom-checkbox">
+                                    {{ create_form.peer_enabled(class="custom-control-input") }}
+                                    {{ create_form.peer_enabled.label(class="custom-control-label") }}
+                                </div>
+                            </div>
+                            <div class="form-group col-md-4">
+                                <div class="custom-control custom-checkbox">
+                                    {{ create_form.peer_nat(class="custom-control-input") }}
+                                    {{ create_form.peer_nat.label(class="custom-control-label") }}
+                                </div>
+                            </div>
+                            <div class="form-group col-md-4">
+                                <div class="custom-control custom-checkbox">
+                                    {{ create_form.peer_full_tunnel(class="custom-control-input") }}
+                                    {{ create_form.peer_full_tunnel.label(class="custom-control-label") }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-8">
+                                {{ create_form.peer_site_to_site_subnets.label() }}
+                                {{ create_form.peer_site_to_site_subnets(class="form-control", rows="2") }}
+                                <small class="text-muted">
+                                    Used for site-to-site peers only.
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </form>
 
             <div class="card mb-4">
@@ -95,6 +207,7 @@
                             <tr>
                                 <th>Username</th>
                                 <th>Role</th>
+                                <th>VPN access</th>
                                 <th>Actions</th>
                             </tr>
                             </thead>
@@ -103,6 +216,25 @@
                                 <tr>
                                     <td>{{ user_item.name }}</td>
                                     <td><span class="badge badge-secondary">{{ user_item.role }}</span></td>
+                                    <td>
+                                        {% set vpn_access = user_vpn_access[user_item.id] %}
+                                        {% if vpn_access %}
+                                            <ul class="list-unstyled mb-0">
+                                                {% for access in vpn_access %}
+                                                    <li>
+                                                        <a href="/wireguard/peers/{{ access.peer_id }}">
+                                                            {{ access.interface_name or access.peer_name }}
+                                                        </a>
+                                                        <small class="text-muted">
+                                                            {{ access.mode }}{% if not access.enabled %} · disabled{% endif %}
+                                                        </small>
+                                                    </li>
+                                                {% endfor %}
+                                            </ul>
+                                        {% else %}
+                                            <span class="text-muted">No connection provisioned</span>
+                                        {% endif %}
+                                    </td>
                                     <td>
                                         {% if user_actions[user_item.id].can_impersonate %}
                                             <form action="/users/{{ user_item.id }}/impersonate" method="post" class="d-inline">

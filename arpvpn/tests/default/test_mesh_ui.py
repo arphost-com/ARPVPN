@@ -32,20 +32,17 @@ def login(client, username: str, password: str):
     assert is_http_success(response.status_code)
 
 
-def test_mesh_page_renders_staff_wizards_and_diagnostics(client):
+def test_mesh_page_is_not_exposed_to_staff(client):
     create_user("admin", "admin", User.ROLE_ADMIN)
     login(client, "admin", "admin")
 
     response = client.get("/mesh")
-    assert is_http_success(response.status_code)
-    assert b"Site-to-site wizard" in response.data
-    assert b"Full mesh wizard" in response.data
-    assert b"Diagnostics and route propagation" in response.data
+    assert response.status_code == 404
 
 
-def test_mesh_page_forbidden_for_client_role(client):
+def test_mesh_page_is_not_exposed_to_client_role(client):
     create_user("client1", "clientpass", User.ROLE_CLIENT)
     login(client, "client1", "clientpass")
 
     response = client.get("/mesh")
-    assert response.status_code == 403
+    assert response.status_code == 404

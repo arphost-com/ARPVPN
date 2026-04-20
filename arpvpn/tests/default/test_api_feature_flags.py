@@ -42,13 +42,10 @@ def test_mesh_api_feature_flag_can_disable_mesh_group(client, monkeypatch):
     assert response.get_json()["error"]["code"] == "feature_disabled"
 
 
-def test_mesh_rollout_flag_can_disable_mesh_page_and_api(client, monkeypatch):
+def test_mesh_rollout_flag_can_disable_mesh_api(client, monkeypatch):
     create_user("admin", "admin", User.ROLE_ADMIN)
     login(client, "admin", "admin")
     monkeypatch.setenv("ARPVPN_FEATURE_MESH_V1", "0")
-
-    page_response = client.get("/mesh")
-    assert page_response.status_code == 404
 
     api_response = client.get("/api/v1/mesh/overview")
     assert api_response.status_code == 404

@@ -40,9 +40,6 @@
                 {% if current_user_can_manage_users %}
                     <a class="dropdown-item" href="/users">Users</a>
                 {% endif %}
-                {% if current_user_is_staff and not is_impersonating %}
-                    <a class="dropdown-item" href="/mesh">Mesh</a>
-                {% endif %}
                 <a class="dropdown-item" href="/documentation">Documentation</a>
                 <a class="dropdown-item" href="/themes">Themes</a>
                 {% if is_impersonating %}

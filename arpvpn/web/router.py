@@ -75,7 +75,6 @@ ALLOWED_NEXT_ENDPOINTS = {
     "/statistics": "router.statistics",
     "/network": "router.network",
     "/wireguard": "router.wireguard",
-    "/mesh": "router.mesh",
     "/settings": "router.settings",
     "/users": "router.manage_users",
     "/themes": "router.themes",
@@ -385,7 +384,7 @@ def enforce_api_feature_flags():
 @router.before_request
 def enforce_mesh_rollout_flags():
     path = request.path
-    if path == "/mesh" or path.startswith("/api/v1/mesh"):
+    if path.startswith("/api/v1/mesh"):
         if not mesh_v1_enabled():
             if is_api_request():
                 return api_error(NOT_FOUND, "feature_disabled", f"Mesh features disabled by {MESH_V1_FEATURE_FLAG}.")
@@ -4912,13 +4911,38 @@ def api_create_user():
         actor=actor,
     )
     validate_unique_username(username)
-    created = RestController.create_user(username, password, resolved_role, tenant_id=resolved_tenant_id or "")
-    log_audit_event(
-        "user.create",
-        status="success",
-        details={"target_user_id": created.id, "target_user_name": created.name, "target_role": created.role},
-    )
-    return api_success(user_to_api_dict(created), status_code=201)
+    created_user = None
+    created_peer = None
+    try:
+        created_user = RestController.create_user(username, password, resolved_role, tenant_id=resolved_tenant_id or "")
+        created_peer = provision_peer_for_created_client(created_user, payload)
+        response_payload = user_to_api_dict(created_user)
+        response_payload["peer"] = peer_to_api_dict(created_peer) if created_peer else None
+        log_audit_event(
+            "user.create",
+            status="success",
+            details={
+                "target_user_id": created_user.id,
+                "target_user_name": created_user.name,
+                "target_role": created_user.role,
+                "provisioned_peer": bool(created_peer),
+            },
+        )
+        return api_success(response_payload, status_code=201)
+    except Exception:
+        if created_peer:
+            try:
+                created_peer.remove()
+                config_manager.save()
+            except Exception as rollback_error:
+                log_exception(rollback_error)
+        if created_user and created_user.id in users:
+            try:
+                del users[created_user.id]
+                config_manager.save_identity_state()
+            except Exception as rollback_error:
+                log_exception(rollback_error)
+        raise
 
 
 @router.route("/api/v1/users/<user_id>", methods=["GET"])
@@ -5039,13 +5063,38 @@ def api_create_tenant_member(tenant_id: str):
         actor=actor,
     )
     validate_unique_username(username)
-    created = RestController.create_user(username, password, resolved_role, tenant_id=resolved_tenant_id or "")
-    log_audit_event(
-        "tenant.member.create",
-        status="success",
-        details={"tenant_id": tenant.id, "target_user_id": created.id, "target_user_name": created.name},
-    )
-    return api_success(user_to_api_dict(created), status_code=201)
+    created_user = None
+    created_peer = None
+    try:
+        created_user = RestController.create_user(username, password, resolved_role, tenant_id=resolved_tenant_id or "")
+        created_peer = provision_peer_for_created_client(created_user, payload)
+        response_payload = user_to_api_dict(created_user)
+        response_payload["peer"] = peer_to_api_dict(created_peer) if created_peer else None
+        log_audit_event(
+            "tenant.member.create",
+            status="success",
+            details={
+                "tenant_id": tenant.id,
+                "target_user_id": created_user.id,
+                "target_user_name": created_user.name,
+                "provisioned_peer": bool(created_peer),
+            },
+        )
+        return api_success(response_payload, status_code=201)
+    except Exception:
+        if created_peer:
+            try:
+                created_peer.remove()
+                config_manager.save()
+            except Exception as rollback_error:
+                log_exception(rollback_error)
+        if created_user and created_user.id in users:
+            try:
+                del users[created_user.id]
+                config_manager.save_identity_state()
+            except Exception as rollback_error:
+                log_exception(rollback_error)
+        raise
 
 
 @router.route("/api/v1/invitations", methods=["GET"])
@@ -5225,7 +5274,7 @@ def api_list_wireguard_interfaces():
 
 @router.route("/api/v1/wireguard/interfaces", methods=["POST"])
 @login_required
-@role_required(*USER_MANAGEMENT_ROLES)
+@role_required(User.ROLE_ADMIN)
 @setup_required
 def api_create_wireguard_interface():
     replay = parse_idempotency_replay()
@@ -6275,7 +6324,7 @@ def connection_rrd_graph_png(uuid: str):
 
 @router.route("/wireguard/interfaces/add", methods=['GET'])
 @login_required
-@role_required(*USER_MANAGEMENT_ROLES)
+@role_required(User.ROLE_ADMIN)
 @setup_required
 def create_wireguard_iface():
     from arpvpn.web.forms import AddInterfaceForm
@@ -6290,7 +6339,7 @@ def create_wireguard_iface():
 
 @router.route("/wireguard/interfaces/add", methods=['POST'])
 @login_required
-@role_required(*USER_MANAGEMENT_ROLES)
+@role_required(User.ROLE_ADMIN)
 @setup_required
 def add_wireguard_iface():
     from arpvpn.web.forms import AddInterfaceForm
@@ -6606,35 +6655,8 @@ def themes():
 def documentation():
     context = {
         "title": "Documentation",
-        "mesh_presets": [
-            {"name": "Point-to-point", "value": "point_to_point", "description": "Two ARPVPN servers with a direct tunnel."},
-            {"name": "Hub and spoke", "value": "hub_spoke", "description": "One central server with multiple branch servers."},
-            {"name": "Full mesh", "value": "full_mesh", "description": "Each server can have links and route policy for every other server."},
-        ],
-        "mesh_policy_source_kinds": [
-            "peer",
-            "group",
-            "server",
-            "all",
-        ],
     }
     return ViewController("web/documentation.html", **context).load()
-
-
-@router.route("/mesh")
-@login_required
-@role_required(*STAFF_ROLES)
-@setup_required
-def mesh():
-    context = {
-        "title": "Mesh",
-        "diagnostics": build_mesh_diagnostics_payload(),
-        "mesh_presets": list(MeshTopology.PRESETS),
-        "mesh_link_statuses": list(VPNLink.STATUSES),
-        "mesh_policy_source_kinds": list(AccessPolicy.SOURCE_KINDS),
-        "mesh_policy_actions": list(AccessPolicy.ACTIONS),
-    }
-    return ViewController("web/mesh.html", **context).load()
 
 
 @router.route("/api/v1/network/inventory", methods=["GET"])
@@ -7244,6 +7266,29 @@ def count_users_by_role(role: str) -> int:
     return len([user_item for user_item in users.values() if user_item.role == role])
 
 
+def get_user_peers(user_item: User) -> List[Peer]:
+    return [
+        peer
+        for peer in get_all_peers().values()
+        if (owner := resolve_peer_owner(peer)) and owner.id == user_item.id
+    ]
+
+
+def build_user_vpn_access_summary(user_item: User) -> List[Dict[str, Any]]:
+    summaries: List[Dict[str, Any]] = []
+    for peer in get_user_peers(user_item):
+        summaries.append({
+            "peer_id": peer.uuid,
+            "peer_name": peer.name,
+            "interface_name": peer.interface.name if peer.interface else None,
+            "mode": peer.mode,
+            "enabled": bool(peer.enabled),
+            "full_tunnel": bool(peer.full_tunnel),
+            "site_to_site_subnets": list(peer.site_to_site_subnets),
+        })
+    return summaries
+
+
 def can_manage_user_account(target_user: User) -> bool:
     if current_user.has_role(User.ROLE_ADMIN):
         return True
@@ -7285,11 +7330,31 @@ def get_users_management_context(create_form=None, edit_form=None, delete_form=N
     create_form = create_form or CreateUserForm()
     edit_form = edit_form or EditUserForm()
     delete_form = delete_form or DeleteUserForm()
+    create_form.peer_interface.choices = []
     if current_user.has_role(User.ROLE_SUPPORT, User.ROLE_TENANT_ADMIN):
         create_form.role.choices = [(User.ROLE_CLIENT, "Client")]
         if request.method == "GET":
             create_form.role.data = User.ROLE_CLIENT
         edit_form.role.choices = [(User.ROLE_CLIENT, "Client")]
+    from arpvpn.web.forms import AddPeerForm
+    create_form.peer_interface.choices = AddPeerForm.get_choices()
+    if request.method == "GET" and create_form.role.data == User.ROLE_CLIENT and create_form.peer_interface.choices:
+        create_form.create_peer.data = True
+        default_iface_name = create_form.peer_interface.choices[0][0]
+        create_form.peer_interface.data = default_iface_name
+        default_iface = interfaces.get_value_by_attr("name", default_iface_name)
+        if default_iface:
+            from arpvpn.web.forms import AddPeerForm as PeerForm
+            peer_form = PeerForm.populate(PeerForm(meta={"csrf": False}), default_iface)
+            create_form.peer_mode.data = peer_form.mode.data
+            create_form.peer_enabled.data = peer_form.enabled.data
+            create_form.peer_nat.data = peer_form.nat.data
+            create_form.peer_full_tunnel.data = peer_form.full_tunnel.data
+            create_form.peer_description.data = peer_form.description.data
+            create_form.peer_ipv4.data = peer_form.ipv4.data
+            create_form.peer_dns1.data = peer_form.dns1.data
+            create_form.peer_dns2.data = peer_form.dns2.data
+            create_form.peer_site_to_site_subnets.data = peer_form.site_to_site_subnets.data
     impersonate_form = impersonate_form or ImpersonateClientForm()
     stop_form = stop_form or ImpersonationStopForm()
     users_list = get_accessible_users(current_user)
@@ -7302,6 +7367,7 @@ def get_users_management_context(create_form=None, edit_form=None, delete_form=N
         "stop_impersonation_form": stop_form,
         "users_list": users_list,
         "user_actions": build_user_actions(users_list),
+        "user_vpn_access": {user_item.id: build_user_vpn_access_summary(user_item) for user_item in users_list},
         "is_impersonating": is_impersonating(),
     }
 
@@ -7314,6 +7380,36 @@ def summarize_form_errors(form: Any) -> str:
         for issue in errors:
             issues.append(f"{field_name}: {issue}")
     return "; ".join(issues)
+
+
+def provision_peer_for_created_client(created_user: User, payload: Dict[str, Any]):
+    if created_user.role != User.ROLE_CLIENT:
+        return None
+    if not parse_boolean_value(payload.get("create_peer"), False):
+        return None
+    from arpvpn.web.forms import AddPeerForm, derive_peer_name
+
+    peer_form = AddPeerForm(meta={"csrf": False})
+    peer_form.name.data = parse_optional_string(payload.get("peer_name")) or derive_peer_name(created_user.name)
+    peer_form.mode.data = parse_optional_string(payload.get("peer_mode")) or Peer.MODE_CLIENT
+    peer_form.enabled.data = parse_boolean_value(payload.get("peer_enabled"), True)
+    peer_form.nat.data = parse_boolean_value(payload.get("peer_nat"), False)
+    peer_form.full_tunnel.data = parse_boolean_value(payload.get("peer_full_tunnel"), False)
+    peer_form.description.data = parse_optional_string(payload.get("peer_description"))
+    peer_form.interface.choices = AddPeerForm.get_choices()
+    peer_form.interface.data = parse_optional_string(payload.get("peer_interface"))
+    peer_form.ipv4.data = parse_optional_string(payload.get("peer_ipv4"))
+    peer_form.dns1.data = parse_optional_string(payload.get("peer_dns1"), "8.8.8.8")
+    peer_form.dns2.data = parse_optional_string(payload.get("peer_dns2"))
+    peer_form.site_to_site_subnets.data = payload.get("peer_site_to_site_subnets", "")
+    if not peer_form.interface.choices:
+        abort(BAD_REQUEST, "No accessible WireGuard interfaces are available.")
+    if not peer_form.interface.data:
+        peer_form.interface.data = peer_form.interface.choices[0][0]
+    if not peer_form.validate():
+        details = summarize_form_errors(peer_form) or "unknown validation error"
+        abort(BAD_REQUEST, f"Unable to provision WireGuard connection: {details}")
+    return RestController().add_peer(peer_form)
 
 
 @router.route("/users", methods=["GET"])
@@ -7330,7 +7426,15 @@ def manage_users():
 @role_required(*STAFF_ROLES)
 @setup_required
 def create_user():
-    from arpvpn.web.forms import CreateUserForm, EditUserForm, DeleteUserForm, ImpersonateClientForm, ImpersonationStopForm
+    from arpvpn.web.forms import (
+        AddPeerForm,
+        CreateUserForm,
+        DeleteUserForm,
+        EditUserForm,
+        ImpersonateClientForm,
+        ImpersonationStopForm,
+        derive_peer_name,
+    )
     form = CreateUserForm(request.form)
     context = get_users_management_context(
         create_form=form,
@@ -7349,12 +7453,44 @@ def create_user():
         context["error"] = True
         context["error_details"] = "Support users can only create client accounts."
         return ViewController("web/users.html", **context).load()
+    created_user = None
+    created_peer = None
     try:
-        RestController.create_user(form.username.data, form.password.data, form.role.data)
+        created_user = RestController.create_user(form.username.data, form.password.data, form.role.data)
+        if form.create_peer.data and created_user.role == User.ROLE_CLIENT:
+            peer_form = AddPeerForm(meta={"csrf": False})
+            peer_form.name.data = derive_peer_name(created_user.name)
+            peer_form.mode.data = form.peer_mode.data or Peer.MODE_CLIENT
+            peer_form.enabled.data = bool(form.peer_enabled.data)
+            peer_form.nat.data = bool(form.peer_nat.data)
+            peer_form.full_tunnel.data = bool(form.peer_full_tunnel.data)
+            peer_form.description.data = form.peer_description.data
+            peer_form.interface.choices = AddPeerForm.get_choices()
+            peer_form.interface.data = form.peer_interface.data or peer_form.interface.choices[0][0]
+            peer_form.ipv4.data = form.peer_ipv4.data
+            peer_form.dns1.data = form.peer_dns1.data
+            peer_form.dns2.data = form.peer_dns2.data
+            peer_form.site_to_site_subnets.data = form.peer_site_to_site_subnets.data
+            created_peer = RestController().add_peer(peer_form)
         context = get_users_management_context()
         context["success"] = True
-        context["success_details"] = "User created successfully."
+        if created_peer:
+            context["success_details"] = "User created successfully and their WireGuard connection was provisioned."
+        else:
+            context["success_details"] = "User created successfully."
     except Exception as e:
+        if created_peer:
+            try:
+                created_peer.remove()
+                config_manager.save()
+            except Exception as rollback_error:
+                log_exception(rollback_error)
+        if created_user and created_user.id in users:
+            try:
+                del users[created_user.id]
+                config_manager.save_identity_state()
+            except Exception as rollback_error:
+                log_exception(rollback_error)
         log_exception(e)
         context["error"] = True
         context["error_details"] = e

@@ -1,5 +1,6 @@
 import ipaddress
 import json
+import re
 from secrets import randbelow
 from typing import List, Tuple
 
@@ -27,6 +28,14 @@ from arpvpn.web.validators import LoginUsernameValidator, LoginPasswordValidator
     PeerSecondaryDnsValidator, PeerNameValidator, NewPasswordValidator, OldPasswordValidator, JsonDataValidator, \
     PathExistsValidator, EndpointValidator, PeerSiteToSiteSubnetsValidator, HostnameOrIPv4Validator, \
     HostnameValidator, EmailValidator, is_valid_tls_server_name
+
+
+def derive_peer_name(source: str) -> str:
+    candidate = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(source or "").strip()).strip("-_. ")
+    candidate = candidate[:Peer.MAX_NAME_LENGTH]
+    if candidate and Peer.is_name_valid(candidate):
+        return candidate
+    return Peer.generate_valid_name()
 
 
 class LoginForm(FlaskForm):
@@ -73,7 +82,70 @@ class CreateUserForm(FlaskForm):
         ],
         default=User.ROLE_CLIENT,
     )
+    create_peer = BooleanField("Provision WireGuard connection", default=False)
+    peer_interface = SelectField("WireGuard interface", validate_choice=False)
+    peer_mode = SelectField(
+        "VPN access",
+        choices=[
+            (Peer.MODE_CLIENT, "Client"),
+            (Peer.MODE_SITE_TO_SITE, "Site-to-site"),
+        ],
+        default=Peer.MODE_CLIENT,
+    )
+    peer_enabled = BooleanField("Enabled", default=True)
+    peer_nat = BooleanField("NAT", default=False)
+    peer_full_tunnel = BooleanField("Full tunnel", default=False)
+    peer_description = TextAreaField("Connection description", render_kw={"placeholder": "Some details..."})
+    peer_ipv4 = StringField("Peer IPv4", render_kw={"placeholder": "0.0.0.0/32"})
+    peer_dns1 = StringField("Primary DNS", render_kw={"placeholder": "8.8.8.8"})
+    peer_dns2 = StringField("Secondary DNS", render_kw={"placeholder": "8.8.4.4"})
+    peer_site_to_site_subnets = TextAreaField(
+        "Remote site subnets",
+        render_kw={"placeholder": "10.10.0.0/16, 172.16.50.0/24"},
+    )
     submit = SubmitField('Create user')
+
+    def validate(self, extra_validators=None):
+        valid = super().validate(extra_validators)
+        role = (self.role.data or User.ROLE_CLIENT).strip()
+        create_peer = bool(self.create_peer.data) and role == User.ROLE_CLIENT
+        self.create_peer.data = create_peer
+
+        if not valid:
+            return False
+
+        if not create_peer:
+            return True
+
+        peer_form = AddPeerForm(meta={"csrf": False})
+        peer_form.name.data = derive_peer_name(self.username.data)
+        peer_form.mode.data = self.peer_mode.data or Peer.MODE_CLIENT
+        peer_form.enabled.data = bool(self.peer_enabled.data)
+        peer_form.nat.data = bool(self.peer_nat.data)
+        peer_form.full_tunnel.data = bool(self.peer_full_tunnel.data)
+        peer_form.description.data = self.peer_description.data
+        peer_form.interface.choices = AddPeerForm.get_choices()
+        peer_form.interface.data = self.peer_interface.data
+        peer_form.ipv4.data = self.peer_ipv4.data
+        peer_form.dns1.data = self.peer_dns1.data
+        peer_form.dns2.data = self.peer_dns2.data
+        peer_form.site_to_site_subnets.data = self.peer_site_to_site_subnets.data
+
+        if not peer_form.interface.choices:
+            self.create_peer.errors.append("No accessible WireGuard interfaces are available.")
+            return False
+        if not peer_form.interface.data:
+            peer_form.interface.data = peer_form.interface.choices[0][0]
+            self.peer_interface.data = peer_form.interface.data
+
+        if not peer_form.validate():
+            for field_name, errors in peer_form.errors.items():
+                target_field = getattr(self, f"peer_{field_name}", None)
+                if target_field is None:
+                    continue
+                target_field.errors.extend(errors)
+            return False
+        return True
 
 
 class EditUserForm(FlaskForm):
