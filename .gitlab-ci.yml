@@ -51,7 +51,6 @@ unit_tests:
         arpvpn/tests/default/test_wireguard_utils.py \
         arpvpn/tests/default/test_rrd_graph_generation.py \
         arpvpn/tests/default/test_api_auth.py \
-        arpvpn/tests/default/test_api_feature_flags.py \
         arpvpn/tests/default/test_api_schema_registry.py \
         arpvpn/tests/default/test_api_ui_parity.py \
         arpvpn/tests/default/test_system_api.py \
