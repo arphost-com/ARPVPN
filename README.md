@@ -133,6 +133,7 @@ Important behavior:
 - If `Redirect HTTP to HTTPS` is enabled in UI settings, HTTP requests are redirected to HTTPS.
 - Keep `ARPVPN_SECURE_COOKIES=0` if you want HTTP login to work when redirect is disabled.
 - If you enable strict HTTPS behavior, use HTTPS URLs consistently and avoid switching between hostnames and IPs mid-session.
+- If the encrypted credentials store is missing or unreadable on a new container, ARPVPN falls back to first-run signup so you can create a new admin password.
 
 Running multiple stacks on one host:
 - Give each stack unique values for:

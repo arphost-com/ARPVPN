@@ -59,33 +59,24 @@ class ConfigManager:
         if "web" in config:
             web_config.load(config["web"])
             web_config.apply()
-        if os.path.exists(web_config.credentials_file) and os.path.getsize(web_config.credentials_file) > 0:
-            try:
-                credentials = UserDict.load(web_config.credentials_file, web_config.secret_key)
-                users.set_contents(credentials)
-            except Exception:
-                error(f"Invalid credentials file detected: {web_config.credentials_file}")
-                raise
-        else:
-            users.clear()
-        if os.path.exists(web_config.tenants_file) and os.path.getsize(web_config.tenants_file) > 0:
-            try:
-                saved_tenants = TenantDict.load(web_config.tenants_file, web_config.secret_key)
-                tenants.set_contents(saved_tenants)
-            except Exception:
-                error(f"Invalid tenants file detected: {web_config.tenants_file}")
-                raise
-        else:
-            tenants.clear()
-        if os.path.exists(web_config.invitations_file) and os.path.getsize(web_config.invitations_file) > 0:
-            try:
-                saved_invitations = InvitationDict.load(web_config.invitations_file, web_config.secret_key)
-                invitations.set_contents(saved_invitations)
-            except Exception:
-                error(f"Invalid invitations file detected: {web_config.invitations_file}")
-                raise
-        else:
-            invitations.clear()
+        self.__load_encrypted_store__(
+            web_config.credentials_file,
+            web_config.secret_key,
+            users,
+            label="credentials",
+        )
+        self.__load_encrypted_store__(
+            web_config.tenants_file,
+            web_config.secret_key,
+            tenants,
+            label="tenants",
+        )
+        self.__load_encrypted_store__(
+            web_config.invitations_file,
+            web_config.secret_key,
+            invitations,
+            label="invitations",
+        )
         if "wireguard" in config:
             wireguard_config.load(config["wireguard"])
             wireguard_config.apply()
@@ -144,6 +135,23 @@ class ConfigManager:
                 os.remove(path)
             return
         store.save(path, web_config.secret_key)
+
+    @staticmethod
+    def __load_encrypted_store__(path: str, encryption_key: str, store, label: str):
+        if not os.path.exists(path) or os.path.getsize(path) < 1:
+            store.clear()
+            return
+        try:
+            loaded_store = type(store).load(path, encryption_key)
+            store.set_contents(loaded_store)
+        except Exception:
+            error(f"Invalid {label} file detected: {path}")
+            warning(
+                "Unable to decrypt %s; continuing with an empty %s store so a fresh password can be created.",
+                path,
+                label,
+            )
+            store.clear()
 
 
 config_manager = ConfigManager()

@@ -3,6 +3,8 @@ import os
 import pytest
 
 from arpvpn.common.properties import global_properties
+from arpvpn.common.models.user import users
+from arpvpn.core.managers.config import config_manager
 from arpvpn.tests.utils import default_cleanup, is_http_success, login, get_testing_app
 
 url = "/setup"
@@ -143,6 +145,23 @@ def test_post_ko(client):
     })
     assert is_http_success(response.status_code)
     assert "Setup".encode() in response.data
+
+
+def test_config_manager_allows_fresh_signup_when_credentials_file_is_unreadable(tmp_path, monkeypatch):
+    previous_workdir = global_properties.workdir
+    try:
+        global_properties.workdir = str(tmp_path)
+        bad_credentials = tmp_path / ".credentials"
+        bad_credentials.write_bytes(b"not-a-valid-encrypted-store")
+        monkeypatch.setattr("arpvpn.core.managers.tenancy.tenancy_manager.initialize", lambda *args, **kwargs: None)
+
+        users.clear()
+        config_manager.load()
+
+        assert len(users) == 0
+        assert os.path.exists(tmp_path / "arpvpn.yaml")
+    finally:
+        global_properties.workdir = previous_workdir
 
     response = client.post(url, data={
         "app_endpoint": 1, "app_iptables_bin": "/dev/null", "app_wg_bin": "/dev/null",
