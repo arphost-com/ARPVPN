@@ -4,7 +4,7 @@ ARPVPN
 .. image:: https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue?logo=python&logoColor=yellow
     :alt: Supported python versions: 3.10, 3.11, 3.12
 
-ARPVPN MultiTenant is the private tenant-aware release line for customer-scoped WireGuard management, tenant runtime planning, mesh controls, and usage monitoring.
+ARPVPN MultiTenant is the private tenant-aware release line for customer-scoped WireGuard management, tenant runtime planning, and usage monitoring.
 
 Key features
 ------------

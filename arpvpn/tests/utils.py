@@ -10,7 +10,6 @@ from arpvpn.common.models.tenant import tenants, invitations
 from arpvpn.common.properties import global_properties
 from arpvpn.common.utils.network import get_system_interfaces
 from arpvpn.core.managers.cron import cron_manager
-from arpvpn.core.mesh import MeshControlPlane
 from arpvpn.core.models import interfaces, Interface
 from arpvpn.web.client import clients
 
@@ -51,11 +50,6 @@ def default_cleanup():
     invitations.clear()
     clients.clear()
     interfaces.clear()
-    try:
-        from arpvpn.core.config.wireguard import config as wireguard_config
-        wireguard_config.mesh = MeshControlPlane()
-    except Exception:
-        pass
     cron_manager.stop()
     try:
         from arpvpn.web.router import (

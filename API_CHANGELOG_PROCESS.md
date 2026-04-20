@@ -6,8 +6,7 @@ This process applies to the private ARPVPN line in this repository.
 
 1. Update `docs/source/api/openapi.v1.yaml`.
 2. Add a release-notes entry in `release-notes.md` with API-specific bullets.
-3. Update checklist status in `MESH_ACL_TODO.md` as applicable.
-4. Add/adjust API tests and ensure CI hard-gate passes.
+3. Add/adjust API tests and ensure CI hard-gate passes.
 
 ## Cross-repo guidance
 

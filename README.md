@@ -1,6 +1,6 @@
 # ARPVPN
 
-Private ARPVPN release line for tenant-scoped WireGuard management, tenant runtime planning, site-to-site mesh control, and customer-facing observability.
+Private ARPVPN release line for tenant-scoped WireGuard management, tenant runtime planning, and customer-facing observability.
 
 Project:
 - Source bundle: the repository itself or a release archive produced by `build.sh`
@@ -17,8 +17,7 @@ Docs live in `docs/` inside this repository.
 - Encrypted user credentials (AES).
 - Multi-user roles (`admin`, `support`, `tenant_admin`, `client`) with impersonation and tenant-scoped controls.
 - Optional multi-factor authentication with TOTP codes and recovery codes, managed once per account in Profile and reused for web login.
-- API v1 with cookie/session and bearer token auth modes, plus mesh control-plane APIs.
-- Dedicated Mesh page for site-to-site and full-mesh planning, route/policy controls, diagnostics, and signed mesh event review.
+- API v1 with cookie/session and bearer token auth modes.
 - Dedicated tenant runtime planning for separate customer VPN stacks and ports.
 - Easy management through the `arpvpn` systemd service.
 
@@ -28,14 +27,12 @@ Docs live in `docs/` inside this repository.
 - Generated Python SDK: `sdk/python`
 - Versioning policy: `API_VERSIONING.md`
 - API changelog process: `API_CHANGELOG_PROCESS.md`
-- Migration notes: `API_MIGRATION_NOTES.md`
 - Threat model: `API_THREAT_MODEL.md`
 
 Cookie-authenticated API writes require a CSRF token from `GET /api/v1/auth/csrf`.
 Bearer-token API requests do not require that CSRF header.
 Tenant runtime planning for separate VPN stacks is exposed under `/api/v1/tenants/<tenant_id>/runtime`.
 System/profile/setup parity APIs are exposed under `/api/v1/system/*`, `/api/v1/profile`, `/api/v1/setup/status`, and `/api/v1/setup/bootstrap`.
-Mesh planning, diagnostics, and policy simulation are exposed under `/api/v1/mesh/plan`, `/api/v1/mesh/diagnostics`, and `/api/v1/mesh/policy-simulate`.
 
 Regenerate the contract artifacts with:
 
@@ -163,8 +160,7 @@ Project CI builds and publishes the standalone image to the configured registry.
    - `$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA`
 4. Optional environment or integration tests can be run by setting pipeline variable `RUN_ENV_INTEGRATION_TESTS=1`.
 5. Optional API contract tests run as `api_contract_tests` and validate the OpenAPI document plus the focused API or security regression subset.
-6. API endpoint groups can be toggled with environment flags such as `ARPVPN_FEATURE_API_MESH=0` or `ARPVPN_FEATURE_API_WIREGUARD=0` for staged rollout.
-7. Mesh rollout can be split from API rollout with `ARPVPN_FEATURE_MESH_V1=0` and `ARPVPN_FEATURE_ACL_V1=0`.
+6. API endpoint groups can be toggled with environment flags such as `ARPVPN_FEATURE_API_WIREGUARD=0` for staged rollout.
 
 For full setup details, see `docs/source/gitlab-deployment.rst`.
 

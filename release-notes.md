@@ -11,11 +11,8 @@
 
 ### 2.0.3
 
-* Mesh UI Added: new `/mesh` control page with quick site-to-site and full-mesh wizards, route/policy management, diagnostics, and signed event review.
-* Mesh API Added: `GET /api/v1/mesh/diagnostics` for route propagation, plan rollups, policy summary, and recent mesh audit events.
-* Security: mesh and ACL rollout flags are now separated with `ARPVPN_FEATURE_MESH_V1` and `ARPVPN_FEATURE_ACL_V1`.
-* Security: mesh/config audit records now include signed event payloads and immediate in-memory availability for fresh installs and test runs.
-* Validation: docker02 mesh/system/UI regression subset passed on 2026-03-15 (`21 passed, 1 warning`), and generated OpenAPI now covers `115` live operations.
+* Deprecated control-plane pages and rollout flags were removed from this release line.
+* Validation: docker02 setup/auth regression coverage passed on 2026-03-26 after the cleanup.
 
 ### 2.0.2
 
@@ -49,11 +46,9 @@
 * API Added: token auth endpoints (`/api/v1/auth/token`, `/api/v1/auth/refresh`) with access/refresh rotation.
 * API Added: token/session control endpoints for revoke, revoke-all, and staff forced logout.
 * API Added: impersonation API endpoints with structured audit logging for start/stop events.
-* API Added: mesh control-plane endpoints (`/api/v1/mesh/*`) for topology/link/route/policy CRUD.
-* API Added: mesh dry-run validation and mesh export/import JSON workflows.
 * API Changed: API auth now includes rate-limiting and lockout controls for token issuance.
 * Docs: added OpenAPI source (`docs/source/api/openapi.v1.yaml`), versioning/changelog process docs, and CI OpenAPI validation.
-* Tests: added API auth and mesh API coverage to the CI hard-gate subset.
+* Tests: added API auth coverage to the CI hard-gate subset.
 
 ### 1.2.7
 
@@ -72,11 +67,7 @@
 
 ### 1.2.5
 
-* Started Phase 1 of mesh/site-to-site expansion with persisted control-plane models:
-  `topologies`, `vpn_links`, `route_advertisements`, and `access_policies`.
-* Added route conflict detection for duplicate ownership and overlapping CIDRs.
-* Extended WireGuard configuration serialization to include mesh control-plane state.
-* Added Phase 1 model tests and included them in the CI hard-gate unit subset.
+* Continued WireGuard configuration and model cleanup for the tenant-aware release line.
 
 ### 1.2.4
 

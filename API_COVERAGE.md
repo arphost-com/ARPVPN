@@ -8,9 +8,9 @@ ARPVPN exposes a hybrid API under `/api/v1`.
 
 - It is not a pure REST API.
 - It is partly resource-oriented and partly action/RPC-oriented.
-- It is usable today for auth, tenant/user lifecycle, WireGuard control, mesh control, stats/traffic, themes, TLS, and system/config operations.
-- It now includes admin backup/restore, tenant-scoped TLS settings, tenant runtime allocation/status APIs, setup/profile/network/about parity endpoints, mesh diagnostics, and generated SDK artifacts.
-- The generated OpenAPI contract currently covers 115 live operations.
+- It is usable today for auth, tenant/user lifecycle, WireGuard control, stats/traffic, themes, TLS, and system/config operations.
+- It includes admin backup/restore, tenant-scoped TLS settings, tenant runtime allocation/status APIs, setup/profile/network/about parity endpoints, and generated SDK artifacts.
+- The generated OpenAPI contract currently covers the live operations implemented in code.
 
 ## API Style
 
@@ -18,14 +18,6 @@ ARPVPN exposes a hybrid API under `/api/v1`.
 
 These follow normal collection/item patterns and are the most REST-like parts of the product:
 
-- `/api/v1/mesh/topologies`
-- `/api/v1/mesh/topologies/<uuid>`
-- `/api/v1/mesh/links`
-- `/api/v1/mesh/links/<uuid>`
-- `/api/v1/mesh/routes`
-- `/api/v1/mesh/routes/<uuid>`
-- `/api/v1/mesh/policies`
-- `/api/v1/mesh/policies/<uuid>`
 - `/api/v1/tenants`
 - `/api/v1/tenants/<tenant_id>`
 - `/api/v1/users`
@@ -49,11 +41,6 @@ These are valid APIs, but they are RPC/action endpoints rather than strict REST 
 - `/api/v1/auth/csrf`
 - `/api/v1/impersonation/start/<user_id>`
 - `/api/v1/impersonation/stop`
-- `/api/v1/mesh/dry-run`
-- `/api/v1/mesh/plan`
-- `/api/v1/mesh/diagnostics`
-- `/api/v1/mesh/policy-simulate`
-- `/api/v1/mesh/import`
 - `/api/v1/tls/mode`
 - `/api/v1/tls/self-signed`
 - `/api/v1/tls/letsencrypt`
@@ -98,24 +85,6 @@ Status:
 - Includes rate limiting, lockout handling, revocation, and audit logging.
 - Cookie-authenticated API writes require CSRF tokens; bearer-token writes do not.
 
-### Mesh control plane
-
-Implemented:
-
-- `GET /api/v1/mesh/overview`
-- `GET /api/v1/mesh/diagnostics`
-- Full CRUD for topologies, links, routes, and policies
-- `POST /api/v1/mesh/dry-run`
-- `GET /api/v1/mesh/export`
-- `POST /api/v1/mesh/import`
-
-Status:
-
-- Strongest API surface currently in ARPVPN.
-- Includes deterministic mesh planning previews, diagnostics rollups, and policy simulation for rollout validation.
-- Mesh event trails are signed and exposed through audit reads and diagnostics summaries.
-- Good candidate for external automation today.
-
 ### Traffic, usage, and RRD
 
 Implemented:
@@ -139,159 +108,31 @@ Status:
 
 Implemented:
 
-- `GET /api/v1/themes`
-- `POST /api/v1/themes`
-- `GET /api/v1/tls/status`
-- `GET /api/v1/tls/certificate`
-- `POST /api/v1/tls/mode`
-- `POST /api/v1/tls/self-signed`
-- `POST /api/v1/tls/letsencrypt`
-- `GET /api/v1/tenants/<tenant_id>/tls/status`
-- `PUT /api/v1/tenants/<tenant_id>/tls`
+- Theme selection endpoints
+- TLS mode update and certificate issuance endpoints
 
 Status:
 
-- Enough to automate theme preference and core TLS/certificate workflows.
-- Global TLS mutation is now super-admin only.
-- Tenant admins can store tenant-scoped TLS intent for their assigned tenant.
+- Intended for admin and tenant-admin workflows where applicable.
 
-### Tenant, user, and invitation management
+### System and setup
 
 Implemented:
 
-- `GET /api/v1/tenants`
-- `POST /api/v1/tenants`
-- `GET /api/v1/tenants/<tenant_id>`
-- `PUT /api/v1/tenants/<tenant_id>`
-- `DELETE /api/v1/tenants/<tenant_id>`
-- `GET /api/v1/users`
-- `POST /api/v1/users`
-- `GET /api/v1/users/<user_id>`
-- `PUT /api/v1/users/<user_id>`
-- `DELETE /api/v1/users/<user_id>`
-- `GET /api/v1/users/export`
-- `POST /api/v1/users/import`
-- `GET /api/v1/tenants/<tenant_id>/members`
-- `POST /api/v1/tenants/<tenant_id>/members`
-- `GET /api/v1/invitations`
-- `POST /api/v1/invitations`
-- `GET /api/v1/invitations/<invitation_id>`
-- `POST /api/v1/invitations/<invitation_id>/resend`
-- `POST /api/v1/invitations/<invitation_id>/revoke`
-- `POST /api/v1/invitations/<invitation_id>/accept`
-
-Status:
-
-- Admins can manage tenants, tenant-admin accounts, and global user state.
-- Support users are restricted to client-user operations.
-- Tenant admins are restricted to client-user and invitation operations inside their assigned tenant.
-- Tenant admins can also manage tenant-scoped TLS intent and tenant runtime allocation/status for their assigned tenant.
-- Bulk import/export APIs are available with role-safe validation and idempotency support.
-- Tenant isolation is enforced in API visibility and management helpers and covered by integration tests.
-
-### Tenant runtime control
-
-Implemented:
-
-- `GET /api/v1/tenants/<tenant_id>/runtime`
-- `PUT /api/v1/tenants/<tenant_id>/runtime`
-- `POST /api/v1/tenants/<tenant_id>/runtime/allocate`
-- `POST /api/v1/tenants/<tenant_id>/runtime/<action>`
-
-Status:
-
-- Provides container/runtime planning metadata for separate tenant VPN stacks.
-- Allocates unique HTTP/HTTPS/VPN host ports across tenants.
-- Stores desired state and status as ARPVPN control-plane intent.
-- Does not directly call Docker or Compose; external deployment automation still applies the plan.
-
-### WireGuard control
-
-Implemented:
-
-- `GET /api/v1/wireguard/interfaces`
-- `POST /api/v1/wireguard/interfaces`
-- `GET /api/v1/wireguard/interfaces/<interface_id>`
-- `PUT /api/v1/wireguard/interfaces/<interface_id>`
-- `DELETE /api/v1/wireguard/interfaces/<interface_id>`
-- `POST /api/v1/wireguard/interfaces/<interface_id>/<action>`
-- `GET /api/v1/wireguard/interfaces/<interface_id>/download`
-- `GET /api/v1/wireguard/interfaces/<interface_id>/qr`
-- `GET /api/v1/wireguard/peers`
-- `POST /api/v1/wireguard/peers`
-- `GET /api/v1/wireguard/peers/<peer_id>`
-- `PUT /api/v1/wireguard/peers/<peer_id>`
-- `DELETE /api/v1/wireguard/peers/<peer_id>`
-- `GET /api/v1/wireguard/peers/<peer_id>/download`
-- `GET /api/v1/wireguard/peers/<peer_id>/qr`
-- `GET /api/v1/jobs/<job_id>`
-
-Status:
-
-- Covers interface and peer CRUD plus config download and QR retrieval.
-- Includes start/stop/restart operations for interfaces.
-- Tenant admins are scoped to their own tenant’s WireGuard objects.
-- Clients can only view their own peer/interface state and downloads.
-- Long-running operations can be queued and polled through the async job API.
-
-### System, audit, and configuration
-
-Implemented:
-
-- `GET /api/v1/system/version`
-- `GET /api/v1/system/health`
-- `GET /api/v1/system/diagnostics`
-- `GET /api/v1/system/backup`
+- `GET /api/v1/about`
+- `GET /api/v1/network`
+- `GET /api/v1/profile`
+- `GET /api/v1/setup/status`
+- `POST /api/v1/setup/bootstrap`
+- `POST /api/v1/system/restart`
 - `POST /api/v1/system/restore`
-- `GET /api/v1/audit/events`
-- `GET /api/v1/config/global`
-- `PUT /api/v1/config/global`
-- `GET /api/v1/tenants/<tenant_id>/config`
-- `PUT /api/v1/tenants/<tenant_id>/config`
 
 Status:
 
-- Global config is API-managed for super-admin use.
-- Tenant branding/limits/defaults/DNS config is tenant-scoped.
-- Admin-only backup export and restore are available, with restore dry-run validation and rollback on failed reload.
-- Audit events are readable from structured log entries and now include signature verification metadata.
-- Health/version/diagnostics endpoints are available for automation and support workflows.
-- API groups can be toggled with feature flags such as `ARPVPN_FEATURE_API_MESH=0` or `ARPVPN_FEATURE_API_WIREGUARD=0`.
+- Covers runtime, bootstrap, and recovery workflows.
 
-## UI Parity Status
+## Coverage Notes
 
-Supported operational UI flows now have matching public API endpoints.
-
-- User lifecycle, invitations, theme controls, profile/password updates, setup/bootstrap, network inventory, about/system metadata, restart flows, WireGuard control, mesh control, stats/RRD, TLS, tenant config, and tenant runtime control all have API counterparts.
-- HTML pages remain convenience/admin surfaces on top of those APIs rather than unique-only control paths.
-
-## What Needs To Be Added Next
-
-- Host-level mesh application and ACL enforcement remain the next major gap.
-- The remaining work is in route install/remove hooks, mesh apply/rollback, per-link host metrics, firewall enforcement, and policy hit accounting rather than API shape.
-
-## OpenAPI Status
-
-The live OpenAPI generator now tracks the implemented route surface used in code.
-
-Current `openapi.v1.yaml` covers the full supported API families, including:
-
-- auth and impersonation
-- theme and TLS endpoints
-- tenant/user/invitation/runtime flows
-- mesh overview, CRUD, plan, diagnostics, dry-run, import/export, and policy simulation
-- stats, exports, and system/config operations
-
-That means the implementation is ahead of the published spec. The spec should be expanded before calling the API fully documented.
-
-## Bottom Line
-
-ARPVPN already has a usable API, but today it is best described as:
-
-- versioned
-- consistent
-- hybrid REST/RPC
-- strong for auth, mesh, stats, and TLS
-- incomplete for full platform automation
-
-The biggest missing areas are user management, WireGuard control, tenant APIs, and system/config operations.
+- The API coverage snapshot is generated from the live Flask route map.
+- The generated OpenAPI document should be kept in sync with the route surface after any API change.
+- API groups can be toggled with feature flags such as `ARPVPN_FEATURE_API_WIREGUARD=0`.

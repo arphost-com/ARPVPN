@@ -18,7 +18,7 @@ The OpenAPI source is validated in CI by:
 Current API shape:
 
 - Hybrid REST and action-style API
-- Strongest implemented areas: auth, mesh, statistics, RRD access, themes, and TLS
+- Strongest implemented areas: auth, statistics, RRD access, themes, and TLS
 - Still incomplete for full platform automation: users, WireGuard CRUD, tenant management, and system operations
 
 Documentation note:

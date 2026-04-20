@@ -77,7 +77,6 @@ _TAG_OVERRIDES = {
     "users": "Tenants",
     "invitations": "Tenants",
     "wireguard": "WireGuard",
-    "mesh": "Mesh",
     "stats": "Stats",
     "themes": "Themes",
     "tls": "TLS",
@@ -99,10 +98,6 @@ _RESPONSE_STATUS_OVERRIDES = {
     "api_create_invitation": 201,
     "api_create_wireguard_interface": 201,
     "api_create_wireguard_peer": 201,
-    "api_mesh_create_topology": 201,
-    "api_mesh_create_link": 201,
-    "api_mesh_create_route": 201,
-    "api_mesh_create_policy": 201,
     "api_accept_invitation": 201,
     "api_system_restart": 202,
 }
@@ -159,7 +154,7 @@ def build_openapi_document(version: str) -> Dict[str, Any]:
             "description": "Generated OpenAPI document for the live ARPVPN API surface.",
         },
         "servers": [{"url": "/", "description": "ARPVPN application root"}],
-        "tags": [{"name": tag} for tag in ["Auth", "Tenants", "WireGuard", "Mesh", "Stats", "Themes", "TLS", "System"]],
+        "tags": [{"name": tag} for tag in ["Auth", "Tenants", "WireGuard", "Stats", "Themes", "TLS", "System"]],
         "paths": {},
         "components": {
             "securitySchemes": {

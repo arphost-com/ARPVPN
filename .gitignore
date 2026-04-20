@@ -4,3 +4,4 @@ __pycache__/
 *.pyd
 docs/source/_build/
 docker/.env
+OPS_NOTES.md

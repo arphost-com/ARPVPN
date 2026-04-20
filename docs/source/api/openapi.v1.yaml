@@ -10,7 +10,6 @@ tags:
 - name: Auth
 - name: Tenants
 - name: WireGuard
-- name: Mesh
 - name: Stats
 - name: Themes
 - name: TLS
@@ -482,7 +481,7 @@ paths:
               traffic:
                 enabled: true
                 driver: json
-                driver_options: &id010
+                driver_options: &id005
                   filepath: /data/traffic.json
   /api/v1/impersonation/start/{user_id}:
     post:
@@ -852,1172 +851,6 @@ paths:
         required: true
         schema:
           type: string
-  /api/v1/mesh/diagnostics:
-    get:
-      tags:
-      - Mesh
-      operationId: api_mesh_diagnostics
-      summary: Mesh diagnostics
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-  /api/v1/mesh/dry-run:
-    post:
-      tags:
-      - Mesh
-      operationId: api_mesh_dry_run
-      summary: Mesh dry run
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/api_mesh_dry_runRequest'
-            example:
-              mesh:
-                topologies: &id001
-                - uuid: topology-123
-                  name: core-mesh
-                  preset: full_mesh
-                  server_ids:
-                  - example
-                  hub_server_id: edge-a
-                  description: Primary site mesh
-                vpn_links: &id002
-                - uuid: link-123
-                  source_server: edge-a
-                  target_server: edge-b
-                  interface_uuid: iface-123
-                  status: active
-                  key_metadata: &id005
-                    local_public_key: pub-key
-                  topology_uuid: topology-123
-                  description: A to B
-                  enabled: true
-                route_advertisements: &id003
-                - uuid: route-123
-                  owner_server: edge-a
-                  cidr: 10.55.0.0/24
-                  via_link_uuid: link-123
-                  description: Branch LAN
-                  enabled: true
-                access_policies: &id004
-                - uuid: policy-123
-                  name: allow-branch-lan
-                  source_kind: server
-                  source_id: edge-a
-                  destinations:
-                  - example
-                  action: allow
-                  priority: 100
-                  description: Allow branch traffic
-                  enabled: true
-  /api/v1/mesh/export:
-    get:
-      tags:
-      - Mesh
-      operationId: api_mesh_export
-      summary: Mesh export
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-  /api/v1/mesh/import:
-    post:
-      tags:
-      - Mesh
-      operationId: api_mesh_import
-      summary: Mesh import
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/api_mesh_importRequest'
-            example:
-              mesh:
-                topologies: *id001
-                vpn_links: *id002
-                route_advertisements: *id003
-                access_policies: *id004
-              allow_conflicts: false
-  /api/v1/mesh/links:
-    post:
-      tags:
-      - Mesh
-      operationId: api_mesh_create_link
-      summary: Mesh create link
-      responses:
-        '201':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/api_mesh_create_linkRequest'
-            example:
-              uuid: link-123
-              source_server: edge-a
-              target_server: edge-b
-              interface_uuid: iface-123
-              status: active
-              key_metadata: *id005
-              topology_uuid: topology-123
-              description: A to B
-              enabled: true
-    get:
-      tags:
-      - Mesh
-      operationId: api_mesh_links
-      summary: Mesh links
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-  /api/v1/mesh/links/{uuid}:
-    delete:
-      tags:
-      - Mesh
-      operationId: api_mesh_delete_link
-      summary: Mesh delete link
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-      parameters:
-      - in: path
-        name: uuid
-        required: true
-        schema:
-          type: string
-    get:
-      tags:
-      - Mesh
-      operationId: api_mesh_get_link
-      summary: Mesh get link
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-      parameters:
-      - in: path
-        name: uuid
-        required: true
-        schema:
-          type: string
-    put:
-      tags:
-      - Mesh
-      operationId: api_mesh_update_link
-      summary: Mesh update link
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-      parameters:
-      - in: path
-        name: uuid
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/api_mesh_update_linkRequest'
-            example:
-              uuid: link-123
-              source_server: edge-a
-              target_server: edge-b
-              interface_uuid: iface-123
-              status: active
-              key_metadata: *id005
-              topology_uuid: topology-123
-              description: A to B
-              enabled: true
-  /api/v1/mesh/overview:
-    get:
-      tags:
-      - Mesh
-      operationId: api_mesh_overview
-      summary: Mesh overview
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-  /api/v1/mesh/plan:
-    get:
-      tags:
-      - Mesh
-      operationId: api_mesh_plan
-      summary: Mesh plan
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-  /api/v1/mesh/policies:
-    post:
-      tags:
-      - Mesh
-      operationId: api_mesh_create_policy
-      summary: Mesh create policy
-      responses:
-        '201':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/api_mesh_create_policyRequest'
-            example:
-              uuid: policy-123
-              name: allow-branch-lan
-              source_kind: server
-              source_id: edge-a
-              destinations:
-              - example
-              action: allow
-              priority: 100
-              description: Allow branch traffic
-              enabled: true
-    get:
-      tags:
-      - Mesh
-      operationId: api_mesh_policies
-      summary: Mesh policies
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-  /api/v1/mesh/policies/{uuid}:
-    delete:
-      tags:
-      - Mesh
-      operationId: api_mesh_delete_policy
-      summary: Mesh delete policy
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-      parameters:
-      - in: path
-        name: uuid
-        required: true
-        schema:
-          type: string
-    get:
-      tags:
-      - Mesh
-      operationId: api_mesh_get_policy
-      summary: Mesh get policy
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-      parameters:
-      - in: path
-        name: uuid
-        required: true
-        schema:
-          type: string
-    put:
-      tags:
-      - Mesh
-      operationId: api_mesh_update_policy
-      summary: Mesh update policy
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-      parameters:
-      - in: path
-        name: uuid
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/api_mesh_update_policyRequest'
-            example:
-              uuid: policy-123
-              name: allow-branch-lan
-              source_kind: server
-              source_id: edge-a
-              destinations:
-              - example
-              action: allow
-              priority: 100
-              description: Allow branch traffic
-              enabled: true
-  /api/v1/mesh/policy-simulate:
-    post:
-      tags:
-      - Mesh
-      operationId: api_mesh_policy_simulate
-      summary: Mesh policy simulate
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/api_mesh_policy_simulateRequest'
-            example:
-              source_kind: server
-              source_id: edge-a
-              destination: 10.55.0.10
-  /api/v1/mesh/routes:
-    post:
-      tags:
-      - Mesh
-      operationId: api_mesh_create_route
-      summary: Mesh create route
-      responses:
-        '201':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/api_mesh_create_routeRequest'
-            example:
-              uuid: route-123
-              owner_server: edge-a
-              cidr: 10.55.0.0/24
-              via_link_uuid: link-123
-              description: Branch LAN
-              enabled: true
-    get:
-      tags:
-      - Mesh
-      operationId: api_mesh_routes
-      summary: Mesh routes
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-  /api/v1/mesh/routes/{uuid}:
-    delete:
-      tags:
-      - Mesh
-      operationId: api_mesh_delete_route
-      summary: Mesh delete route
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-      parameters:
-      - in: path
-        name: uuid
-        required: true
-        schema:
-          type: string
-    get:
-      tags:
-      - Mesh
-      operationId: api_mesh_get_route
-      summary: Mesh get route
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-      parameters:
-      - in: path
-        name: uuid
-        required: true
-        schema:
-          type: string
-    put:
-      tags:
-      - Mesh
-      operationId: api_mesh_update_route
-      summary: Mesh update route
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-      parameters:
-      - in: path
-        name: uuid
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/api_mesh_update_routeRequest'
-            example:
-              uuid: route-123
-              owner_server: edge-a
-              cidr: 10.55.0.0/24
-              via_link_uuid: link-123
-              description: Branch LAN
-              enabled: true
-  /api/v1/mesh/topologies:
-    post:
-      tags:
-      - Mesh
-      operationId: api_mesh_create_topology
-      summary: Mesh create topology
-      responses:
-        '201':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/api_mesh_create_topologyRequest'
-            example:
-              uuid: topology-123
-              name: core-mesh
-              preset: full_mesh
-              server_ids:
-              - example
-              hub_server_id: edge-a
-              description: Primary site mesh
-    get:
-      tags:
-      - Mesh
-      operationId: api_mesh_topologies
-      summary: Mesh topologies
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-  /api/v1/mesh/topologies/{uuid}:
-    delete:
-      tags:
-      - Mesh
-      operationId: api_mesh_delete_topology
-      summary: Mesh delete topology
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-      parameters:
-      - in: path
-        name: uuid
-        required: true
-        schema:
-          type: string
-    get:
-      tags:
-      - Mesh
-      operationId: api_mesh_get_topology
-      summary: Mesh get topology
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-      parameters:
-      - in: path
-        name: uuid
-        required: true
-        schema:
-          type: string
-    put:
-      tags:
-      - Mesh
-      operationId: api_mesh_update_topology
-      summary: Mesh update topology
-      responses:
-        '200':
-          description: Successful response.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiSuccessEnvelope'
-        '400':
-          description: Bad request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '401':
-          description: Unauthorized.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-        '403':
-          description: Forbidden.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-      security:
-      - bearerAuth: []
-      - cookieAuth: []
-      parameters:
-      - in: path
-        name: uuid
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/api_mesh_update_topologyRequest'
-            example:
-              uuid: topology-123
-              name: core-mesh
-              preset: full_mesh
-              server_ids:
-              - example
-              hub_server_id: edge-a
-              description: Primary site mesh
   /api/v1/network/inventory:
     get:
       tags:
@@ -2834,7 +1667,7 @@ paths:
             schema:
               $ref: '#/components/schemas/api_system_restoreRequest'
             example:
-              backup: &id009
+              backup: &id004
                 format: arpvpn-backup-v1
                 files: {}
               dry_run: true
@@ -2922,11 +1755,11 @@ paths:
               status: active
               description: Managed customer
               settings:
-                branding: &id006
+                branding: &id001
                   company_name: Tenant One
-                limits: &id007
+                limits: &id002
                   max_clients: 25
-                defaults: &id008
+                defaults: &id003
                   theme: dark
                 dns_servers:
                 - example
@@ -3115,9 +1948,9 @@ paths:
               status: active
               description: Managed customer
               settings:
-                branding: *id006
-                limits: *id007
-                defaults: *id008
+                branding: *id001
+                limits: *id002
+                defaults: *id003
                 dns_servers:
                 - example
                 tls:
@@ -3225,9 +2058,9 @@ paths:
               $ref: '#/components/schemas/api_update_tenant_configRequest'
             example:
               settings:
-                branding: *id006
-                limits: *id007
-                defaults: *id008
+                branding: *id001
+                limits: *id002
+                defaults: *id003
                 dns_servers:
                 - example
                 tls:
@@ -3248,11 +2081,11 @@ paths:
                   http_port: 18085
                   https_port: 18086
                   vpn_port: 51820
-              branding: &id011
+              branding: &id006
                 company_name: Tenant One
-              limits: &id012
+              limits: &id007
                 max_clients: 25
-              defaults: &id013
+              defaults: &id008
                 theme: dark
               dns_servers:
               - example
@@ -3988,7 +2821,8 @@ paths:
               peer_ipv4: 10.10.0.2/32
               peer_dns1: 8.8.8.8
               peer_dns2: 1.1.1.1
-              peer_site_to_site_subnets: []
+              peer_site_to_site_subnets:
+              - example
     get:
       tags:
       - Tenants
@@ -5138,17 +3972,17 @@ components:
               type: object
               properties: {}
               additionalProperties: true
-              example: *id006
+              example: *id001
             limits:
               type: object
               properties: {}
               additionalProperties: true
-              example: *id007
+              example: *id002
             defaults:
               type: object
               properties: {}
               additionalProperties: true
-              example: *id008
+              example: *id003
             dns_servers:
               oneOf:
               - type: string
@@ -5242,9 +4076,9 @@ components:
                 vpn_port: 51820
           additionalProperties: false
           example:
-            branding: *id006
-            limits: *id007
-            defaults: *id008
+            branding: *id001
+            limits: *id002
+            defaults: *id003
             dns_servers:
             - example
             tls:
@@ -5278,9 +4112,9 @@ components:
         status: active
         description: Managed customer
         settings:
-          branding: *id006
-          limits: *id007
-          defaults: *id008
+          branding: *id001
+          limits: *id002
+          defaults: *id003
           dns_servers:
           - example
           tls:
@@ -5385,6 +4219,8 @@ components:
           - type: array
             items:
               type: string
+          example:
+          - example
       additionalProperties: false
       required:
       - username
@@ -5404,7 +4240,8 @@ components:
         peer_ipv4: 10.10.0.2/32
         peer_dns1: 8.8.8.8
         peer_dns2: 1.1.1.1
-        peer_site_to_site_subnets: []
+        peer_site_to_site_subnets:
+        - example
     api_create_wireguard_interfaceRequest:
       type: object
       properties:
@@ -5671,833 +4508,6 @@ components:
           tenant_id: tenant-123
         dry_run: false
         continue_on_error: false
-    api_mesh_create_linkRequest:
-      type: object
-      properties:
-        uuid:
-          type: string
-          example: link-123
-        source_server:
-          type: string
-          example: edge-a
-        target_server:
-          type: string
-          example: edge-b
-        interface_uuid:
-          type: string
-          example: iface-123
-        status:
-          type: string
-          enum:
-          - pending
-          - active
-          - degraded
-          - error
-          - disabled
-          example: active
-        key_metadata:
-          type: object
-          properties: {}
-          additionalProperties: true
-          example: *id005
-        topology_uuid:
-          type: string
-          example: topology-123
-        description:
-          type: string
-          example: A to B
-        enabled:
-          type: boolean
-          example: true
-      additionalProperties: false
-      required:
-      - source_server
-      - target_server
-      example:
-        uuid: link-123
-        source_server: edge-a
-        target_server: edge-b
-        interface_uuid: iface-123
-        status: active
-        key_metadata: *id005
-        topology_uuid: topology-123
-        description: A to B
-        enabled: true
-    api_mesh_create_policyRequest:
-      type: object
-      properties:
-        uuid:
-          type: string
-          example: policy-123
-        name:
-          type: string
-          example: allow-branch-lan
-        source_kind:
-          type: string
-          enum:
-          - peer
-          - group
-          - server
-          - all
-          example: server
-        source_id:
-          type: string
-          example: edge-a
-        destinations:
-          oneOf:
-          - type: string
-          - type: array
-            items:
-              type: string
-          example:
-          - example
-        action:
-          type: string
-          enum:
-          - allow
-          - deny
-          example: allow
-        priority:
-          type: integer
-          example: 100
-        description:
-          type: string
-          example: Allow branch traffic
-        enabled:
-          type: boolean
-          example: true
-      additionalProperties: false
-      required:
-      - name
-      - destinations
-      example:
-        uuid: policy-123
-        name: allow-branch-lan
-        source_kind: server
-        source_id: edge-a
-        destinations:
-        - example
-        action: allow
-        priority: 100
-        description: Allow branch traffic
-        enabled: true
-    api_mesh_create_routeRequest:
-      type: object
-      properties:
-        uuid:
-          type: string
-          example: route-123
-        owner_server:
-          type: string
-          example: edge-a
-        cidr:
-          type: string
-          example: 10.55.0.0/24
-        via_link_uuid:
-          type: string
-          example: link-123
-        description:
-          type: string
-          example: Branch LAN
-        enabled:
-          type: boolean
-          example: true
-      additionalProperties: false
-      required:
-      - owner_server
-      - cidr
-      example:
-        uuid: route-123
-        owner_server: edge-a
-        cidr: 10.55.0.0/24
-        via_link_uuid: link-123
-        description: Branch LAN
-        enabled: true
-    api_mesh_create_topologyRequest:
-      type: object
-      properties:
-        uuid:
-          type: string
-          example: topology-123
-        name:
-          type: string
-          example: core-mesh
-        preset:
-          type: string
-          enum:
-          - point_to_point
-          - hub_spoke
-          - full_mesh
-          example: full_mesh
-        server_ids:
-          oneOf:
-          - type: string
-          - type: array
-            items:
-              type: string
-          example:
-          - example
-        hub_server_id:
-          type: string
-          example: edge-a
-        description:
-          type: string
-          example: Primary site mesh
-      additionalProperties: false
-      required:
-      - name
-      - server_ids
-      example:
-        uuid: topology-123
-        name: core-mesh
-        preset: full_mesh
-        server_ids:
-        - example
-        hub_server_id: edge-a
-        description: Primary site mesh
-    api_mesh_dry_runRequest:
-      type: object
-      properties:
-        mesh:
-          type: object
-          properties:
-            topologies:
-              type: array
-              items:
-                type: object
-                properties:
-                  uuid:
-                    type: string
-                    example: topology-123
-                  name:
-                    type: string
-                    example: core-mesh
-                  preset:
-                    type: string
-                    enum:
-                    - point_to_point
-                    - hub_spoke
-                    - full_mesh
-                    example: full_mesh
-                  server_ids:
-                    oneOf:
-                    - type: string
-                    - type: array
-                      items:
-                        type: string
-                    example:
-                    - example
-                  hub_server_id:
-                    type: string
-                    example: edge-a
-                  description:
-                    type: string
-                    example: Primary site mesh
-                additionalProperties: false
-                required:
-                - name
-                - server_ids
-                example:
-                  uuid: topology-123
-                  name: core-mesh
-                  preset: full_mesh
-                  server_ids:
-                  - example
-                  hub_server_id: edge-a
-                  description: Primary site mesh
-              example: *id001
-            vpn_links:
-              type: array
-              items:
-                type: object
-                properties:
-                  uuid:
-                    type: string
-                    example: link-123
-                  source_server:
-                    type: string
-                    example: edge-a
-                  target_server:
-                    type: string
-                    example: edge-b
-                  interface_uuid:
-                    type: string
-                    example: iface-123
-                  status:
-                    type: string
-                    enum:
-                    - pending
-                    - active
-                    - degraded
-                    - error
-                    - disabled
-                    example: active
-                  key_metadata:
-                    type: object
-                    properties: {}
-                    additionalProperties: true
-                    example: *id005
-                  topology_uuid:
-                    type: string
-                    example: topology-123
-                  description:
-                    type: string
-                    example: A to B
-                  enabled:
-                    type: boolean
-                    example: true
-                additionalProperties: false
-                required:
-                - source_server
-                - target_server
-                example:
-                  uuid: link-123
-                  source_server: edge-a
-                  target_server: edge-b
-                  interface_uuid: iface-123
-                  status: active
-                  key_metadata: *id005
-                  topology_uuid: topology-123
-                  description: A to B
-                  enabled: true
-              example: *id002
-            route_advertisements:
-              type: array
-              items:
-                type: object
-                properties:
-                  uuid:
-                    type: string
-                    example: route-123
-                  owner_server:
-                    type: string
-                    example: edge-a
-                  cidr:
-                    type: string
-                    example: 10.55.0.0/24
-                  via_link_uuid:
-                    type: string
-                    example: link-123
-                  description:
-                    type: string
-                    example: Branch LAN
-                  enabled:
-                    type: boolean
-                    example: true
-                additionalProperties: false
-                required:
-                - owner_server
-                - cidr
-                example:
-                  uuid: route-123
-                  owner_server: edge-a
-                  cidr: 10.55.0.0/24
-                  via_link_uuid: link-123
-                  description: Branch LAN
-                  enabled: true
-              example: *id003
-            access_policies:
-              type: array
-              items:
-                type: object
-                properties:
-                  uuid:
-                    type: string
-                    example: policy-123
-                  name:
-                    type: string
-                    example: allow-branch-lan
-                  source_kind:
-                    type: string
-                    enum:
-                    - peer
-                    - group
-                    - server
-                    - all
-                    example: server
-                  source_id:
-                    type: string
-                    example: edge-a
-                  destinations:
-                    oneOf:
-                    - type: string
-                    - type: array
-                      items:
-                        type: string
-                    example:
-                    - example
-                  action:
-                    type: string
-                    enum:
-                    - allow
-                    - deny
-                    example: allow
-                  priority:
-                    type: integer
-                    example: 100
-                  description:
-                    type: string
-                    example: Allow branch traffic
-                  enabled:
-                    type: boolean
-                    example: true
-                additionalProperties: false
-                required:
-                - name
-                - destinations
-                example:
-                  uuid: policy-123
-                  name: allow-branch-lan
-                  source_kind: server
-                  source_id: edge-a
-                  destinations:
-                  - example
-                  action: allow
-                  priority: 100
-                  description: Allow branch traffic
-                  enabled: true
-              example: *id004
-          additionalProperties: true
-          example:
-            topologies: *id001
-            vpn_links: *id002
-            route_advertisements: *id003
-            access_policies: *id004
-      additionalProperties: false
-      example:
-        mesh:
-          topologies: *id001
-          vpn_links: *id002
-          route_advertisements: *id003
-          access_policies: *id004
-    api_mesh_importRequest:
-      type: object
-      properties:
-        mesh:
-          type: object
-          properties:
-            topologies:
-              type: array
-              items:
-                type: object
-                properties:
-                  uuid:
-                    type: string
-                    example: topology-123
-                  name:
-                    type: string
-                    example: core-mesh
-                  preset:
-                    type: string
-                    enum:
-                    - point_to_point
-                    - hub_spoke
-                    - full_mesh
-                    example: full_mesh
-                  server_ids:
-                    oneOf:
-                    - type: string
-                    - type: array
-                      items:
-                        type: string
-                    example:
-                    - example
-                  hub_server_id:
-                    type: string
-                    example: edge-a
-                  description:
-                    type: string
-                    example: Primary site mesh
-                additionalProperties: false
-                required:
-                - name
-                - server_ids
-                example:
-                  uuid: topology-123
-                  name: core-mesh
-                  preset: full_mesh
-                  server_ids:
-                  - example
-                  hub_server_id: edge-a
-                  description: Primary site mesh
-              example: *id001
-            vpn_links:
-              type: array
-              items:
-                type: object
-                properties:
-                  uuid:
-                    type: string
-                    example: link-123
-                  source_server:
-                    type: string
-                    example: edge-a
-                  target_server:
-                    type: string
-                    example: edge-b
-                  interface_uuid:
-                    type: string
-                    example: iface-123
-                  status:
-                    type: string
-                    enum:
-                    - pending
-                    - active
-                    - degraded
-                    - error
-                    - disabled
-                    example: active
-                  key_metadata:
-                    type: object
-                    properties: {}
-                    additionalProperties: true
-                    example: *id005
-                  topology_uuid:
-                    type: string
-                    example: topology-123
-                  description:
-                    type: string
-                    example: A to B
-                  enabled:
-                    type: boolean
-                    example: true
-                additionalProperties: false
-                required:
-                - source_server
-                - target_server
-                example:
-                  uuid: link-123
-                  source_server: edge-a
-                  target_server: edge-b
-                  interface_uuid: iface-123
-                  status: active
-                  key_metadata: *id005
-                  topology_uuid: topology-123
-                  description: A to B
-                  enabled: true
-              example: *id002
-            route_advertisements:
-              type: array
-              items:
-                type: object
-                properties:
-                  uuid:
-                    type: string
-                    example: route-123
-                  owner_server:
-                    type: string
-                    example: edge-a
-                  cidr:
-                    type: string
-                    example: 10.55.0.0/24
-                  via_link_uuid:
-                    type: string
-                    example: link-123
-                  description:
-                    type: string
-                    example: Branch LAN
-                  enabled:
-                    type: boolean
-                    example: true
-                additionalProperties: false
-                required:
-                - owner_server
-                - cidr
-                example:
-                  uuid: route-123
-                  owner_server: edge-a
-                  cidr: 10.55.0.0/24
-                  via_link_uuid: link-123
-                  description: Branch LAN
-                  enabled: true
-              example: *id003
-            access_policies:
-              type: array
-              items:
-                type: object
-                properties:
-                  uuid:
-                    type: string
-                    example: policy-123
-                  name:
-                    type: string
-                    example: allow-branch-lan
-                  source_kind:
-                    type: string
-                    enum:
-                    - peer
-                    - group
-                    - server
-                    - all
-                    example: server
-                  source_id:
-                    type: string
-                    example: edge-a
-                  destinations:
-                    oneOf:
-                    - type: string
-                    - type: array
-                      items:
-                        type: string
-                    example:
-                    - example
-                  action:
-                    type: string
-                    enum:
-                    - allow
-                    - deny
-                    example: allow
-                  priority:
-                    type: integer
-                    example: 100
-                  description:
-                    type: string
-                    example: Allow branch traffic
-                  enabled:
-                    type: boolean
-                    example: true
-                additionalProperties: false
-                required:
-                - name
-                - destinations
-                example:
-                  uuid: policy-123
-                  name: allow-branch-lan
-                  source_kind: server
-                  source_id: edge-a
-                  destinations:
-                  - example
-                  action: allow
-                  priority: 100
-                  description: Allow branch traffic
-                  enabled: true
-              example: *id004
-          additionalProperties: true
-          example:
-            topologies: *id001
-            vpn_links: *id002
-            route_advertisements: *id003
-            access_policies: *id004
-        allow_conflicts:
-          type: boolean
-          example: false
-      additionalProperties: false
-      required:
-      - mesh
-      example:
-        mesh:
-          topologies: *id001
-          vpn_links: *id002
-          route_advertisements: *id003
-          access_policies: *id004
-        allow_conflicts: false
-    api_mesh_policy_simulateRequest:
-      type: object
-      properties:
-        source_kind:
-          type: string
-          enum:
-          - peer
-          - group
-          - server
-          - all
-          example: server
-        source_id:
-          type: string
-          example: edge-a
-        destination:
-          type: string
-          example: 10.55.0.10
-      additionalProperties: false
-      required:
-      - source_kind
-      - source_id
-      - destination
-      example:
-        source_kind: server
-        source_id: edge-a
-        destination: 10.55.0.10
-    api_mesh_update_linkRequest:
-      type: object
-      properties:
-        uuid:
-          type: string
-          example: link-123
-        source_server:
-          type: string
-          example: edge-a
-        target_server:
-          type: string
-          example: edge-b
-        interface_uuid:
-          type: string
-          example: iface-123
-        status:
-          type: string
-          enum:
-          - pending
-          - active
-          - degraded
-          - error
-          - disabled
-          example: active
-        key_metadata:
-          type: object
-          properties: {}
-          additionalProperties: true
-          example: *id005
-        topology_uuid:
-          type: string
-          example: topology-123
-        description:
-          type: string
-          example: A to B
-        enabled:
-          type: boolean
-          example: true
-      additionalProperties: false
-      required:
-      - source_server
-      - target_server
-      example:
-        uuid: link-123
-        source_server: edge-a
-        target_server: edge-b
-        interface_uuid: iface-123
-        status: active
-        key_metadata: *id005
-        topology_uuid: topology-123
-        description: A to B
-        enabled: true
-    api_mesh_update_policyRequest:
-      type: object
-      properties:
-        uuid:
-          type: string
-          example: policy-123
-        name:
-          type: string
-          example: allow-branch-lan
-        source_kind:
-          type: string
-          enum:
-          - peer
-          - group
-          - server
-          - all
-          example: server
-        source_id:
-          type: string
-          example: edge-a
-        destinations:
-          oneOf:
-          - type: string
-          - type: array
-            items:
-              type: string
-          example:
-          - example
-        action:
-          type: string
-          enum:
-          - allow
-          - deny
-          example: allow
-        priority:
-          type: integer
-          example: 100
-        description:
-          type: string
-          example: Allow branch traffic
-        enabled:
-          type: boolean
-          example: true
-      additionalProperties: false
-      required:
-      - name
-      - destinations
-      example:
-        uuid: policy-123
-        name: allow-branch-lan
-        source_kind: server
-        source_id: edge-a
-        destinations:
-        - example
-        action: allow
-        priority: 100
-        description: Allow branch traffic
-        enabled: true
-    api_mesh_update_routeRequest:
-      type: object
-      properties:
-        uuid:
-          type: string
-          example: route-123
-        owner_server:
-          type: string
-          example: edge-a
-        cidr:
-          type: string
-          example: 10.55.0.0/24
-        via_link_uuid:
-          type: string
-          example: link-123
-        description:
-          type: string
-          example: Branch LAN
-        enabled:
-          type: boolean
-          example: true
-      additionalProperties: false
-      required:
-      - owner_server
-      - cidr
-      example:
-        uuid: route-123
-        owner_server: edge-a
-        cidr: 10.55.0.0/24
-        via_link_uuid: link-123
-        description: Branch LAN
-        enabled: true
-    api_mesh_update_topologyRequest:
-      type: object
-      properties:
-        uuid:
-          type: string
-          example: topology-123
-        name:
-          type: string
-          example: core-mesh
-        preset:
-          type: string
-          enum:
-          - point_to_point
-          - hub_spoke
-          - full_mesh
-          example: full_mesh
-        server_ids:
-          oneOf:
-          - type: string
-          - type: array
-            items:
-              type: string
-          example:
-          - example
-        hub_server_id:
-          type: string
-          example: edge-a
-        description:
-          type: string
-          example: Primary site mesh
-      additionalProperties: false
-      example:
-        uuid: topology-123
-        name: core-mesh
-        preset: full_mesh
-        server_ids:
-        - example
-        hub_server_id: edge-a
-        description: Primary site mesh
     api_operate_wireguard_interfaceRequest:
       type: object
       properties:
@@ -6682,7 +4692,7 @@ components:
           type: object
           properties: {}
           additionalProperties: true
-          example: *id009
+          example: *id004
         dry_run:
           type: boolean
           example: true
@@ -6690,7 +4700,7 @@ components:
       required:
       - backup
       example:
-        backup: *id009
+        backup: *id004
         dry_run: true
     api_tls_generate_self_signedRequest:
       type: object
@@ -6870,12 +4880,12 @@ components:
               type: object
               properties: {}
               additionalProperties: true
-              example: *id010
+              example: *id005
           additionalProperties: false
           example:
             enabled: true
             driver: json
-            driver_options: *id010
+            driver_options: *id005
       additionalProperties: false
       example:
         logger:
@@ -6901,7 +4911,7 @@ components:
         traffic:
           enabled: true
           driver: json
-          driver_options: *id010
+          driver_options: *id005
     api_update_tenantRequest:
       type: object
       properties:
@@ -6944,17 +4954,17 @@ components:
               type: object
               properties: {}
               additionalProperties: true
-              example: *id006
+              example: *id001
             limits:
               type: object
               properties: {}
               additionalProperties: true
-              example: *id007
+              example: *id002
             defaults:
               type: object
               properties: {}
               additionalProperties: true
-              example: *id008
+              example: *id003
             dns_servers:
               oneOf:
               - type: string
@@ -7048,9 +5058,9 @@ components:
                 vpn_port: 51820
           additionalProperties: false
           example:
-            branding: *id006
-            limits: *id007
-            defaults: *id008
+            branding: *id001
+            limits: *id002
+            defaults: *id003
             dns_servers:
             - example
             tls:
@@ -7082,9 +5092,9 @@ components:
         status: active
         description: Managed customer
         settings:
-          branding: *id006
-          limits: *id007
-          defaults: *id008
+          branding: *id001
+          limits: *id002
+          defaults: *id003
           dns_servers:
           - example
           tls:
@@ -7115,17 +5125,17 @@ components:
               type: object
               properties: {}
               additionalProperties: true
-              example: *id006
+              example: *id001
             limits:
               type: object
               properties: {}
               additionalProperties: true
-              example: *id007
+              example: *id002
             defaults:
               type: object
               properties: {}
               additionalProperties: true
-              example: *id008
+              example: *id003
             dns_servers:
               oneOf:
               - type: string
@@ -7219,9 +5229,9 @@ components:
                 vpn_port: 51820
           additionalProperties: false
           example:
-            branding: *id006
-            limits: *id007
-            defaults: *id008
+            branding: *id001
+            limits: *id002
+            defaults: *id003
             dns_servers:
             - example
             tls:
@@ -7246,17 +5256,17 @@ components:
           type: object
           properties: {}
           additionalProperties: true
-          example: *id011
+          example: *id006
         limits:
           type: object
           properties: {}
           additionalProperties: true
-          example: *id012
+          example: *id007
         defaults:
           type: object
           properties: {}
           additionalProperties: true
-          example: *id013
+          example: *id008
         dns_servers:
           oneOf:
           - type: string
@@ -7351,9 +5361,9 @@ components:
       additionalProperties: false
       example:
         settings:
-          branding: *id006
-          limits: *id007
-          defaults: *id008
+          branding: *id001
+          limits: *id002
+          defaults: *id003
           dns_servers:
           - example
           tls:
@@ -7374,9 +5384,9 @@ components:
             http_port: 18085
             https_port: 18086
             vpn_port: 51820
-        branding: *id011
-        limits: *id012
-        defaults: *id013
+        branding: *id006
+        limits: *id007
+        defaults: *id008
         dns_servers:
         - example
         tls:

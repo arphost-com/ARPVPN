@@ -250,10 +250,6 @@ def empty_schema(description: str = "") -> ApiRequestSchema:
 ROLE_ENUM = ("client", "tenant_admin", "admin", "support")
 TENANT_STATUS_ENUM = ("active", "suspended", "disabled")
 TLS_MODE_ENUM = ("http", "self_signed", "letsencrypt", "reverse_proxy")
-MESH_PRESET_ENUM = ("point_to_point", "hub_spoke", "full_mesh")
-MESH_LINK_STATUS_ENUM = ("pending", "active", "degraded", "error", "disabled")
-MESH_SOURCE_KIND_ENUM = ("peer", "group", "server", "all")
-MESH_ACTION_ENUM = ("allow", "deny")
 THEME_ENUM = ("auto", "light", "dark")
 
 TENANT_TLS_FIELD = object_field(
@@ -369,66 +365,6 @@ PEER_PAYLOAD_FIELD = object_field(
         "username": string_field(example="client1"),
         "tenant_id": string_field(example="tenant-123"),
         "async": boolean_field(example=False),
-    }
-)
-
-TOPOLOGY_FIELD = object_field(
-    properties={
-        "uuid": string_field(example="topology-123"),
-        "name": string_field(required=True, example="core-mesh"),
-        "preset": string_field(enum=MESH_PRESET_ENUM, example="full_mesh"),
-        "server_ids": string_list_field(required=True),
-        "hub_server_id": string_field(example="edge-a"),
-        "description": string_field(example="Primary site mesh"),
-    }
-)
-
-LINK_FIELD = object_field(
-    properties={
-        "uuid": string_field(example="link-123"),
-        "source_server": string_field(required=True, example="edge-a"),
-        "target_server": string_field(required=True, example="edge-b"),
-        "interface_uuid": string_field(example="iface-123"),
-        "status": string_field(enum=MESH_LINK_STATUS_ENUM, example="active"),
-        "key_metadata": object_field(additional_properties=True, example={"local_public_key": "pub-key"}),
-        "topology_uuid": string_field(example="topology-123"),
-        "description": string_field(example="A to B"),
-        "enabled": boolean_field(example=True),
-    }
-)
-
-ROUTE_FIELD = object_field(
-    properties={
-        "uuid": string_field(example="route-123"),
-        "owner_server": string_field(required=True, example="edge-a"),
-        "cidr": string_field(required=True, example="10.55.0.0/24"),
-        "via_link_uuid": string_field(example="link-123"),
-        "description": string_field(example="Branch LAN"),
-        "enabled": boolean_field(example=True),
-    }
-)
-
-POLICY_FIELD = object_field(
-    properties={
-        "uuid": string_field(example="policy-123"),
-        "name": string_field(required=True, example="allow-branch-lan"),
-        "source_kind": string_field(enum=MESH_SOURCE_KIND_ENUM, example="server"),
-        "source_id": string_field(example="edge-a"),
-        "destinations": string_list_field(required=True),
-        "action": string_field(enum=MESH_ACTION_ENUM, example="allow"),
-        "priority": integer_field(example=100),
-        "description": string_field(example="Allow branch traffic"),
-        "enabled": boolean_field(example=True),
-    }
-)
-
-MESH_PAYLOAD_FIELD = object_field(
-    additional_properties=True,
-    properties={
-        "topologies": array_field(items=TOPOLOGY_FIELD, example=[TOPOLOGY_FIELD.example_payload()]),
-        "vpn_links": array_field(items=LINK_FIELD, example=[LINK_FIELD.example_payload()]),
-        "route_advertisements": array_field(items=ROUTE_FIELD, example=[ROUTE_FIELD.example_payload()]),
-        "access_policies": array_field(items=POLICY_FIELD, example=[POLICY_FIELD.example_payload()]),
     }
 )
 
@@ -553,34 +489,6 @@ API_REQUEST_SCHEMAS: Dict[str, ApiRequestSchema] = {
     }),
     "api_delete_wireguard_peer": ApiRequestSchema(fields={
         "async": boolean_field(example=False),
-    }),
-    "api_mesh_create_topology": ApiRequestSchema(fields=TOPOLOGY_FIELD.properties),
-    "api_mesh_update_topology": ApiRequestSchema(fields={
-        **TOPOLOGY_FIELD.properties,
-        "name": string_field(example="core-mesh"),
-        "server_ids": string_list_field(),
-    }),
-    "api_mesh_delete_topology": empty_schema(),
-    "api_mesh_create_link": ApiRequestSchema(fields=LINK_FIELD.properties),
-    "api_mesh_update_link": ApiRequestSchema(fields=LINK_FIELD.properties),
-    "api_mesh_delete_link": empty_schema(),
-    "api_mesh_create_route": ApiRequestSchema(fields=ROUTE_FIELD.properties),
-    "api_mesh_update_route": ApiRequestSchema(fields=ROUTE_FIELD.properties),
-    "api_mesh_delete_route": empty_schema(),
-    "api_mesh_create_policy": ApiRequestSchema(fields=POLICY_FIELD.properties),
-    "api_mesh_update_policy": ApiRequestSchema(fields=POLICY_FIELD.properties),
-    "api_mesh_delete_policy": empty_schema(),
-    "api_mesh_dry_run": ApiRequestSchema(fields={
-        "mesh": MESH_PAYLOAD_FIELD,
-    }),
-    "api_mesh_import": ApiRequestSchema(fields={
-        "mesh": object_field(required=True, properties=MESH_PAYLOAD_FIELD.properties, additional_properties=True),
-        "allow_conflicts": boolean_field(example=False),
-    }),
-    "api_mesh_policy_simulate": ApiRequestSchema(fields={
-        "source_kind": string_field(required=True, enum=MESH_SOURCE_KIND_ENUM, example="server"),
-        "source_id": string_field(required=True, example="edge-a"),
-        "destination": string_field(required=True, example="10.55.0.10"),
     }),
     "api_system_restore": ApiRequestSchema(fields={
         "backup": object_field(required=True, additional_properties=True, example={"format": "arpvpn-backup-v1", "files": {}}),

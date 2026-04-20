@@ -19,6 +19,4 @@ PYTHON_BIN="$PYTHON_BIN" ./scripts/check_api_artifacts.sh
   arpvpn/tests/default/test_wireguard_api.py \
   arpvpn/tests/default/test_statistics_api.py \
   arpvpn/tests/default/test_tls_api.py \
-  arpvpn/tests/default/test_system_api.py \
-  arpvpn/tests/default/test_mesh_planner.py \
-  arpvpn/tests/default/test_mesh_api.py
+  arpvpn/tests/default/test_system_api.py

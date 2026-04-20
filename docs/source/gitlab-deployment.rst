@@ -71,7 +71,7 @@ The repository also runs ``api_contract_tests`` as a non-blocking CI job.
 - Validates ``docs/source/api/openapi.v1.yaml``.
 - Runs the focused API or security regression subset from ``scripts/run-api-contract-tests.sh``.
 - Keeps the existing ``unit_tests`` subset as the hard gate while still reporting API drift early.
-- Supports feature-flagged rollout of API groups through environment variables such as ``ARPVPN_FEATURE_API_MESH=0`` or ``ARPVPN_FEATURE_API_WIREGUARD=0``.
+- Supports feature-flagged rollout of API groups through environment variables such as ``ARPVPN_FEATURE_API_WIREGUARD=0``.
 
 Deploying ARPVPN with compose
 -----------------------------
