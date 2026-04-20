@@ -7399,7 +7399,7 @@ def provision_peer_for_created_client(created_user: User, payload: Dict[str, Any
     peer_form.interface.choices = AddPeerForm.get_choices()
     peer_form.interface.data = parse_optional_string(payload.get("peer_interface"))
     peer_form.ipv4.data = parse_optional_string(payload.get("peer_ipv4"))
-    peer_form.dns1.data = parse_optional_string(payload.get("peer_dns1"), "8.8.8.8")
+    peer_form.dns1.data = parse_optional_string(payload.get("peer_dns1")) or "8.8.8.8"
     peer_form.dns2.data = parse_optional_string(payload.get("peer_dns2"))
     peer_form.site_to_site_subnets.data = payload.get("peer_site_to_site_subnets", "")
     if not peer_form.interface.choices:
