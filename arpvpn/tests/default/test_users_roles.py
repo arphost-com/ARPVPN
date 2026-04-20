@@ -142,7 +142,8 @@ def test_support_can_create_client_with_vpn_connection(client):
     assert peer.name == "clientvpn"
     assert peer.interface.name == iface.name
     assert b"clientvpn" in response.data
-    assert b"No connection provisioned" not in response.data
+    assert response.data.count(b"clientvpn") >= 1
+    assert bytes(f"/wireguard/peers/{peer.id}", "utf-8") in response.data
 
 
 def test_support_cannot_create_network_interfaces(client):

@@ -3978,6 +3978,17 @@ paths:
               password: change-me
               role: client
               tenant_id: tenant-123
+              create_peer: true
+              peer_interface: wg0
+              peer_mode: client
+              peer_enabled: true
+              peer_nat: false
+              peer_full_tunnel: false
+              peer_description: Provisioned via API
+              peer_ipv4: 10.10.0.2/32
+              peer_dns1: 8.8.8.8
+              peer_dns2: 1.1.1.1
+              peer_site_to_site_subnets: []
     get:
       tags:
       - Tenants
@@ -5335,6 +5346,45 @@ components:
         tenant_id:
           type: string
           example: tenant-123
+        create_peer:
+          type: boolean
+          example: true
+        peer_interface:
+          type: string
+          example: wg0
+        peer_mode:
+          type: string
+          enum:
+          - client
+          - site_to_site
+          example: client
+        peer_enabled:
+          type: boolean
+          example: true
+        peer_nat:
+          type: boolean
+          example: false
+        peer_full_tunnel:
+          type: boolean
+          example: false
+        peer_description:
+          type: string
+          example: Provisioned via API
+        peer_ipv4:
+          type: string
+          example: 10.10.0.2/32
+        peer_dns1:
+          type: string
+          example: 8.8.8.8
+        peer_dns2:
+          type: string
+          example: 1.1.1.1
+        peer_site_to_site_subnets:
+          oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
       additionalProperties: false
       required:
       - username
@@ -5344,6 +5394,17 @@ components:
         password: change-me
         role: client
         tenant_id: tenant-123
+        create_peer: true
+        peer_interface: wg0
+        peer_mode: client
+        peer_enabled: true
+        peer_nat: false
+        peer_full_tunnel: false
+        peer_description: Provisioned via API
+        peer_ipv4: 10.10.0.2/32
+        peer_dns1: 8.8.8.8
+        peer_dns2: 1.1.1.1
+        peer_site_to_site_subnets: []
     api_create_wireguard_interfaceRequest:
       type: object
       properties:
