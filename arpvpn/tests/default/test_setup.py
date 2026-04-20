@@ -146,6 +146,20 @@ def test_post_ko(client):
     assert is_http_success(response.status_code)
     assert "Setup".encode() in response.data
 
+    response = client.post(url, data={
+        "app_endpoint": 1, "app_iptables_bin": "/dev/null", "app_wg_bin": "/dev/null",
+        "app_wg_quick_bin": "", "log_overwrite": False, "traffic_enabled": True, "web_tls_mode": "http"
+    })
+    assert is_http_success(response.status_code)
+    assert "Setup".encode() in response.data
+
+    response = client.post(url, data={
+        "app_endpoint": "vpn.example.com", "app_iptables_bin": 1231, "app_wg_bin": "/dev/null",
+        "app_wg_quick_bin": "", "log_overwrite": False, "traffic_enabled": True, "web_tls_mode": "http"
+    })
+    assert is_http_success(response.status_code)
+    assert "Setup".encode() in response.data
+
 
 def test_config_manager_allows_fresh_signup_when_credentials_file_is_unreadable(tmp_path, monkeypatch):
     previous_workdir = global_properties.workdir
@@ -162,17 +176,3 @@ def test_config_manager_allows_fresh_signup_when_credentials_file_is_unreadable(
         assert os.path.exists(tmp_path / "arpvpn.yaml")
     finally:
         global_properties.workdir = previous_workdir
-
-    response = client.post(url, data={
-        "app_endpoint": 1, "app_iptables_bin": "/dev/null", "app_wg_bin": "/dev/null",
-        "app_wg_quick_bin": "", "log_overwrite": False, "traffic_enabled": True, "web_tls_mode": "http"
-    })
-    assert is_http_success(response.status_code)
-    assert "Setup".encode() in response.data
-
-    response = client.post(url, data={
-        "app_endpoint": "vpn.example.com", "app_iptables_bin": 1231, "app_wg_bin": "/dev/null",
-        "app_wg_quick_bin": "", "log_overwrite": False, "traffic_enabled": True, "web_tls_mode": "http"
-    })
-    assert is_http_success(response.status_code)
-    assert "Setup".encode() in response.data
