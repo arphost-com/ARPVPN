@@ -1,15 +1,78 @@
 import os
 from ipaddress import IPv4Address
 from logging import debug, warning, error
-from typing import Dict, Type, Any
+from typing import Any, Dict, Mapping, Type
 from urllib.request import Request, urlopen
 
-from yamlable import yaml_info, Y
+from yamlable import YamlAble, yaml_info, Y
 
+from arpvpn.common.models.enhanced_dict import EnhancedDict, K, V
 from arpvpn.common.properties import global_properties
 from arpvpn.common.utils.network import get_default_gateway
 from arpvpn.common.utils.system import Command
 from arpvpn.core.config.base import BaseConfig
+
+
+class _LegacyMeshDict(EnhancedDict, YamlAble, Mapping[K, V]):
+    """Compatibility shim for legacy mesh YAML tags found in older config files."""
+
+    @classmethod
+    def __from_yaml_dict__(cls, dct, yaml_tag=""):  # type: ignore[override]
+        legacy_dict = cls()
+        legacy_dict.update(dct or {})
+        return legacy_dict
+
+    def __to_yaml_dict__(self):  # type: (...) -> Dict[str, Any]
+        return self
+
+
+@yaml_info(yaml_tag="mesh_access_policies")
+class MeshAccessPolicies(_LegacyMeshDict):
+    pass
+
+
+@yaml_info(yaml_tag="mesh_route_advertisements")
+class MeshRouteAdvertisements(_LegacyMeshDict):
+    pass
+
+
+@yaml_info(yaml_tag="mesh_topologies")
+class MeshTopologies(_LegacyMeshDict):
+    pass
+
+
+@yaml_info(yaml_tag="mesh_vpn_links")
+class MeshVpnLinks(_LegacyMeshDict):
+    pass
+
+
+@yaml_info(yaml_tag="mesh_control_plane")
+class MeshControlPlane(BaseConfig):
+    def __init__(self):
+        self.access_policies = MeshAccessPolicies()
+        self.route_advertisements = MeshRouteAdvertisements()
+        self.topologies = MeshTopologies()
+        self.vpn_links = MeshVpnLinks()
+
+    def __to_yaml_dict__(self):  # type: (...) -> Dict[str, Any]
+        return {
+            "access_policies": self.access_policies,
+            "route_advertisements": self.route_advertisements,
+            "topologies": self.topologies,
+            "vpn_links": self.vpn_links,
+        }
+
+    @classmethod
+    def __from_yaml_dict__(cls, dct, yaml_tag=""):  # type: ignore[override]
+        mesh = MeshControlPlane()
+        dct = dct or {}
+        mesh.access_policies = dct.get("access_policies", mesh.access_policies)
+        mesh.route_advertisements = dct.get("route_advertisements", mesh.route_advertisements)
+        mesh.topologies = dct.get("topologies", mesh.topologies)
+        mesh.vpn_links = dct.get("vpn_links", mesh.vpn_links)
+        return mesh
+
+
 @yaml_info(yaml_tag='wireguard')
 class WireguardConfig(BaseConfig):
     __IP_RETRIEVER_URL = "https://api.ipify.org"
