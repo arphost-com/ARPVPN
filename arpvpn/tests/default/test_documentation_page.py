@@ -21,3 +21,18 @@ def test_documentation_page_contains_tls_and_api_guidance(client):
     assert is_http_success(response.status_code)
     assert b"Web Access and TLS" in response.data
     assert b"API and Automation" in response.data
+
+
+def test_documentation_page_contains_site_to_site_guide(client):
+    login(client)
+    response = client.get("/documentation")
+    assert is_http_success(response.status_code)
+    assert b"Site-to-site Quick Guide" in response.data
+    assert b"Remote site subnets" in response.data
+
+
+def test_themes_page_no_longer_shows_site_to_site_guide(client):
+    login(client)
+    response = client.get("/themes")
+    assert is_http_success(response.status_code)
+    assert b"Site-to-site Quick Guide" not in response.data
