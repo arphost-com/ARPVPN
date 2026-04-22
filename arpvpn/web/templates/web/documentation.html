@@ -10,7 +10,6 @@
                 </div>
                 <div class="page-header-actions">
                     <a href="#tls-access" class="btn btn-outline-secondary btn-sm">TLS and access</a>
-                    <a href="#api-automation" class="btn btn-outline-secondary btn-sm">API</a>
                 </div>
             </div>
 
@@ -66,6 +65,25 @@
                 </div>
             </div>
 
+            <div class="card mb-4 panel-glass">
+                <div class="card-header">
+                    <i class="fas fa-book mr-1"></i>
+                    Site-to-site Quick Guide
+                </div>
+                <div class="card-body">
+                    <ol class="mb-2 pl-3">
+                        <li>Create or choose a WireGuard interface in <a href="/wireguard">WireGuard</a>.</li>
+                        <li>Add a peer and set <strong>Mode</strong> to <strong>Site-to-site</strong>.</li>
+                        <li>Set the tunnel IP for the remote gateway peer.</li>
+                        <li>Add remote LANs (CIDR) in <strong>Remote site subnets</strong>.</li>
+                        <li>Download the generated config and apply it on the remote gateway.</li>
+                        <li>Ensure both firewalls allow UDP on the interface listen port.</li>
+                    </ol>
+                    <small class="text-muted">
+                        ARPVPN will automatically include the remote site subnets in server-side `AllowedIPs`.
+                    </small>
+                </div>
+            </div>
             {% if current_user_is_staff and not is_impersonating %}
             <div class="card mb-4 panel-glass" id="wireguard-operations">
                 <div class="card-header">
@@ -74,23 +92,13 @@
                 </div>
                 <div class="card-body">
                     <div class="row">
-                        <div class="col-lg-6 mb-3 mb-lg-0">
+                        <div class="col-lg-12">
                             <h5 class="mb-3">Client VPN workflow</h5>
                             <ol class="pl-3 mb-0">
                                 <li>Open <a href="/wireguard">WireGuard</a> and create an interface if one does not exist.</li>
                                 <li>Add a peer in <strong>Client</strong> mode.</li>
                                 <li>Download the generated peer config and import it into the client device.</li>
                                 <li>Use <a href="/statistics">Statistics</a> to verify handshake age, traffic, and alerts.</li>
-                            </ol>
-                        </div>
-                        <div class="col-lg-6">
-                            <h5 class="mb-3">Site-to-site workflow</h5>
-                            <ol class="pl-3 mb-0">
-                                <li>Create or select an interface on the ARPVPN server.</li>
-                                <li>Add a peer and set <strong>Mode</strong> to <strong>Site-to-site</strong>.</li>
-                                <li>Enter the remote gateway tunnel IP and the remote LAN subnets in CIDR format.</li>
-                                <li>Apply the generated config on the remote gateway and allow forwarding between LAN and WireGuard.</li>
-                                <li>Validate traffic to a host behind the remote site and check the statistics page for history.</li>
                             </ol>
                         </div>
                     </div>

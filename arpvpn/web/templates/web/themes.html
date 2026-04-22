@@ -33,30 +33,6 @@
                 </div>
             </div>
 
-            <div class="card mb-4 panel-glass">
-                <div class="card-header">
-                    <i class="fas fa-book mr-1"></i>
-                    Site-to-site Quick Guide
-                </div>
-                <div class="card-body">
-                    <ol class="mb-2 pl-3">
-                        <li>Create or choose a WireGuard interface in <a href="/wireguard">WireGuard</a>.</li>
-                        <li>Add a peer and set <strong>Mode</strong> to <strong>Site-to-site</strong>.</li>
-                        <li>Set the tunnel IP for the remote gateway peer.</li>
-                        <li>Add remote LANs (CIDR) in <strong>Remote site subnets</strong>.</li>
-                        <li>Download the generated config and apply it on the remote gateway.</li>
-                        <li>Ensure both firewalls allow UDP on the interface listen port.</li>
-                    </ol>
-                    <small class="text-muted">
-                        ARPVPN will automatically include the remote site subnets in server-side `AllowedIPs`.
-                    </small>
-                    <div class="mt-3">
-                        <a href="/documentation#wireguard-operations" class="btn btn-outline-primary btn-sm">
-                            WireGuard operations guide
-                        </a>
-                    </div>
-                </div>
-            </div>
         </div>
     </main>
 
