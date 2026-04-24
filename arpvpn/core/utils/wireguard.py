@@ -17,7 +17,7 @@ def _parse_ip_link_is_up(stdout: str) -> bool:
 
 def is_wg_iface_up(iface_name: str) -> bool:
     # Prefer `ip link` because it generally works without elevated privileges.
-    ip_bin = which("ip")
+    ip_bin = "ip"
     if not ip_bin:
         ip_result = None
     else:

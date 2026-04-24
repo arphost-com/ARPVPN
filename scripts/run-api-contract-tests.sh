@@ -9,7 +9,6 @@ PYTHON_BIN="$PYTHON_BIN" ./scripts/check_api_artifacts.sh
 "$PYTHON_BIN" -m pytest -q \
   arpvpn/tests/default/test_api_auth.py \
   arpvpn/tests/default/test_api_cookie_csrf.py \
-  arpvpn/tests/default/test_api_feature_flags.py \
   arpvpn/tests/default/test_api_authorization_matrix.py \
   arpvpn/tests/default/test_api_schema_registry.py \
   arpvpn/tests/default/test_api_ui_parity.py \

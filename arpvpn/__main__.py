@@ -242,6 +242,20 @@ def _https_redirect_host() -> str:
                 fallback_ip,
             )
         return fallback_ip
+    request_host = (request.host or "").strip()
+    if request_host.startswith("[") and "]" in request_host:
+        request_host = request_host[1:request_host.index("]")]
+    else:
+        request_host = request_host.split(":", 1)[0].strip()
+    if _is_valid_redirect_host(request_host):
+        if configured_host:
+            warning(
+                "Configured TLS server name '%s' is not a valid redirect host. "
+                "Falling back to request host '%s'.",
+                configured_host,
+                request_host,
+            )
+        return request_host
     return configured_host
 
 
