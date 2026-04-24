@@ -1,11 +1,13 @@
 import os
 from datetime import datetime
 from typing import Dict
+import json
 
 import pytest
 
 from arpvpn.core.drivers.traffic_storage_driver import TrafficData
 from arpvpn.core.drivers.traffic_storage_driver_json import TrafficStorageDriverJson
+from arpvpn.core.drivers import traffic_storage_driver_json as traffic_driver_json_module
 
 
 class TrafficStorageDriverJsonMock(TrafficStorageDriverJson):
@@ -47,8 +49,9 @@ class TestJsonTrafficDriver:
     @pytest.fixture(autouse=True)
     def cleanup(self):
         yield
-        if self.driver and os.path.exists(self.driver.filepath):
-            os.remove(self.driver.filepath)
+        driver = getattr(self, "driver", None)
+        if driver and os.path.exists(driver.filepath):
+            os.remove(driver.filepath)
 
     def test_load_no_data(self):
         self.driver = TrafficStorageDriverJson()
@@ -79,3 +82,88 @@ class TestJsonTrafficDriver:
         data = self.driver.load_data()
         assert data is not None
         assert len(data) > 0
+
+    def test_store_data_keeps_devices_after_interface_entries(self, monkeypatch, tmp_path):
+        class OrderedTrafficDriver(TrafficStorageDriverJson):
+            def __init__(self):
+                super().__init__()
+
+            def get_session_and_stored_data(self):
+                timestamp = datetime.strptime("15/09/2021 15:24:34", self.DEFAULT_TIMESTAMP_FORMAT)
+                return {
+                    timestamp: {
+                        "peer-before": TrafficData(1, 2),
+                        "iface-uuid": TrafficData(3, 4),
+                        "peer-after": TrafficData(5, 6),
+                    }
+                }
+
+        monkeypatch.setattr(traffic_driver_json_module, "interfaces", {"iface-uuid": object()})
+        monkeypatch.setattr(
+            traffic_driver_json_module.global_properties,
+            "join_workdir",
+            lambda filename: str(tmp_path / filename),
+        )
+
+        driver = OrderedTrafficDriver()
+        driver.save_data()
+
+        with open(driver.filepath, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+
+        stored_devices = payload["15/09/2021 15:24:34"]
+        assert "peer-before" in stored_devices
+        assert "peer-after" in stored_devices
+        assert "iface-uuid" not in stored_devices
+
+    def test_load_data_keeps_multiple_interfaces_separate(self, monkeypatch, tmp_path):
+        class DummyInterface:
+            def __init__(self, uuid: str):
+                self.uuid = uuid
+
+        class DummyPeer:
+            def __init__(self, interface):
+                self.interface = interface
+
+        iface_main = DummyInterface("iface-main")
+        iface_extra = DummyInterface("iface-extra")
+        peer_main = DummyInterface("peer-main")
+        peer_extra = DummyInterface("peer-extra")
+
+        monkeypatch.setattr(
+            traffic_driver_json_module,
+            "interfaces",
+            {iface_main.uuid: object(), iface_extra.uuid: object()},
+        )
+        monkeypatch.setattr(
+            traffic_driver_json_module,
+            "get_all_peers",
+            lambda: {
+                peer_main.uuid: DummyPeer(iface_main),
+                peer_extra.uuid: DummyPeer(iface_extra),
+            },
+        )
+        monkeypatch.setattr(
+            traffic_driver_json_module.global_properties,
+            "join_workdir",
+            lambda filename: str(tmp_path / filename),
+        )
+
+        driver = TrafficStorageDriverJson()
+        with open(driver.filepath, "w", encoding="utf-8") as handle:
+            json.dump(
+                {
+                    "15/09/2021 15:24:34": {
+                        peer_main.uuid: {"rx": 10, "tx": 20},
+                        peer_extra.uuid: {"rx": 30, "tx": 40},
+                    }
+                },
+                handle,
+            )
+
+        loaded = driver.load_data()
+        sample = loaded[datetime.strptime("15/09/2021 15:24:34", driver.DEFAULT_TIMESTAMP_FORMAT)]
+        assert sample[iface_main.uuid].rx == 20
+        assert sample[iface_main.uuid].tx == 10
+        assert sample[iface_extra.uuid].rx == 40
+        assert sample[iface_extra.uuid].tx == 30

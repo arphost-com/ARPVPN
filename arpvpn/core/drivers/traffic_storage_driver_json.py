@@ -38,7 +38,7 @@ class TrafficStorageDriverJson(TrafficStorageDriver):
                 for device, traffic_data in data.items():
                     if device in interfaces.keys():
                         # Do not store interface data, since it will be calculated from peers data
-                        break
+                        continue
                     device_data[device] = {"rx": traffic_data.rx, "tx": traffic_data.tx}
                 json_data[timestamp.strftime(self.timestamp_format)] = device_data
             json.dump(json_data, f)
