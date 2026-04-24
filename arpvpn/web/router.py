@@ -46,6 +46,9 @@ from arpvpn.core.drivers.traffic_storage_driver import TrafficData
 from arpvpn.core.exceptions import WireguardError
 from arpvpn.core.managers.config import config_manager
 from arpvpn.core.managers.tls import tls_manager
+# Ensure scheduled traffic collection jobs are registered on router import,
+# even when the settings/forms modules are never loaded during this process.
+from arpvpn.core.managers import traffic_storage as _traffic_storage  # noqa: F401
 from arpvpn.core.models import interfaces, Interface, get_all_peers, Peer
 from arpvpn.core.utils.wireguard import is_wg_iface_up
 from arpvpn.web.client import clients, Client

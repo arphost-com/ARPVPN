@@ -19,6 +19,9 @@ from arpvpn.common.models.user import users, User
 from arpvpn.common.properties import global_properties
 from arpvpn.common.utils.system import try_makedir
 from arpvpn.core.managers.cron import cron_manager
+# Import traffic storage manager at startup so its scheduled jobs are always
+# registered before the cron thread begins (including uwsgi boot paths).
+from arpvpn.core.managers import traffic_storage  # noqa: F401
 from arpvpn.core.managers.wireguard import wireguard_manager
 from arpvpn.web.static.assets.resources import APP_NAME
 
