@@ -137,7 +137,7 @@ def test_admin_dashboard_contains_rrd_links_for_connections(client):
 def test_admin_dashboard_shows_interface_rrd_graphs(client):
     create_user("admin", "admin", User.ROLE_ADMIN)
     iface0, peer0 = setup_connection(owner_name="client01", iface_name="wg0")
-    iface1, peer1 = setup_connection(owner_name="client02", iface_name="wg1")
+    iface1, peer1 = setup_connection(owner_name="client02", iface_name="wg1", peer_name="tester")
     login(client, "admin", "admin")
 
     response = client.get("/dashboard")
@@ -145,10 +145,19 @@ def test_admin_dashboard_shows_interface_rrd_graphs(client):
     assert b"Interface throughput" in response.data
     assert b"wg0" in response.data
     assert b"wg1" in response.data
+    assert b"Current RRD snapshots" in response.data
+    assert b"Peer state distribution" in response.data
     assert f"/traffic/rrd/{iface0.uuid}.png?window=24h".encode() in response.data
     assert f"/traffic/rrd/{iface1.uuid}.png?window=24h".encode() in response.data
-    assert f"/traffic/rrd/{peer0.uuid}.png?window=24h".encode() in response.data
-    assert f"/traffic/rrd/{peer1.uuid}.png?window=24h".encode() in response.data
+
+    interface_section = response.data.split(b"Interface throughput", 1)[1].split(b"Peer state distribution", 1)[0]
+    peer_snapshot_section = response.data.split(b"Current RRD snapshots", 1)[1].split(b"Peer health and session traffic", 1)[0]
+    assert b"tester" not in interface_section
+    assert f"/traffic/rrd/{peer0.uuid}.png?window=24h".encode() not in interface_section
+    assert f"/traffic/rrd/{peer1.uuid}.png?window=24h".encode() not in interface_section
+    assert b"tester" in peer_snapshot_section
+    assert f"/traffic/rrd/{peer0.uuid}.png?window=24h".encode() in peer_snapshot_section
+    assert f"/traffic/rrd/{peer1.uuid}.png?window=24h".encode() in peer_snapshot_section
 
 
 def test_client_dashboard_contains_rrd_links_for_owned_connections(client):

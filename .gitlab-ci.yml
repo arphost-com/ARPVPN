@@ -75,7 +75,8 @@ unit_tests:
       "
       EXISTING_TARGETS=""
       for target in $UNIT_TEST_TARGETS; do
-        if [ -e "$target" ]; then
+        target_path="${target%%::*}"
+        if [ -e "$target_path" ]; then
           EXISTING_TARGETS="$EXISTING_TARGETS $target"
         else
           echo "Skipping missing unit test target: $target"

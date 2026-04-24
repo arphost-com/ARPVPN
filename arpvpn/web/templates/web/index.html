@@ -95,16 +95,16 @@
                             Interface throughput
                         </div>
                         <div class="card-body">
-                            {% if dashboard_rrd_rows %}
+                            {% if interface_rrd_rows %}
                                 <div class="row">
-                                    {% for item in dashboard_rrd_rows %}
+                                    {% for item in interface_rrd_rows %}
                                         <div class="col-12 col-lg-6 mb-3">
                                             <div class="border rounded p-2 h-100">
                                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                                     <div>
                                                         <strong>{{ item.name }}</strong>
                                                         <div class="text-muted small">
-                                                            {{ item.type_label }}{% if item.parent_name != EMPTY_FIELD %} · {{ item.parent_name }}{% endif %}
+                                                            {{ item.session_rx_human }} RX / {{ item.session_tx_human }} TX
                                                         </div>
                                                     </div>
                                                     <a href="{{ item.rrd_page_url }}">Open</a>
@@ -123,7 +123,7 @@
                                     {% endfor %}
                                 </div>
                             {% else %}
-                                <span class="text-muted">No interface or peer history available yet.</span>
+                                <span class="text-muted">No interface history available yet.</span>
                             {% endif %}
                         </div>
                         <div class="card-footer">
@@ -138,62 +138,51 @@
                             Peer state distribution
                         </div>
                         <div class="card-body">
-                            <canvas id="peerStateChart" width="100%"></canvas>
-                            <script>
-                                const peerStateCanvas = document.getElementById("peerStateChart");
-                                const peerStateLabels = ["Active", "Stale", "Offline", "Never seen"];
-                                const peerStateCounts = [
-                                    {{ peer_runtime["totals"]["active_peers"] }},
-                                    {{ peer_runtime["totals"]["stale_peers"] }},
-                                    {{ peer_runtime["totals"]["offline_peers"] }},
-                                    {{ peer_runtime["totals"]["never_seen_peers"] }}
-                                ];
-                                let peerStateChartInstance = null;
-
-                                function cssVar(name, fallback) {
-                                    const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-                                    return value || fallback;
-                                }
-
-                                function renderPeerStateChart() {
-                                    const stateData = {
-                                        labels: peerStateLabels,
-                                        datasets: [{
-                                            data: peerStateCounts,
-                                            backgroundColor: [
-                                                cssVar("--theme-success", "#1ecb81"),
-                                                cssVar("--theme-warning", "#f2ad4c"),
-                                                cssVar("--theme-danger", "#eb5a67"),
-                                                cssVar("--theme-text-muted", "#7f8da6")
-                                            ],
-                                            borderWidth: 0
-                                        }]
-                                    };
-                                    if (peerStateChartInstance) {
-                                        peerStateChartInstance.destroy();
-                                    }
-                                    peerStateChartInstance = new Chart(peerStateCanvas, {
-                                        type: "doughnut",
-                                        data: stateData,
-                                        options: {
-                                            cutout: "62%",
-                                            plugins: {
-                                                legend: { position: "bottom" },
-                                                tooltip: {
-                                                    callbacks: {
-                                                        label: function(context) {
-                                                            return context.label + ": " + context.formattedValue;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    });
-                                }
-
-                                renderPeerStateChart();
-                                window.addEventListener("arpvpn:theme-change", renderPeerStateChart);
-                            </script>
+                            {% set total_peers = peer_runtime["totals"]["peers"] %}
+                            {% set active_peers = peer_runtime["totals"]["active_peers"] %}
+                            {% set stale_peers = peer_runtime["totals"]["stale_peers"] %}
+                            {% set offline_peers = peer_runtime["totals"]["offline_peers"] %}
+                            {% set never_seen_peers = peer_runtime["totals"]["never_seen_peers"] %}
+                            {% if total_peers %}
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between align-items-end mb-2">
+                                        <div>
+                                            <div class="h3 mb-0">{{ active_peers }}/{{ total_peers }}</div>
+                                            <div class="text-muted small">active peers right now</div>
+                                        </div>
+                                        <div class="text-right">
+                                            <div class="h5 mb-0">{{ peer_runtime["totals"]["session_total_human"] }}</div>
+                                            <div class="text-muted small">session traffic</div>
+                                        </div>
+                                    </div>
+                                    <div class="progress" style="height: 0.85rem;">
+                                        <div class="progress-bar bg-success" role="progressbar" style="width: {{ (active_peers * 100 / total_peers) | round(1) }}%;" aria-valuenow="{{ active_peers }}" aria-valuemin="0" aria-valuemax="{{ total_peers }}"></div>
+                                        <div class="progress-bar bg-warning" role="progressbar" style="width: {{ (stale_peers * 100 / total_peers) | round(1) }}%;" aria-valuenow="{{ stale_peers }}" aria-valuemin="0" aria-valuemax="{{ total_peers }}"></div>
+                                        <div class="progress-bar bg-danger" role="progressbar" style="width: {{ (offline_peers * 100 / total_peers) | round(1) }}%;" aria-valuenow="{{ offline_peers }}" aria-valuemin="0" aria-valuemax="{{ total_peers }}"></div>
+                                        <div class="progress-bar bg-secondary" role="progressbar" style="width: {{ (never_seen_peers * 100 / total_peers) | round(1) }}%;" aria-valuenow="{{ never_seen_peers }}" aria-valuemin="0" aria-valuemax="{{ total_peers }}"></div>
+                                    </div>
+                                </div>
+                                <div class="row text-center">
+                                    <div class="col-6 col-md-3 mb-3">
+                                        <div class="text-success h4 mb-0">{{ active_peers }}</div>
+                                        <div class="text-muted small">Active</div>
+                                    </div>
+                                    <div class="col-6 col-md-3 mb-3">
+                                        <div class="text-warning h4 mb-0">{{ stale_peers }}</div>
+                                        <div class="text-muted small">Stale</div>
+                                    </div>
+                                    <div class="col-6 col-md-3 mb-3">
+                                        <div class="text-danger h4 mb-0">{{ offline_peers }}</div>
+                                        <div class="text-muted small">Offline</div>
+                                    </div>
+                                    <div class="col-6 col-md-3 mb-3">
+                                        <div class="text-muted h4 mb-0">{{ never_seen_peers }}</div>
+                                        <div class="text-muted small">Never seen</div>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <span class="text-muted">No peers configured yet.</span>
+                            {% endif %}
                         </div>
                         <div class="card-footer">
                           <small class="text-muted">State calculated from last handshake timestamps.</small>

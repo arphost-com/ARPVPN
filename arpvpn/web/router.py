@@ -826,15 +826,14 @@ def index():
     visible_interfaces = get_visible_interfaces_for_current_user()
     sample_counts = get_connection_sample_counts()
     statistics_rows = build_statistics_rows(visible_interfaces, peer_runtime, traffic, sample_counts)
-    dashboard_rrd_rows = []
+    interface_rrd_rows = []
     for row in statistics_rows:
-        if row["type"] not in {"interface", "peer"}:
+        if row["type"] != "interface":
             continue
         enriched_row = dict(row)
         enriched_row["rrd_page_url"] = url_for("router.connection_rrd_graph", uuid=row["uuid"], window="24h")
         enriched_row["rrd_image_url"] = url_for("router.connection_rrd_graph_png", uuid=row["uuid"], window="24h")
-        dashboard_rrd_rows.append(enriched_row)
-    dashboard_rrd_rows = dashboard_rrd_rows[:8]
+        interface_rrd_rows.append(enriched_row)
 
     interface_statuses = [iface.status for iface in visible_interfaces.values()]
     interface_totals = {
@@ -849,7 +848,7 @@ def index():
         "interface_totals": interface_totals,
         "peer_runtime": peer_runtime,
         "top_peers": peer_runtime["rows"][:10],
-        "dashboard_rrd_rows": dashboard_rrd_rows,
+        "interface_rrd_rows": interface_rrd_rows,
         "last_update": datetime.now().strftime("%H:%M"),
         "EMPTY_FIELD": EMPTY_FIELD,
         "traffic_config": traffic_config
