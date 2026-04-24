@@ -2,6 +2,8 @@ default:
   image: python:3.11-slim
   tags:
     - docker02
+  before_script:
+    - cd "$CI_PROJECT_DIR"
 
 stages:
   - test
@@ -39,7 +41,7 @@ unit_tests:
     - poetry install --with dev --no-interaction --no-ansi
     - python3 scripts/validate_openapi.py
     - ./scripts/check_api_artifacts.sh
-    - pytest -q \
+    - python3 -m pytest -q \
       arpvpn/tests/test_server.py \
       arpvpn/tests/default/test_setup.py \
       arpvpn/tests/default/test_about_page.py \
@@ -83,7 +85,7 @@ integration_tests_env:
     - pip install --no-cache-dir poetry==1.8.3
     - poetry config virtualenvs.create false
     - poetry install --with dev --no-interaction --no-ansi
-    - pytest -q arpvpn/tests
+    - python3 -m pytest -q arpvpn/tests
   rules:
     - if: '$RUN_ENV_INTEGRATION_TESTS == "1"'
     - when: never
