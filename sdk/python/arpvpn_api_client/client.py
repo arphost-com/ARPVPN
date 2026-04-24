@@ -7,15 +7,15 @@ import requests
 
 
 class ArpvpnApiClient:
-    def __init__(self, base_url: str, bearer_token: Optional[str] = None, timeout: int = 30, verify: bool = True, session: Optional[requests.Session] = None):
+    def __init__(self, base_url: str, bearer_token: str = "", timeout: int = 30, verify: bool = True, session: Optional[requests.Session] = None):
         self.base_url = base_url.rstrip("/") + "/"
         self.timeout = timeout
         self.verify = verify
         self.session = session or requests.Session()
-        self.bearer_token = bearer_token or None
+        self.bearer_token = bearer_token
 
-    def set_bearer_token(self, token: Optional[str]):
-        self.bearer_token = token or None
+    def set_bearer_token(self, token: str):
+        self.bearer_token = token
 
     def _request(self, method: str, path: str, *, params: Optional[Dict[str, Any]] = None, payload: Optional[Dict[str, Any]] = None, headers: Optional[Dict[str, str]] = None) -> Any:
         request_headers: Dict[str, str] = dict(headers or {})
