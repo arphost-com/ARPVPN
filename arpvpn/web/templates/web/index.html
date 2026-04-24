@@ -1,11 +1,5 @@
 {% extends 'web/web-main.html' %}
 
-{% block additional_prioritary_scripts %}
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.5.1/dist/chart.min.js" crossorigin="anonymous"></script>
-    <script src="../../static/js/libs/color-scheme.min.js"></script>
-    <script src="../../static/js/libs/chartUtils.js"></script>
-{% endblock %}
-
 {% block additional_styles %}
     <link href="https://cdn.datatables.net/1.10.20/css/dataTables.bootstrap4.min.css" rel="stylesheet" crossorigin="anonymous" />
 {% endblock %}
@@ -101,85 +95,39 @@
                             Interface throughput
                         </div>
                         <div class="card-body">
-                            <canvas id="interfacesChart" width="100%"></canvas>
-                            <script>
-                                const interfacesCanvas = document.getElementById("interfacesChart");
-                                const interfaceLabels = {{ interfaces_chart["labels"] | tojson }};
-                                const rawInterfaceDatasets = {{ interfaces_chart["datasets"] | tojson }};
-                                let interfacesChartInstance = null;
-
-                                function buildInterfaceDatasets() {
-                                    const palette = chartUtils.getTrafficPalette();
-                                    const styleSet = [
-                                        {line: palette.primary, fill: palette.primarySoft},
-                                        {line: palette.secondary, fill: palette.secondarySoft},
-                                        {line: palette.alert, fill: "rgba(255, 109, 74, 0.18)"}
-                                    ];
-                                    return rawInterfaceDatasets.map((dataset, index) => {
-                                        const style = styleSet[index % styleSet.length];
-                                        return {
-                                            label: dataset.label,
-                                            data: dataset.data,
-                                            borderColor: style.line,
-                                            backgroundColor: style.fill,
-                                            borderWidth: 2,
-                                            fill: true,
-                                            tension: 0.35
-                                        };
-                                    });
-                                }
-
-                                function renderInterfacesChart() {
-                                    const themeDefaults = chartUtils.applyThemeDefaults();
-                                    const interfacesData = {
-                                        labels: interfaceLabels,
-                                        datasets: buildInterfaceDatasets()
-                                    };
-                                    const interfacesOptions = {
-                                        scales: {
-                                            y: {
-                                                ticks: {
-                                                    precision: 2,
-                                                    callback: function(value) {
-                                                        return chartUtils.ticksFilesizeCallback(value, this.max);
-                                                    }
-                                                },
-                                                grid: { color: themeDefaults.grid || "rgba(120,120,120,0.2)" }
-                                            },
-                                            x: {
-                                                grid: { color: themeDefaults.grid || "rgba(120,120,120,0.2)" }
-                                            }
-                                        },
-                                        plugins: {
-                                            title: {
-                                                display: true,
-                                                text: "Traffic data from current session plus stored history (if enabled)"
-                                            },
-                                            tooltip: {
-                                                callbacks: {
-                                                    label: function(context) {
-                                                        return context.dataset.label + ": " + chartUtils.tooltipFilesizeCallback(context);
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    };
-                                    if (interfacesChartInstance) {
-                                        interfacesChartInstance.destroy();
-                                    }
-                                    interfacesChartInstance = new Chart(interfacesCanvas, {
-                                        type: "line",
-                                        data: interfacesData,
-                                        options: interfacesOptions
-                                    });
-                                }
-
-                                renderInterfacesChart();
-                                window.addEventListener("arpvpn:theme-change", renderInterfacesChart);
-                            </script>
+                            {% if dashboard_rrd_rows %}
+                                <div class="row">
+                                    {% for item in dashboard_rrd_rows %}
+                                        <div class="col-12 col-lg-6 mb-3">
+                                            <div class="border rounded p-2 h-100">
+                                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                                    <div>
+                                                        <strong>{{ item.name }}</strong>
+                                                        <div class="text-muted small">
+                                                            {{ item.type_label }}{% if item.parent_name != EMPTY_FIELD %} · {{ item.parent_name }}{% endif %}
+                                                        </div>
+                                                    </div>
+                                                    <a href="{{ item.rrd_page_url }}">Open</a>
+                                                </div>
+                                                <img
+                                                  class="img-fluid border rounded"
+                                                  loading="lazy"
+                                                  decoding="async"
+                                                  src="{{ item.rrd_image_url }}"
+                                                  alt="RRD graph for {{ item.name }}"
+                                                  onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"
+                                                />
+                                                <span class="text-muted small" style="display:none;">No RRD history available yet.</span>
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <span class="text-muted">No interface or peer history available yet.</span>
+                            {% endif %}
                         </div>
                         <div class="card-footer">
-                          <small class="text-muted">Information provided by <code>wg</code> at {{ last_update }}.</small>
+                          <small class="text-muted">Interface graphs come from stored RRD history plus the current session.</small>
                         </div>
                     </div>
                 </div>

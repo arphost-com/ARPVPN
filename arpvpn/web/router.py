@@ -824,26 +824,17 @@ def index():
         traffic = {datetime.now(): traffic_config.driver.get_session_data()}
     peer_runtime = filter_peer_runtime_for_current_user(get_peer_runtime_summary())
     visible_interfaces = get_visible_interfaces_for_current_user()
-    iface_names = []
-    ifaces_traffic = [
-        {"label": "Received", "data": []},
-        {"label": "Transmitted", "data": []},
-    ]
-    peer_names = []
-    peers_traffic = [
-        {"label": "Received", "data": []},
-        {"label": "Transmitted", "data": []},
-    ]
-    for iface in visible_interfaces.values():
-        iface_names.append(iface.name)
-        iface_traffic = __get_total_traffic__(iface.uuid, traffic)
-        ifaces_traffic[0]["data"].append(iface_traffic.rx)
-        ifaces_traffic[1]["data"].append(iface_traffic.tx)
-        for peer in iface.peers.values():
-            peer_names.append(peer.name)
-            peer_traffic = __get_total_traffic__(peer.uuid, traffic)
-            peers_traffic[0]["data"].append(peer_traffic.rx)
-            peers_traffic[1]["data"].append(peer_traffic.tx)
+    sample_counts = get_connection_sample_counts()
+    statistics_rows = build_statistics_rows(visible_interfaces, peer_runtime, traffic, sample_counts)
+    dashboard_rrd_rows = []
+    for row in statistics_rows:
+        if row["type"] not in {"interface", "peer"}:
+            continue
+        enriched_row = dict(row)
+        enriched_row["rrd_page_url"] = url_for("router.connection_rrd_graph", uuid=row["uuid"], window="24h")
+        enriched_row["rrd_image_url"] = url_for("router.connection_rrd_graph_png", uuid=row["uuid"], window="24h")
+        dashboard_rrd_rows.append(enriched_row)
+    dashboard_rrd_rows = dashboard_rrd_rows[:8]
 
     interface_statuses = [iface.status for iface in visible_interfaces.values()]
     interface_totals = {
@@ -854,12 +845,11 @@ def index():
 
     context = {
         "title": "Dashboard",
-        "interfaces_chart": {"labels": iface_names, "datasets": ifaces_traffic},
-        "peers_chart": {"labels": peer_names, "datasets": peers_traffic},
         "interfaces": visible_interfaces,
         "interface_totals": interface_totals,
         "peer_runtime": peer_runtime,
         "top_peers": peer_runtime["rows"][:10],
+        "dashboard_rrd_rows": dashboard_rrd_rows,
         "last_update": datetime.now().strftime("%H:%M"),
         "EMPTY_FIELD": EMPTY_FIELD,
         "traffic_config": traffic_config

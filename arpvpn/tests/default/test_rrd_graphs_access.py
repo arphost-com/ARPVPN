@@ -34,9 +34,9 @@ def create_user(name: str, password: str, role: str):
     return user
 
 
-def setup_connection(owner_name: str = "client01"):
+def setup_connection(owner_name: str = "client01", iface_name: str = "wgdemo0", peer_name: str | None = None):
     iface = Interface(
-        name="wgdemo0",
+        name=iface_name,
         description="",
         gw_iface="eth0",
         ipv4_address="10.123.0.1/24",
@@ -46,7 +46,7 @@ def setup_connection(owner_name: str = "client01"):
         on_down=[],
     )
     peer = Peer(
-        name=owner_name,
+        name=peer_name or owner_name,
         description="",
         interface=iface,
         ipv4_address="10.123.0.2/24",
@@ -132,6 +132,23 @@ def test_admin_dashboard_contains_rrd_links_for_connections(client):
     assert is_http_success(response.status_code)
     assert f"/traffic/rrd/{iface.uuid}".encode() in response.data
     assert f"/traffic/rrd/{peer.uuid}".encode() in response.data
+
+
+def test_admin_dashboard_shows_interface_rrd_graphs(client):
+    create_user("admin", "admin", User.ROLE_ADMIN)
+    iface0, peer0 = setup_connection(owner_name="client01", iface_name="wg0")
+    iface1, peer1 = setup_connection(owner_name="client02", iface_name="wg1")
+    login(client, "admin", "admin")
+
+    response = client.get("/dashboard")
+    assert is_http_success(response.status_code)
+    assert b"Interface throughput" in response.data
+    assert b"wg0" in response.data
+    assert b"wg1" in response.data
+    assert f"/traffic/rrd/{iface0.uuid}.png?window=24h".encode() in response.data
+    assert f"/traffic/rrd/{iface1.uuid}.png?window=24h".encode() in response.data
+    assert f"/traffic/rrd/{peer0.uuid}.png?window=24h".encode() in response.data
+    assert f"/traffic/rrd/{peer1.uuid}.png?window=24h".encode() in response.data
 
 
 def test_client_dashboard_contains_rrd_links_for_owned_connections(client):
