@@ -37,7 +37,7 @@ unit_tests:
         -w /work \
         python:3.11-slim \
         sh -lc '
-          set -euo pipefail
+          set -eu
           trap "chown -R \"$HOST_UID:$HOST_GID\" .ci-venv dist 2>/dev/null || true" EXIT
           apt-get update
           apt-get install -y --no-install-recommends iproute2
@@ -96,7 +96,7 @@ integration_tests_env:
         -w /work \
         python:3.11-slim \
         sh -lc '
-          set -euo pipefail
+          set -eu
           trap "chown -R \"$HOST_UID:$HOST_GID\" .ci-venv dist 2>/dev/null || true" EXIT
           apt-get update
           apt-get install -y --no-install-recommends iproute2
@@ -127,7 +127,7 @@ api_contract_tests:
         -w /work \
         python:3.11-slim \
         sh -lc '
-          set -euo pipefail
+          set -eu
           trap "chown -R \"$HOST_UID:$HOST_GID\" .ci-venv dist 2>/dev/null || true" EXIT
           apt-get update
           apt-get install -y --no-install-recommends iproute2
@@ -160,7 +160,7 @@ package_dist:
         -w /work \
         python:3.11-slim \
         sh -lc '
-          set -euo pipefail
+          set -eu
           trap "chown -R \"$HOST_UID:$HOST_GID\" .ci-venv dist 2>/dev/null || true" EXIT
           rm -rf dist
           apt-get update
