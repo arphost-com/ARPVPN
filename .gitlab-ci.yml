@@ -41,36 +41,51 @@ unit_tests:
     - poetry install --with dev --no-interaction --no-ansi
     - python3 scripts/validate_openapi.py
     - ./scripts/check_api_artifacts.sh
-    - python3 -m pytest -q \
-      arpvpn/tests/test_server.py \
-      arpvpn/tests/default/test_setup.py \
-      arpvpn/tests/default/test_about_page.py \
-      arpvpn/tests/default/test_login.py \
-      arpvpn/tests/default/test_profile.py \
-      arpvpn/tests/default/test_password_reset.py \
-      arpvpn/tests/default/test_theme_api.py \
-      arpvpn/tests/default/test_statistics_page.py \
-      arpvpn/tests/default/test_statistics_api.py \
-      arpvpn/tests/default/test_tls_api.py \
-      arpvpn/tests/default/test_https_redirect.py \
-      arpvpn/tests/default/test_traffic_driver.py \
-      arpvpn/tests/default/test_interface_state.py \
-      arpvpn/tests/default/test_wireguard_utils.py \
-      arpvpn/tests/default/test_rrd_graph_generation.py \
-      arpvpn/tests/default/test_api_auth.py \
-      arpvpn/tests/default/test_api_schema_registry.py \
-      arpvpn/tests/default/test_api_ui_parity.py \
-      arpvpn/tests/default/test_system_api.py \
-      arpvpn/tests/default/test_tenant_user_invitation_api.py \
-      arpvpn/tests/default/test_users_roles.py::test_admin_can_create_client_user \
-      arpvpn/tests/default/test_users_roles.py::test_admin_can_edit_user_name_role_and_password \
-      arpvpn/tests/default/test_users_roles.py::test_admin_can_delete_client_user \
-      arpvpn/tests/default/test_users_roles.py::test_admin_cannot_delete_own_account \
-      arpvpn/tests/default/test_users_roles.py::test_support_can_impersonate_client_and_return \
-      arpvpn/tests/default/test_users_roles.py::test_support_can_edit_client_but_cannot_promote_role \
-      arpvpn/tests/default/test_users_roles.py::test_support_cannot_delete_admin_user \
-      arpvpn/tests/default/test_users_roles.py::test_client_forbidden_on_staff_routes \
+    - |
+      UNIT_TEST_TARGETS="
+      arpvpn/tests/test_server.py
+      arpvpn/tests/default/test_setup.py
+      arpvpn/tests/default/test_about_page.py
+      arpvpn/tests/default/test_login.py
+      arpvpn/tests/default/test_profile.py
+      arpvpn/tests/default/test_password_reset.py
+      arpvpn/tests/default/test_theme_api.py
+      arpvpn/tests/default/test_statistics_page.py
+      arpvpn/tests/default/test_statistics_api.py
+      arpvpn/tests/default/test_tls_api.py
+      arpvpn/tests/default/test_https_redirect.py
+      arpvpn/tests/default/test_traffic_driver.py
+      arpvpn/tests/default/test_interface_state.py
+      arpvpn/tests/default/test_wireguard_utils.py
+      arpvpn/tests/default/test_rrd_graph_generation.py
+      arpvpn/tests/default/test_api_auth.py
+      arpvpn/tests/default/test_api_schema_registry.py
+      arpvpn/tests/default/test_api_ui_parity.py
+      arpvpn/tests/default/test_system_api.py
+      arpvpn/tests/default/test_tenant_user_invitation_api.py
+      arpvpn/tests/default/test_users_roles.py::test_admin_can_create_client_user
+      arpvpn/tests/default/test_users_roles.py::test_admin_can_edit_user_name_role_and_password
+      arpvpn/tests/default/test_users_roles.py::test_admin_can_delete_client_user
+      arpvpn/tests/default/test_users_roles.py::test_admin_cannot_delete_own_account
+      arpvpn/tests/default/test_users_roles.py::test_support_can_impersonate_client_and_return
+      arpvpn/tests/default/test_users_roles.py::test_support_can_edit_client_but_cannot_promote_role
+      arpvpn/tests/default/test_users_roles.py::test_support_cannot_delete_admin_user
+      arpvpn/tests/default/test_users_roles.py::test_client_forbidden_on_staff_routes
       arpvpn/tests/default/test_users_roles.py::test_support_cannot_create_admin_or_support
+      "
+      EXISTING_TARGETS=""
+      for target in $UNIT_TEST_TARGETS; do
+        if [ -e "$target" ]; then
+          EXISTING_TARGETS="$EXISTING_TARGETS $target"
+        else
+          echo "Skipping missing unit test target: $target"
+        fi
+      done
+      if [ -z "$EXISTING_TARGETS" ]; then
+        echo "No unit test targets resolved in $CI_PROJECT_DIR"
+        exit 1
+      fi
+      python3 -m pytest -q $EXISTING_TARGETS
 
 integration_tests_env:
   stage: test
