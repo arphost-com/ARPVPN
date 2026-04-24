@@ -4,7 +4,8 @@ import os
 import re
 from logging import info, warning, error, debug
 from secrets import randbelow
-from subprocess import PIPE, run
+from shutil import which
+from subprocess import PIPE, run  # nosec B404 - local command execution for interface status checks
 from time import sleep
 from typing import Dict, Any, Type, List, Mapping
 from uuid import uuid4 as gen_uuid
@@ -133,9 +134,12 @@ class Interface(YamlAble):
 
     @property
     def is_up(self):
+        ip_bin = which("ip")
+        if not ip_bin:
+            return False
         try:
             result = run(
-                ["ip", "link", "show", "dev", self.name],
+                [ip_bin, "link", "show", "dev", self.name],  # nosec B603 - fixed argv, interface name is validated upstream
                 stdout=PIPE,
                 stderr=PIPE,
                 text=True,

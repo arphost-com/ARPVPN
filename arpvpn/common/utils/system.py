@@ -1,7 +1,7 @@
 import os
 import shlex
 from logging import debug, error, warning
-from subprocess import PIPE, Popen, run
+from subprocess import PIPE, Popen, run  # nosec B404 - local command execution wrapper
 from typing import List
 
 
@@ -32,7 +32,7 @@ class Command:
         segments: List[List[str]] = []
         current_segment: List[str] = []
         for token in lexer:
-            if token == "|":
+            if token == "|":  # nosec B105 - pipeline separator, not a password
                 if not current_segment:
                     raise ValueError("Invalid command pipeline")
                 segments.append(current_segment)
@@ -48,7 +48,7 @@ class Command:
     @staticmethod
     def _run_pipeline(command_pipeline: List[List[str]]) -> CommandResult:
         if len(command_pipeline) == 1:
-            proc = run(command_pipeline[0], shell=False, check=False, stdout=PIPE, stderr=PIPE)
+            proc = run(command_pipeline[0], shell=False, check=False, stdout=PIPE, stderr=PIPE)  # nosec B603 - fixed argv, shell disabled
             return CommandResult(
                 proc.returncode,
                 proc.stdout.decode("utf-8", errors="replace").strip(),
@@ -58,7 +58,7 @@ class Command:
         processes = []
         previous_proc = None
         for segment in command_pipeline:
-            proc = Popen(
+            proc = Popen(  # nosec B603 - fixed argv pipeline, shell disabled
                 segment,
                 stdin=previous_proc.stdout if previous_proc else None,
                 stdout=PIPE,

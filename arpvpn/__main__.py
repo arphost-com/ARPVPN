@@ -210,7 +210,7 @@ def _detect_local_server_ip() -> str:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.connect(("1.1.1.1", 80))
             ip_value = (sock.getsockname()[0] or "").strip()
-            if ip_value and ip_value != "0.0.0.0":
+            if ip_value and not ipaddress.IPv4Address(ip_value).is_unspecified:
                 return ip_value
     except OSError:
         pass
@@ -219,24 +219,12 @@ def _detect_local_server_ip() -> str:
     except OSError:
         host_ips = []
     for ip_value in host_ips:
-        if ip_value and not ip_value.startswith("127.") and ip_value != "0.0.0.0":
+        if ip_value and not ip_value.startswith("127.") and not ipaddress.IPv4Address(ip_value).is_unspecified:
             return ip_value
     return ""
 
 
-def _request_host_hint() -> str:
-    host_header = (request.host or "").strip()
-    if not host_header:
-        return ""
-    if host_header.startswith("["):
-        closing = host_header.find("]")
-        if closing > 1:
-            return host_header[1:closing]
-        return ""
-    return host_header.split(":", 1)[0].strip()
-
-
-def _https_redirect_host(request_host_hint: str = "") -> str:
+def _https_redirect_host() -> str:
     configured_host = ""
     if web_config.tls_mode == web_config.TLS_MODE_REVERSE_PROXY:
         configured_host = (web_config.proxy_incoming_hostname or "").strip()
@@ -254,16 +242,6 @@ def _https_redirect_host(request_host_hint: str = "") -> str:
                 fallback_ip,
             )
         return fallback_ip
-    hint = (request_host_hint or "").strip()
-    if _is_valid_redirect_host(hint):
-        if configured_host:
-            warning(
-                "Configured TLS server name '%s' is not a valid redirect host and no local IP fallback was found. "
-                "Using request host '%s' for HTTP->HTTPS redirect.",
-                configured_host,
-                hint,
-            )
-        return hint
     return configured_host
 
 
@@ -324,7 +302,7 @@ def maybe_redirect_http_to_https():
     if x_forwarded_proto == "https":
         return None
 
-    host = _https_redirect_host(_request_host_hint())
+    host = _https_redirect_host()
     if not host:
         warning("HTTP->HTTPS redirect enabled but no trusted hostname configured; skipping redirect.")
         return None

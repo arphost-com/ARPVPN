@@ -52,7 +52,7 @@ document.getElementById("togglePrivateKey").addEventListener("click", function (
 
 const removeIfaceBtn = $(".removeIfaceBtn");
 removeItem(removeIfaceBtn, "interface", function () {
-    location.replace(document.referrer);
+    location.replace("/wireguard");
 });
 
 const removePeerBtn = $(".removePeerBtn");

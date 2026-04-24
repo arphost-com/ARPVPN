@@ -1,8 +1,10 @@
 import os
 from ipaddress import IPv4Address
 from logging import debug, warning, error
+from shutil import which
 from typing import Any, Dict, Mapping, Type
-from urllib.request import Request, urlopen
+
+import requests
 
 from yamlable import YamlAble, yaml_info, Y
 
@@ -94,15 +96,9 @@ class WireguardConfig(BaseConfig):
         self.iptables_bin = ""
         self.wg_bin = ""
         self.wg_quick_bin = ""
-        result = Command("whereis wg | tr ' ' '\n' | grep bin").run()
-        if result.successful:
-            self.wg_bin = result.output
-        result = Command("whereis wg-quick | tr ' ' '\n' | grep bin").run()
-        if result.successful:
-            self.wg_quick_bin = result.output
-        result = Command("whereis iptables | tr ' ' '\n' | grep bin").run()
-        if result.successful:
-            self.iptables_bin = result.output
+        self.wg_bin = which("wg") or ""
+        self.wg_quick_bin = which("wg-quick") or ""
+        self.iptables_bin = which("iptables") or ""
         from arpvpn.core.models import interfaces
         self.interfaces = interfaces
 
@@ -122,9 +118,9 @@ class WireguardConfig(BaseConfig):
 
     def set_default_endpoint(self):
         try:
-            request = Request(self.__IP_RETRIEVER_URL, headers={"User-Agent": "ARPVPN/2"})
-            with urlopen(request, timeout=10) as response:
-                self.endpoint = response.read(64).decode("utf-8", errors="ignore").strip()
+            response = requests.get(self.__IP_RETRIEVER_URL, headers={"User-Agent": "ARPVPN/2"}, timeout=10)
+            response.raise_for_status()
+            self.endpoint = response.text[:64].strip()
             IPv4Address(self.endpoint)
             debug(f"Public IP address is {self.endpoint}. This will be used as default endpoint.")
         except Exception as e:

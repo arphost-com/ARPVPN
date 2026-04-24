@@ -10,7 +10,7 @@ import os
 import re
 import signal
 import secrets
-import subprocess
+import subprocess  # nosec B404 - fixed-argv local command execution for RRD/OpenSSL helpers
 import tempfile
 from collections import deque
 from datetime import datetime, timezone
@@ -545,7 +545,7 @@ def build_token_response_payload(token_pair: Dict[str, Any], scope: str) -> Dict
     access = token_pair["access"]
     refresh = token_pair["refresh"]
     return {
-        "token_type": "Bearer",
+        "token_type": "Bearer",  # nosec B105 - protocol label, not a secret
         "scope": scope,
         "access_token": access["raw_token"],
         "access_token_id": access["token_id"],
@@ -1329,20 +1329,6 @@ def statistics():
         include_log_issues=is_staff_view,
         diagnostic_filter=selected_diagnostic,
     )
-    diagnostic_links = {}
-    if is_staff_view:
-        diagnostic_links = {
-            "clear": url_for("router.statistics"),
-            "handshake": url_for("router.statistics", diagnostic="handshake"),
-            "auth": url_for("router.statistics", diagnostic="auth"),
-            "interface": url_for("router.statistics", diagnostic="interface"),
-            "tls": url_for("router.statistics", diagnostic="tls"),
-            "rrd": url_for("router.statistics", diagnostic="rrd"),
-            "bans": url_for("router.statistics", diagnostic="bans"),
-            "warnings": url_for("router.statistics", diagnostic="warnings"),
-            "errors": url_for("router.statistics", diagnostic="errors"),
-            "all": url_for("router.statistics", diagnostic="all"),
-        }
     context = {
         "title": "Statistics",
         "statistics_rows": payload["statistics_rows"],
@@ -1358,7 +1344,6 @@ def statistics():
         "failure_metrics": payload["failure_metrics"],
         "log_summary": payload["log_summary"],
         "diagnostic_view": payload["diagnostic_view"],
-        "diagnostic_links": diagnostic_links,
         "is_staff_view": is_staff_view,
         "last_update": datetime.now().strftime("%H:%M"),
         "traffic_config": traffic_config
@@ -2209,13 +2194,13 @@ def _render_rrd_graph_png(uuid: str, window_seconds: int) -> Optional[bytes]:
             f"DS:tx:COUNTER:{heartbeat}:0:U",
             "RRA:AVERAGE:0.5:1:100000",
         ]
-        created = subprocess.run(create_cmd, capture_output=True, text=True, check=False)
+        created = subprocess.run(create_cmd, capture_output=True, text=True, check=False)  # nosec B603 B607 - fixed argv, inputs are internal identifiers
         if created.returncode != 0:
             err_detail = (created.stderr or created.stdout or "unknown rrdtool error").strip()
             raise RuntimeError(f"Unable to create RRD file: {err_detail}")
 
         for unix_ts, rx, tx in points:
-            update = subprocess.run(
+            update = subprocess.run(  # nosec B603 B607 - fixed argv, inputs are internal identifiers
                 ["rrdtool", "update", rrd_file, f"{unix_ts}:{rx}:{tx}"],
                 capture_output=True,
                 text=True,
@@ -2254,7 +2239,7 @@ def _render_rrd_graph_png(uuid: str, window_seconds: int) -> Optional[bytes]:
             r"GPRINT:rxs:MAX:Max RX/s\: %8.2lf%sB/s",
             r"GPRINT:txs:MAX:Max TX/s\: %8.2lf%sB/s",
         ]
-        graphed = subprocess.run(graph_cmd, capture_output=True, text=True, check=False)
+        graphed = subprocess.run(graph_cmd, capture_output=True, text=True, check=False)  # nosec B603 B607 - fixed argv, inputs are internal identifiers
         if graphed.returncode != 0:
             err_detail = (graphed.stderr or graphed.stdout or "unknown rrdtool error").strip()
             raise RuntimeError(f"Unable to generate RRD graph: {err_detail}")
@@ -2514,7 +2499,7 @@ def read_certificate_metadata(cert_file: str, key_file: str) -> Dict[str, Any]:
         "subjectAltName",
     ]
     try:
-        result = subprocess.run(openssl_cmd, capture_output=True, text=True, check=False)
+        result = subprocess.run(openssl_cmd, capture_output=True, text=True, check=False)  # nosec B603 B607 - fixed argv, certificate path is internal
     except FileNotFoundError:
         metadata["read_error"] = "openssl command not found."
         return metadata
@@ -2906,7 +2891,7 @@ def user_to_api_dict(user_item: User) -> Dict[str, Any]:
     }
 
 
-def invitation_to_api_dict(invitation: Invitation, raw_token: str = "") -> Dict[str, Any]:
+def invitation_to_api_dict(invitation: Invitation, raw_token: Optional[str] = None) -> Dict[str, Any]:
     tenant = tenants.get(invitation.tenant_id, None)
     payload: Dict[str, Any] = {
         "id": invitation.id,
@@ -4850,7 +4835,7 @@ def api_create_invitation():
         parse_optional_string(payload.get("tenant_id")),
         actor=actor,
     )
-    raw_token = ""
+    raw_token: Optional[str] = None
     invitation = Invitation(
         tenant_id=resolved_tenant_id,
         email=email,

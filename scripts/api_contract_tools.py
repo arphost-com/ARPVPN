@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from http import HTTPStatus
 import re
 import sys
 from pathlib import Path
@@ -91,15 +92,15 @@ _TAG_OVERRIDES = {
 
 
 _RESPONSE_STATUS_OVERRIDES = {
-    "api_auth_issue_token": 201,
-    "api_create_tenant": 201,
-    "api_create_user": 201,
-    "api_create_tenant_member": 201,
-    "api_create_invitation": 201,
-    "api_create_wireguard_interface": 201,
-    "api_create_wireguard_peer": 201,
-    "api_accept_invitation": 201,
-    "api_system_restart": 202,
+    "api_auth_issue_token": HTTPStatus.CREATED,
+    "api_create_tenant": HTTPStatus.CREATED,
+    "api_create_user": HTTPStatus.CREATED,
+    "api_create_tenant_member": HTTPStatus.CREATED,
+    "api_create_invitation": HTTPStatus.CREATED,
+    "api_create_wireguard_interface": HTTPStatus.CREATED,
+    "api_create_wireguard_peer": HTTPStatus.CREATED,
+    "api_accept_invitation": HTTPStatus.CREATED,
+    "api_system_restart": HTTPStatus.ACCEPTED,
 }
 
 

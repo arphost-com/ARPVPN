@@ -1,6 +1,6 @@
 import os
 from logging import info
-from subprocess import PIPE, run
+from subprocess import PIPE, run  # nosec B404 - local certificate issuance requires subprocess
 from typing import Dict, Any
 
 import yaml
@@ -18,7 +18,7 @@ class TLSManager:
     @staticmethod
     def _run_checked(cmd: list[str], error_prefix: str):
         try:
-            result = run(cmd, shell=False, check=False, stdout=PIPE, stderr=PIPE, text=True)
+            result = run(cmd, shell=False, check=False, stdout=PIPE, stderr=PIPE, text=True)  # nosec B603 B607 - fixed argv, shell disabled
         except FileNotFoundError as exc:
             raise RuntimeError(f"{error_prefix}: command not found ({cmd[0]}).") from exc
         if result.returncode != 0:
@@ -50,7 +50,7 @@ class TLSManager:
     @staticmethod
     def _resolve_bind_host(_uwsgi_settings: Dict[str, Any], _web_config: WebConfig) -> str:
         # Always bind ARPVPN listeners on all interfaces for remote management.
-        return "0.0.0.0"
+        return "0.0.0.0"  # nosec B104 - intentional container/service bind address
 
     @classmethod
     def _ensure_bind_http_only(cls, uwsgi_settings: Dict[str, Any], web_config: WebConfig):
@@ -103,7 +103,7 @@ class TLSManager:
             f"subjectAltName=DNS:{server_name}",
         ]
         try:
-            result = run(cmd, shell=False, check=False, stdout=PIPE, stderr=PIPE, text=True)
+            result = run(cmd, shell=False, check=False, stdout=PIPE, stderr=PIPE, text=True)  # nosec B603 B607 - fixed argv, shell disabled
         except FileNotFoundError as exc:
             raise RuntimeError("Unable to generate self-signed certificate: command not found (openssl).") from exc
         if result.returncode != 0:

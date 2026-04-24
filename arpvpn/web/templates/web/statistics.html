@@ -83,42 +83,42 @@
                     <div class="row">
                         <div class="col-md-4 mb-2">
                             {% if is_staff_view %}
-                                <a class="text-reset" href="{{ diagnostic_links["handshake"] }}"><strong>Handshake failures:</strong> {{ handshake_failures }}</a>
+                                <a class="text-reset" href="{{ url_for('router.statistics', diagnostic='handshake') }}"><strong>Handshake failures:</strong> {{ handshake_failures }}</a>
                             {% else %}
                                 <strong>Handshake failures:</strong> {{ handshake_failures }}
                             {% endif %}
                         </div>
                         <div class="col-md-4 mb-2">
                             {% if is_staff_view %}
-                                <a class="text-reset" href="{{ diagnostic_links["auth"] }}"><strong>Auth failures (log tail):</strong> {{ failure_metrics["auth_failures"] }}</a>
+                                <a class="text-reset" href="{{ url_for('router.statistics', diagnostic='auth') }}"><strong>Auth failures (log tail):</strong> {{ failure_metrics["auth_failures"] }}</a>
                             {% else %}
                                 <strong>Auth failures (log tail):</strong> {{ failure_metrics["auth_failures"] }}
                             {% endif %}
                         </div>
                         <div class="col-md-4 mb-2">
                             {% if is_staff_view %}
-                                <a class="text-reset" href="{{ diagnostic_links["interface"] }}"><strong>Interface failures (log tail):</strong> {{ failure_metrics["interface_failures"] }}</a>
+                                <a class="text-reset" href="{{ url_for('router.statistics', diagnostic='interface') }}"><strong>Interface failures (log tail):</strong> {{ failure_metrics["interface_failures"] }}</a>
                             {% else %}
                                 <strong>Interface failures (log tail):</strong> {{ failure_metrics["interface_failures"] }}
                             {% endif %}
                         </div>
                         <div class="col-md-4 mb-2">
                             {% if is_staff_view %}
-                                <a class="text-reset" href="{{ diagnostic_links["tls"] }}"><strong>TLS failures (log tail):</strong> {{ failure_metrics["tls_failures"] }}</a>
+                                <a class="text-reset" href="{{ url_for('router.statistics', diagnostic='tls') }}"><strong>TLS failures (log tail):</strong> {{ failure_metrics["tls_failures"] }}</a>
                             {% else %}
                                 <strong>TLS failures (log tail):</strong> {{ failure_metrics["tls_failures"] }}
                             {% endif %}
                         </div>
                         <div class="col-md-4 mb-2">
                             {% if is_staff_view %}
-                                <a class="text-reset" href="{{ diagnostic_links["rrd"] }}"><strong>RRD failures (log tail):</strong> {{ failure_metrics["rrd_failures"] }}</a>
+                                <a class="text-reset" href="{{ url_for('router.statistics', diagnostic='rrd') }}"><strong>RRD failures (log tail):</strong> {{ failure_metrics["rrd_failures"] }}</a>
                             {% else %}
                                 <strong>RRD failures (log tail):</strong> {{ failure_metrics["rrd_failures"] }}
                             {% endif %}
                         </div>
                         <div class="col-md-4 mb-2">
                             {% if is_staff_view %}
-                                <a class="text-reset" href="{{ diagnostic_links["bans"] }}"><strong>Active login bans:</strong> {{ failure_metrics["active_login_bans"] }}</a>
+                                <a class="text-reset" href="{{ url_for('router.statistics', diagnostic='bans') }}"><strong>Active login bans:</strong> {{ failure_metrics["active_login_bans"] }}</a>
                             {% else %}
                                 <strong>Active login bans:</strong> {{ failure_metrics["active_login_bans"] }}
                             {% endif %}
@@ -138,13 +138,13 @@
                     {% elif log_summary["available"] %}
                         <div class="row">
                             <div class="col-md-4 mb-2">
-                                <a class="text-reset" href="{{ diagnostic_links["all"] }}"><strong>Total lines:</strong> {{ log_summary["total_lines"] }}</a>
+                                <a class="text-reset" href="{{ url_for('router.statistics', diagnostic='all') }}"><strong>Total lines:</strong> {{ log_summary["total_lines"] }}</a>
                             </div>
                             <div class="col-md-4 mb-2">
-                                <a class="text-reset" href="{{ diagnostic_links["warnings"] }}"><strong>Warnings (tail):</strong> {{ log_summary["warning_lines"] }}</a>
+                                <a class="text-reset" href="{{ url_for('router.statistics', diagnostic='warnings') }}"><strong>Warnings (tail):</strong> {{ log_summary["warning_lines"] }}</a>
                             </div>
                             <div class="col-md-4 mb-2">
-                                <a class="text-reset" href="{{ diagnostic_links["errors"] }}"><strong>Errors/Fatal (tail):</strong> {{ log_summary["error_lines"] }}</a>
+                                <a class="text-reset" href="{{ url_for('router.statistics', diagnostic='errors') }}"><strong>Errors/Fatal (tail):</strong> {{ log_summary["error_lines"] }}</a>
                             </div>
                         </div>
                         {% if log_summary.get("suppressed_issue_lines", 0) > 0 %}
@@ -187,7 +187,7 @@
                             <i class="fas fa-filter mr-1"></i>
                             Filtered diagnostics: {{ diagnostic_view["title"] }}
                         </span>
-                        <a class="btn btn-sm btn-outline-secondary" href="{{ diagnostic_links["clear"] }}">Clear filter</a>
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('router.statistics') }}">Clear filter</a>
                     </div>
                     <div class="card-body">
                         <p class="text-muted mb-3">{{ diagnostic_view["subtitle"] }}</p>

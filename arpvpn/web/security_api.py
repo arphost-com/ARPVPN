@@ -74,8 +74,8 @@ class AsyncJobRecord:
 
 
 class ApiTokenStore:
-    TOKEN_KIND_ACCESS = "access"
-    TOKEN_KIND_REFRESH = "refresh"
+    TOKEN_KIND_ACCESS = "access"  # nosec B105 - token classification label
+    TOKEN_KIND_REFRESH = "refresh"  # nosec B105 - token classification label
 
     def __init__(self, signing_key: str):
         self._signing_key = str(signing_key or "")

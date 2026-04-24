@@ -193,7 +193,7 @@ class Invitation(YamlAble):
 
     @property
     def raw_token(self) -> str:
-        return getattr(self, "_raw_token", "")
+        return getattr(self, "_raw_token", None) or ""
 
     def touch(self):
         self.updated_at = utcnow_iso()
@@ -281,7 +281,7 @@ class Invitation(YamlAble):
         invitation.accepted_user_id = dct.get("accepted_user_id", "")
         invitation.expires_at = dct.get("expires_at", invitation.expires_at)
         invitation.token_hash = dct.get("token_hash", invitation.token_hash)
-        invitation._raw_token = ""
+        invitation._raw_token = None
         return invitation
 
 

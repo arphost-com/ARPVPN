@@ -1,6 +1,6 @@
 import re
 from shutil import which
-from subprocess import PIPE, run
+from subprocess import PIPE, run  # nosec B404 - local command execution for WireGuard helpers
 
 from arpvpn.core.exceptions import WireguardError
 
@@ -17,16 +17,20 @@ def _parse_ip_link_is_up(stdout: str) -> bool:
 
 def is_wg_iface_up(iface_name: str) -> bool:
     # Prefer `ip link` because it generally works without elevated privileges.
-    try:
-        ip_result = run(
-            ["ip", "link", "show", "dev", iface_name],
-            stdout=PIPE,
-            stderr=PIPE,
-            text=True,
-            check=False,
-        )
-    except Exception:
+    ip_bin = which("ip")
+    if not ip_bin:
         ip_result = None
+    else:
+        try:
+            ip_result = run(
+                [ip_bin, "link", "show", "dev", iface_name],  # nosec B603 - fixed argv, iface name is validated upstream
+                stdout=PIPE,
+                stderr=PIPE,
+                text=True,
+                check=False,
+            )
+        except Exception:
+            ip_result = None
     if ip_result and ip_result.returncode == 0:
         return _parse_ip_link_is_up(ip_result.stdout)
     if ip_result and ip_result.returncode != 0:
@@ -47,7 +51,7 @@ def is_wg_iface_up(iface_name: str) -> bool:
         return False
     try:
         result = run(
-            [wg_bin, "show", iface_name],
+            [wg_bin, "show", iface_name],  # nosec B603 - fixed argv, iface name is validated upstream
             stdout=PIPE,
             stderr=PIPE,
             text=True,
@@ -60,10 +64,13 @@ def is_wg_iface_up(iface_name: str) -> bool:
 
 def _run_wg_command(args: list[str], stdin_data: str = "") -> str:
     from arpvpn.core.config.wireguard import config
+    wg_bin = config.wg_bin or which("wg")
+    if not wg_bin:
+        raise WireguardError("WireGuard binary not found.")
 
     try:
         result = run(
-            [config.wg_bin, *args],
+            [wg_bin, *args],  # nosec B603 - fixed argv, WireGuard command and args are controlled by the application
             input=stdin_data,
             text=True,
             stdout=PIPE,
