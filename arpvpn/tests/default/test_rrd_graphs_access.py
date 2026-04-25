@@ -68,6 +68,8 @@ def test_admin_can_open_rrd_page(client):
     response = client.get(f"/traffic/rrd/{peer.uuid}")
     assert is_http_success(response.status_code)
     assert b"RRD traffic history" in response.data
+    for window in ("6h", "24h", "7d", "30d"):
+        assert f"/traffic/rrd/{peer.uuid}.png?window={window}".encode() in response.data
 
 
 def test_client_can_open_own_peer_rrd_page(client):

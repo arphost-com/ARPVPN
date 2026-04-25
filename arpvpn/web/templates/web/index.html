@@ -98,7 +98,7 @@
                             {% if interface_rrd_rows %}
                                 <div class="row">
                                     {% for item in interface_rrd_rows %}
-                                        <div class="col-12 col-lg-6 mb-3">
+                                        <div class="col-12 mb-3">
                                             <div class="border rounded p-2 h-100">
                                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                                     <div>
@@ -110,7 +110,7 @@
                                                     <a href="{{ item.rrd_page_url }}">Open</a>
                                                 </div>
                                                 <img
-                                                  class="img-fluid border rounded"
+                                                  class="img-fluid w-100 border rounded"
                                                   loading="lazy"
                                                   decoding="async"
                                                   src="{{ item.rrd_image_url }}"

@@ -5525,17 +5525,24 @@ def connection_rrd_graph(uuid: str):
     requested_window = (request.args.get("window", "24h") or "24h").lower()
     if requested_window not in RRD_GRAPH_WINDOWS_SECONDS:
         abort(BAD_REQUEST, "Unknown graph window.")
+    sorted_windows = sorted(
+        RRD_GRAPH_WINDOWS_SECONDS.keys(),
+        key=lambda key: RRD_GRAPH_WINDOWS_SECONDS[key]
+    )
     context = {
         "title": "Connection graph",
         "connection_type": item_type,
         "connection_uuid": uuid,
         "connection_name": item.name,
         "window": requested_window,
-        "window_options": sorted(
-            RRD_GRAPH_WINDOWS_SECONDS.keys(),
-            key=lambda key: RRD_GRAPH_WINDOWS_SECONDS[key]
-        ),
-        "image_url": url_for("router.connection_rrd_graph_png", uuid=uuid, window=requested_window),
+        "rrd_windows": [
+            {
+                "name": window_name,
+                "label": window_name.upper(),
+                "image_url": url_for("router.connection_rrd_graph_png", uuid=uuid, window=window_name),
+            }
+            for window_name in sorted_windows
+        ],
     }
     return ViewController("web/traffic-rrd.html", **context).load()
 
