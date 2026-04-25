@@ -12,16 +12,6 @@ It is designed for teams that want to manage interfaces and client configs from 
 - Secure logins with optional TOTP MFA and recovery codes.
 - Manage TLS mode directly in the UI (HTTP, self-signed, Let's Encrypt, reverse proxy).
 
-## Screenshots
-
-Add your screenshots to the repository and update these paths when ready:
-
-- `docs/source/images/README-dashboard.png` (Dashboard)
-- `docs/source/images/README-wireguard.png` (WireGuard interfaces/peers)
-- `docs/source/images/README-peer.png` (Peer details and download/QR actions)
-- `docs/source/images/README-settings.png` (Settings and TLS configuration)
-- `docs/source/images/README-profile-mfa.png` (Profile MFA setup)
-
 ## Quick Start (Docker)
 
 ```bash
