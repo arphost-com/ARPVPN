@@ -24,7 +24,6 @@ Contents
     :maxdepth: 2
 
     installation
-    screenshots
     in-depth
     api
     contributing
