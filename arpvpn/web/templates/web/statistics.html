@@ -138,7 +138,7 @@
                     {% elif log_summary["available"] %}
                         <div class="row">
                             <div class="col-md-4 mb-2">
-                                <a class="text-reset" href="{{ url_for('router.statistics', diagnostic='all') }}"><strong>Total lines:</strong> {{ log_summary["total_lines"] }}</a>
+                                <a class="text-reset" href="{{ url_for('router.statistics', diagnostic='all') }}"><strong>Inspected lines:</strong> {{ log_summary["total_lines"] }}</a>
                             </div>
                             <div class="col-md-4 mb-2">
                                 <a class="text-reset" href="{{ url_for('router.statistics', diagnostic='warnings') }}"><strong>Warnings (tail):</strong> {{ log_summary["warning_lines"] }}</a>

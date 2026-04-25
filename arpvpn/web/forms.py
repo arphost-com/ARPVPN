@@ -2,6 +2,7 @@ import ipaddress
 import json
 import re
 from secrets import randbelow
+from shutil import which
 from typing import List, Tuple
 
 from flask_login import current_user
@@ -494,6 +495,17 @@ class SetupForm(FlaskForm):
 
 
 class AddInterfaceForm(FlaskForm):
+    LOCAL_ROUTE_UP_RE = re.compile(
+        r"^(?P<ip_bin>\S+)\s+route\s+replace\s+"
+        r"(?P<network>\d{1,3}(?:\.\d{1,3}){3}/\d{1,2})\s+via\s+"
+        r"(?P<gateway>\d{1,3}(?:\.\d{1,3}){3})$"
+    )
+    LOCAL_ROUTE_DOWN_RE = re.compile(
+        r"^(?P<ip_bin>\S+)\s+route\s+del\s+"
+        r"(?P<network>\d{1,3}(?:\.\d{1,3}){3}/\d{1,2})\s+via\s+"
+        r"(?P<gateway>\d{1,3}(?:\.\d{1,3}){3})\s*\|\|\s*true$"
+    )
+
     name = StringField("Name", validators=[DataRequired(), InterfaceNameValidator()])
     auto = BooleanField("Auto", default=True)
     description = TextAreaField("Description", render_kw={"placeholder": "Some details..."})
@@ -502,10 +514,183 @@ class AddInterfaceForm(FlaskForm):
                        render_kw={"placeholder": "0.0.0.0/32"})
     port = IntegerField("Listen port", validators=[InterfacePortValidator()],
                         render_kw={"placeholder": "25000", "type": "number"})
+    local_routes_enabled = BooleanField("Manage local server routes", default=False)
+    local_route_gateway = StringField(
+        "Route gateway IP",
+        render_kw={"placeholder": "10.10.10.1"},
+    )
+    local_routes = TextAreaField(
+        "Local route subnets",
+        render_kw={"placeholder": "10.10.11.0/24, 172.16.0.0/24"},
+    )
     on_up = TextAreaField("On up")
     on_down = TextAreaField("On down")
     iface = None
     submit = SubmitField('Add')
+
+    @staticmethod
+    def _split_lines(value: str) -> List[str]:
+        lines: List[str] = []
+        for line in re.split(r"\r?\n", str(value or "")):
+            entry = str(line or "").strip()
+            if entry:
+                lines.append(entry)
+        return lines
+
+    @classmethod
+    def _normalize_command_list(cls, values: List[str]) -> List[str]:
+        commands: List[str] = []
+        for value in values:
+            commands.extend(cls._split_lines(value))
+        return commands
+
+    @classmethod
+    def _parse_managed_route_up(cls, command: str):
+        match = cls.LOCAL_ROUTE_UP_RE.match(str(command or "").strip())
+        if not match:
+            return None
+        if match.group("ip_bin").split("/")[-1] != "ip":
+            return None
+        try:
+            route = str(ipaddress.IPv4Network(match.group("network"), strict=False))
+            gateway = str(ipaddress.IPv4Address(match.group("gateway")))
+        except ValueError:
+            return None
+        return route, gateway
+
+    @classmethod
+    def _parse_managed_route_down(cls, command: str):
+        match = cls.LOCAL_ROUTE_DOWN_RE.match(str(command or "").strip())
+        if not match:
+            return None
+        if match.group("ip_bin").split("/")[-1] != "ip":
+            return None
+        try:
+            route = str(ipaddress.IPv4Network(match.group("network"), strict=False))
+            gateway = str(ipaddress.IPv4Address(match.group("gateway")))
+        except ValueError:
+            return None
+        return route, gateway
+
+    @classmethod
+    def _strip_managed_local_route_commands(
+            cls,
+            on_up_commands: List[str],
+            on_down_commands: List[str],
+    ) -> Tuple[List[str], List[str], str, List[str]]:
+        up_pairs = {
+            parsed for parsed in (cls._parse_managed_route_up(command) for command in on_up_commands)
+            if parsed is not None
+        }
+        down_pairs = {
+            parsed for parsed in (cls._parse_managed_route_down(command) for command in on_down_commands)
+            if parsed is not None
+        }
+        managed_pairs = up_pairs.intersection(down_pairs)
+        if not managed_pairs:
+            return on_up_commands, on_down_commands, "", []
+        gateways = {pair[1] for pair in managed_pairs}
+        if len(gateways) != 1:
+            return on_up_commands, on_down_commands, "", []
+        cleaned_on_up = [
+            command for command in on_up_commands
+            if cls._parse_managed_route_up(command) not in managed_pairs
+        ]
+        cleaned_on_down = [
+            command for command in on_down_commands
+            if cls._parse_managed_route_down(command) not in managed_pairs
+        ]
+        routes = sorted(
+            {pair[0] for pair in managed_pairs},
+            key=lambda item: (int(ipaddress.IPv4Network(item).network_address), ipaddress.IPv4Network(item).prefixlen),
+        )
+        return cleaned_on_up, cleaned_on_down, next(iter(gateways)), routes
+
+    @staticmethod
+    def _parse_local_routes_field(value: str) -> List[str]:
+        routes: List[str] = []
+        seen = set()
+        for chunk in re.split(r"[,\r\n]+", str(value or "")):
+            candidate = str(chunk or "").strip()
+            if not candidate:
+                continue
+            route = str(ipaddress.IPv4Network(candidate, strict=False))
+            if route in seen:
+                continue
+            seen.add(route)
+            routes.append(route)
+        return routes
+
+    @staticmethod
+    def _default_nat_commands(name: str, gateway_iface: str) -> Tuple[List[str], List[str]]:
+        return (
+            [
+                f"{wireguard_config.iptables_bin} -I FORWARD -i {name} -j ACCEPT",
+                f"{wireguard_config.iptables_bin} -I FORWARD -o {name} -j ACCEPT",
+                f"{wireguard_config.iptables_bin} -t nat -I POSTROUTING -o {gateway_iface} -j MASQUERADE",
+            ],
+            [
+                f"{wireguard_config.iptables_bin} -D FORWARD -i {name} -j ACCEPT",
+                f"{wireguard_config.iptables_bin} -D FORWARD -o {name} -j ACCEPT",
+                f"{wireguard_config.iptables_bin} -t nat -D POSTROUTING -o {gateway_iface} -j MASQUERADE",
+            ],
+        )
+
+    def validate(self, extra_validators=None):
+        valid = super().validate(extra_validators)
+        self._normalized_local_routes = []
+        self._normalized_local_route_gateway = ""
+        if not valid:
+            return False
+
+        if not self.local_routes_enabled.data:
+            return True
+
+        try:
+            routes = self._parse_local_routes_field(self.local_routes.data)
+        except ValueError:
+            self.local_routes.errors.append(
+                "must be a comma/newline-separated list of IPv4 CIDR blocks (example: 10.10.11.0/24)."
+            )
+            return False
+        if not routes:
+            self.local_routes.errors.append("add at least one route subnet when local route management is enabled.")
+            return False
+
+        gateway_raw = str(self.local_route_gateway.data or "").strip()
+        if not gateway_raw:
+            self.local_route_gateway.errors.append("is required when local route management is enabled.")
+            return False
+        try:
+            gateway = str(ipaddress.IPv4Address(gateway_raw))
+        except ValueError:
+            self.local_route_gateway.errors.append("must be a valid IPv4 address.")
+            return False
+
+        self._normalized_local_routes = routes
+        self._normalized_local_route_gateway = gateway
+        self.local_routes.data = list_to_str(routes, separator="\n")
+        self.local_route_gateway.data = gateway
+        return True
+
+    def build_interface_hooks(self) -> Tuple[List[str], List[str]]:
+        on_up_commands = self._split_lines(self.on_up.data)
+        on_down_commands = self._split_lines(self.on_down.data)
+        on_up_commands, on_down_commands, _, _ = self._strip_managed_local_route_commands(
+            on_up_commands,
+            on_down_commands,
+        )
+
+        if self.local_routes_enabled.data:
+            routes = list(getattr(self, "_normalized_local_routes", []))
+            if not routes:
+                routes = self._parse_local_routes_field(self.local_routes.data)
+            gateway = str(getattr(self, "_normalized_local_route_gateway", "") or self.local_route_gateway.data).strip()
+            ip_bin = which("ip") or "ip"
+            for route in routes:
+                on_up_commands.append(f"{ip_bin} route replace {route} via {gateway}")
+                on_down_commands.append(f"{ip_bin} route del {route} via {gateway} || true")
+        return on_up_commands, on_down_commands
 
     @classmethod
     def get_choices(cls, exclusions: List[str]) -> List[Tuple[str, str]]:
@@ -523,6 +708,9 @@ class AddInterfaceForm(FlaskForm):
         new_form.gateway.data = form.gateway.data
         new_form.ipv4.data = form.ipv4.data
         new_form.port.data = form.port.data
+        new_form.local_routes_enabled.data = form.local_routes_enabled.data
+        new_form.local_route_gateway.data = form.local_route_gateway.data
+        new_form.local_routes.data = form.local_routes.data
         new_form.on_up.data = form.on_up.data
         new_form.on_down.data = form.on_down.data
         return new_form
@@ -546,16 +734,12 @@ class AddInterfaceForm(FlaskForm):
         else:
             form.ipv4.data = "No addresses available!"
         form.port.data = Interface.get_unused_port()
-        form.on_up.data = list_to_str([
-            f"{wireguard_config.iptables_bin} -I FORWARD -i {name} -j ACCEPT\n" +
-            f"{wireguard_config.iptables_bin} -I FORWARD -o {name} -j ACCEPT\n" +
-            f"{wireguard_config.iptables_bin} -t nat -I POSTROUTING -o {gw} -j MASQUERADE\n"
-        ])
-        form.on_down.data = list_to_str([
-            f"{wireguard_config.iptables_bin} -D FORWARD -i {name} -j ACCEPT\n" +
-            f"{wireguard_config.iptables_bin} -D FORWARD -o {name} -j ACCEPT\n" +
-            f"{wireguard_config.iptables_bin} -t nat -D POSTROUTING -o {gw} -j MASQUERADE\n"
-        ])
+        default_on_up, default_on_down = cls._default_nat_commands(name, gw)
+        form.local_routes_enabled.data = False
+        form.local_route_gateway.data = ""
+        form.local_routes.data = ""
+        form.on_up.data = list_to_str(default_on_up, separator="\n")
+        form.on_down.data = list_to_str(default_on_down, separator="\n")
         return form
 
 
@@ -573,6 +757,9 @@ class EditInterfaceForm(AddInterfaceForm):
         new_form.gateway.data = form.gateway.data
         new_form.ipv4.data = form.ipv4.data
         new_form.port.data = form.port.data
+        new_form.local_routes_enabled.data = form.local_routes_enabled.data
+        new_form.local_route_gateway.data = form.local_route_gateway.data
+        new_form.local_routes.data = form.local_routes.data
         new_form.on_up.data = form.on_up.data
         new_form.on_down.data = form.on_down.data
         new_form.public_key.data = iface.public_key
@@ -589,8 +776,17 @@ class EditInterfaceForm(AddInterfaceForm):
         form.port.data = iface.listen_port
         form.gateway.choices = cls.get_choices(exclusions=["lo", form.name])
         form.gateway.data = iface.gw_iface
-        form.on_up.data = list_to_str(iface.on_up, separator="\n")
-        form.on_down.data = list_to_str(iface.on_down, separator="\n")
+        on_up_commands = cls._normalize_command_list(list(iface.on_up))
+        on_down_commands = cls._normalize_command_list(list(iface.on_down))
+        on_up_commands, on_down_commands, local_route_gateway, local_routes = cls._strip_managed_local_route_commands(
+            on_up_commands,
+            on_down_commands,
+        )
+        form.local_routes_enabled.data = bool(local_routes)
+        form.local_route_gateway.data = local_route_gateway
+        form.local_routes.data = list_to_str(local_routes, separator="\n")
+        form.on_up.data = list_to_str(on_up_commands, separator="\n")
+        form.on_down.data = list_to_str(on_down_commands, separator="\n")
         form.auto.data = iface.auto
         form.public_key.data = iface.public_key
         form.private_key.data = iface.private_key

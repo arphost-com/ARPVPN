@@ -4,6 +4,8 @@ const ifaceName = $("#name");
 const gwIface = $("#gateway");
 const onUp = $("#on_up")
 const onDown = $("#on_down")
+const localRoutesEnabled = $("#local_routes_enabled")
+const localRoutesFields = $("#localRoutesFields")
 const alertContainer = "alerts";
 
 let oldName = ifaceName.val();
@@ -33,22 +35,36 @@ gwIface.change(function () {
     oldGw = newGw;
 });
 
-document.getElementById('private_key').setAttribute('type', "password");
+function updateLocalRoutesVisibility() {
+    if (localRoutesEnabled.is(":checked")) {
+        localRoutesFields.show();
+    } else {
+        localRoutesFields.hide();
+    }
+}
 
-document.getElementById("togglePrivateKey").addEventListener("click", function () {
-    const icon = document.getElementById('togglePrivateKeyIcon')
-    const field = document.getElementById('private_key');
-    const type = field.getAttribute('type') === 'password' ? 'text' : 'password';
-    field.setAttribute('type', type);
-    if (type === "password") {
-        icon.classList.add('fa-eye-slash');
-        icon.classList.remove('fa-eye');
-    }
-    else {
-        icon.classList.add('fa-eye');
-        icon.classList.remove('fa-eye-slash');
-    }
-}, false);
+localRoutesEnabled.change(updateLocalRoutesVisibility);
+updateLocalRoutesVisibility();
+
+const privateKeyField = document.getElementById("private_key");
+const togglePrivateKeyButton = document.getElementById("togglePrivateKey");
+if (privateKeyField && togglePrivateKeyButton) {
+    privateKeyField.setAttribute("type", "password");
+    togglePrivateKeyButton.addEventListener("click", function () {
+        const icon = document.getElementById("togglePrivateKeyIcon")
+        const field = document.getElementById("private_key");
+        const type = field.getAttribute("type") === "password" ? "text" : "password";
+        field.setAttribute("type", type);
+        if (type === "password") {
+            icon.classList.add("fa-eye-slash");
+            icon.classList.remove("fa-eye");
+        }
+        else {
+            icon.classList.add("fa-eye");
+            icon.classList.remove("fa-eye-slash");
+        }
+    }, false);
+}
 
 const removeIfaceBtn = $(".removeIfaceBtn");
 removeItem(removeIfaceBtn, "interface", function () {

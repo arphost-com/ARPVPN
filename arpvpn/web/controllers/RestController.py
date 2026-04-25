@@ -10,7 +10,6 @@ from werkzeug.wsgi import FileWrapper
 
 from arpvpn.common.models.user import users, User
 from arpvpn.common.utils.logs import log_exception
-from arpvpn.common.utils.strings import str_to_list
 from arpvpn.core.config.logger import config as logger_config, LoggerConfig
 from arpvpn.core.config.traffic import config as traffic_config
 from arpvpn.core.config.web import config as web_config, WebConfig
@@ -30,10 +29,11 @@ class RestController:
 
     @staticmethod
     def __save_iface__(iface: Interface, form):
+        on_up, on_down = form.build_interface_hooks()
         iface.edit(name=form.name.data, description=form.description.data,
                    gw_iface=form.gateway.data, ipv4_address=form.ipv4.data, port=form.port.data,
-                   auto=form.auto.data, on_up=str_to_list(form.on_up.data),
-                   on_down=str_to_list(form.on_down.data), tenant_id=getattr(iface, "tenant_id", "") or "")
+                   auto=form.auto.data, on_up=on_up,
+                   on_down=on_down, tenant_id=getattr(iface, "tenant_id", "") or "")
         config_manager.save()
 
     def apply_iface(self, iface: Interface, form):
@@ -42,8 +42,7 @@ class RestController:
 
     @staticmethod
     def add_iface(form):
-        on_up = str_to_list(form.on_up.data)
-        on_down = str_to_list(form.on_down.data)
+        on_up, on_down = form.build_interface_hooks()
         tenant_id = ""
         if current_user and current_user.is_authenticated and getattr(current_user, "role", "") == User.ROLE_TENANT_ADMIN:
             tenant_id = str(getattr(current_user, "tenant_id", "") or "")

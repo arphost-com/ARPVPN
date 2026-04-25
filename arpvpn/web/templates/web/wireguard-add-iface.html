@@ -56,6 +56,21 @@
                                   Error in field <strong>{{ form.port.label.text }}</strong>: {{ error }}
                                 </div>
                             {% endfor %}
+                            {% for error in form.local_routes_enabled.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ form.local_routes_enabled.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in form.local_route_gateway.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ form.local_route_gateway.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in form.local_routes.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ form.local_routes.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
                             {% for error in form.on_up.errors %}
                                 <div class="alert alert-danger" role="alert">
                                   Error in field <strong>{{ form.on_up.label.text }}</strong>: {{ error }}
@@ -97,12 +112,63 @@
                         </div>
                         <div class="form-row">
                             <div class="form-group col-md-4">
-                                {{ form.on_up.label() }}
-                                {{ form.on_up(class="form-control", rows='5') }}
+                                <div class="custom-control custom-checkbox">
+                                    {{ form.local_routes_enabled(class="custom-control-input") }}
+                                    {{ form.local_routes_enabled.label(class="custom-control-label") }}
+                                    <span type="button" class="ml-1" data-toggle="popover"
+                                        data-placement="top"
+                                        data-content="Add server-side routes when this WireGuard interface starts, and remove them on stop.">
+                                        <i class="fas fa-question-circle"></i>
+                                    </span>
+                                </div>
+                                <small class="text-muted d-block mt-2">
+                                    Use this for reachable LAN subnets behind another router (example: 10.10.11.0/24 via 10.10.10.1).
+                                </small>
+                            </div>
+                        </div>
+                        <div id="localRoutesFields" class="form-row">
+                            <div class="form-group col-md-4">
+                                {{ form.local_route_gateway.label() }}
+                                {{ form.local_route_gateway(class="form-control") }}
                             </div>
                             <div class="form-group col-md-4">
-                                {{ form.on_down.label() }}
-                                {{ form.on_down(class="form-control", rows='5') }}
+                                {{ form.local_routes.label() }}
+                                {{ form.local_routes(class="form-control", rows='3') }}
+                                <small class="text-muted d-block mt-1">
+                                    Enter one CIDR per line or comma-separated. These routes are managed as `PostUp`/`PostDown`.
+                                </small>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-8">
+                                <button class="btn btn-sm btn-outline-secondary mb-2" type="button"
+                                        data-toggle="collapse" data-target="#advancedHooks" aria-expanded="false"
+                                        aria-controls="advancedHooks">
+                                    Advanced: On Up / On Down hooks
+                                </button>
+                                <div class="collapse{% if form.on_up.errors or form.on_down.errors %} show{% endif %}" id="advancedHooks">
+                                    <small class="text-muted d-block mb-2">
+                                        Advanced commands run directly in `wg-quick` as `PostUp` and `PostDown`.
+                                        Keep each command on its own line. Use On Up for add/start actions and On Down for matching cleanup.
+                                    </small>
+                                    <small class="text-muted d-block mb-2">
+                                        Example route pair:
+                                        <code>ip route replace 10.10.11.0/24 via 10.10.10.1</code> (On Up) and
+                                        <code>ip route del 10.10.11.0/24 via 10.10.10.1 || true</code> (On Down).
+                                        If remote LAN hosts lack a return route, add matching SNAT lines with
+                                        <code>iptables -t nat -I/-D POSTROUTING -o eth1 -j MASQUERADE</code>.
+                                    </small>
+                                    <div class="form-row">
+                                        <div class="form-group col-md-6">
+                                            {{ form.on_up.label() }}
+                                            {{ form.on_up(class="form-control", rows='5') }}
+                                        </div>
+                                        <div class="form-group col-md-6">
+                                            {{ form.on_down.label() }}
+                                            {{ form.on_down(class="form-control", rows='5') }}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="form-row">

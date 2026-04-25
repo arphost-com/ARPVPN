@@ -146,6 +146,8 @@ THEME_CHOICES = ("auto", "light", "dark")
 THEME_COOKIE_NAME = "arpvpn_theme"
 THEME_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365
 MAX_HISTORY_POINTS = 5000
+LOG_DIAGNOSTICS_CACHE_TTL_SECONDS = get_env_int("ARPVPN_LOG_DIAGNOSTICS_CACHE_TTL_SECONDS", 5)
+LOG_DIAGNOSTICS_READ_BLOCK_BYTES = get_env_int("ARPVPN_LOG_DIAGNOSTICS_READ_BLOCK_BYTES", 65536)
 API_AUTH_ACCESS_TTL_SECONDS = get_env_int("ARPVPN_API_ACCESS_TTL_SECONDS", 15 * 60)
 API_AUTH_REFRESH_TTL_SECONDS = get_env_int("ARPVPN_API_REFRESH_TTL_SECONDS", 24 * 60 * 60)
 API_AUTH_RATE_WINDOW_SECONDS = get_env_int("ARPVPN_API_AUTH_WINDOW_SECONDS", 60)
@@ -235,6 +237,8 @@ api_auth_lockouts = AuthLockoutManager()
 api_idempotency_store = IdempotencyStore()
 api_async_jobs = AsyncJobStore()
 recent_audit_events_memory: deque[Dict[str, Any]] = deque(maxlen=500)
+log_diagnostics_cache: Dict[Tuple[str, int], Dict[str, Any]] = {}
+log_diagnostics_cache_lock = Lock()
 PROCESS_STARTED_AT = datetime.now(timezone.utc)
 
 
@@ -1001,8 +1005,40 @@ def summarize_rollups(rollup_rows: List[Dict[str, Any]]) -> Dict[str, Dict[str, 
     return totals
 
 
+def _clone_log_diagnostics_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    cloned = dict(payload)
+    cloned["issue_entries"] = list(payload.get("issue_entries", []))
+    cloned["tail_entries"] = list(payload.get("tail_entries", []))
+    return cloned
+
+
+def _read_log_tail_entries(logfile: str, max_tail_lines: int) -> Tuple[List[str], Optional[str]]:
+    if max_tail_lines <= 0:
+        return [], None
+    buffer = b""
+    block_size = max(LOG_DIAGNOSTICS_READ_BLOCK_BYTES, 4096)
+    try:
+        with open(logfile, "rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            cursor = handle.tell()
+            target_newlines = max_tail_lines + 1
+            while cursor > 0 and buffer.count(b"\n") <= target_newlines:
+                chunk_size = min(block_size, cursor)
+                cursor -= chunk_size
+                handle.seek(cursor)
+                chunk = handle.read(chunk_size)
+                if not chunk:
+                    break
+                buffer = chunk + buffer
+    except OSError as e:
+        return [], str(e)
+    entries = [line.strip() for line in buffer.decode("utf-8", errors="ignore").splitlines() if line.strip()]
+    return entries[-max_tail_lines:], None
+
+
 def build_log_diagnostics(max_tail_lines: int = 5000) -> Dict[str, Any]:
     logfile = logger_config.logfile
+    active_login_bans = sum(1 for client in clients.values() if client.is_banned())
     diagnostics: Dict[str, Any] = {
         "available": False,
         "logfile": logfile,
@@ -1018,29 +1054,48 @@ def build_log_diagnostics(max_tail_lines: int = 5000) -> Dict[str, Any]:
         "interface_failures": 0,
         "tls_failures": 0,
         "rrd_failures": 0,
-        "active_login_bans": sum(1 for client in clients.values() if client.is_banned()),
+        "active_login_bans": active_login_bans,
         "total": 0,
     }
     if not os.path.exists(logfile):
         diagnostics["total"] = diagnostics["active_login_bans"]
         return diagnostics
 
-    tail: deque[str] = deque(maxlen=max_tail_lines)
+    cache_key = (logfile, max_tail_lines)
+    now_seconds = time()
     try:
-        with open(logfile, "r", encoding="utf-8", errors="ignore") as handle:
-            for line in handle:
-                diagnostics["total_lines"] += 1
-                entry = line.strip()
-                if not entry:
-                    continue
-                tail.append(entry)
+        stat_result = os.stat(logfile)
+        cache_meta = (stat_result.st_mtime_ns, stat_result.st_size)
     except OSError as e:
         diagnostics["read_error"] = str(e)
         diagnostics["total"] = diagnostics["active_login_bans"]
         return diagnostics
 
+    with log_diagnostics_cache_lock:
+        cached = log_diagnostics_cache.get(cache_key, None)
+        if cached:
+            fresh = (now_seconds - cached["cached_at"]) <= LOG_DIAGNOSTICS_CACHE_TTL_SECONDS
+            if fresh and cached["meta"] == cache_meta:
+                cached_payload = _clone_log_diagnostics_payload(cached["payload"])
+                cached_payload["active_login_bans"] = active_login_bans
+                cached_payload["total"] = (
+                    cached_payload["auth_failures"]
+                    + cached_payload["interface_failures"]
+                    + cached_payload["tls_failures"]
+                    + cached_payload["rrd_failures"]
+                    + cached_payload["active_login_bans"]
+                )
+                return cached_payload
+
+    tail_entries, read_error = _read_log_tail_entries(logfile, max_tail_lines)
+    if read_error:
+        diagnostics["read_error"] = read_error
+        diagnostics["total"] = diagnostics["active_login_bans"]
+        return diagnostics
+    diagnostics["total_lines"] = len(tail_entries)
+
     issue_entries: List[str] = []
-    for entry in tail:
+    for entry in tail_entries:
         lowered = entry.lower()
         is_error = "[error]" in lowered or "[fatal]" in lowered
         is_warning = "[warning]" in lowered
@@ -1063,7 +1118,6 @@ def build_log_diagnostics(max_tail_lines: int = 5000) -> Dict[str, Any]:
             diagnostics["warning_lines"] += 1
         issue_entries.append(entry)
 
-    tail_entries = list(tail)
     diagnostics["tail_entries"] = tail_entries
     diagnostics["tail_lines"] = len(tail_entries)
     diagnostics["issue_entries"] = issue_entries
@@ -1075,6 +1129,12 @@ def build_log_diagnostics(max_tail_lines: int = 5000) -> Dict[str, Any]:
         + diagnostics["rrd_failures"]
         + diagnostics["active_login_bans"]
     )
+    with log_diagnostics_cache_lock:
+        log_diagnostics_cache[cache_key] = {
+            "cached_at": now_seconds,
+            "meta": cache_meta,
+            "payload": _clone_log_diagnostics_payload(diagnostics),
+        }
     return diagnostics
 
 

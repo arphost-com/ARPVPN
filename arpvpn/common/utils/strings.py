@@ -15,8 +15,11 @@ def list_to_str(_list: list, separator=", ") -> str:
 
 
 def str_to_list(string: str, separator: str = "\n") -> List[str]:
-    chunks = string.strip().split(separator)
-    lst = []
+    candidate = str(string or "")
+    chunks = candidate.split(separator)
+    items = []
     for cmd in chunks:
-        lst.append(cmd)
-    return lst
+        normalized = str(cmd or "").strip()
+        if normalized:
+            items.append(normalized)
+    return items

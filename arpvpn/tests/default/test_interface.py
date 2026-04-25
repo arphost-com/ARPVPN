@@ -161,6 +161,61 @@ def test_post_edit_ko(client):
     assert "Error".encode() in response.data
 
 
+def test_post_edit_adds_managed_local_routes(client):
+    login(client)
+    iface = create_test_iface("iface1", "10.0.0.1/24", 50000)
+    interfaces[iface.uuid] = iface
+
+    response = client.post(f"{url}/{iface.uuid}", data={
+        "name": iface.name,
+        "auto": iface.auto,
+        "description": iface.description,
+        "gateway": iface.gw_iface,
+        "ipv4": iface.ipv4_address,
+        "port": iface.listen_port,
+        "local_routes_enabled": "y",
+        "local_route_gateway": "10.10.10.1",
+        "local_routes": "10.10.11.0/24\n172.16.0.0/24",
+        "on_up": list_to_str(iface.on_up),
+        "on_down": list_to_str(iface.on_down),
+    })
+    assert is_http_success(response.status_code)
+    assert any(
+        command.endswith("route replace 10.10.11.0/24 via 10.10.10.1")
+        for command in iface.on_up
+    )
+    assert any(
+        command.endswith("route replace 172.16.0.0/24 via 10.10.10.1")
+        for command in iface.on_up
+    )
+    assert any(
+        command.endswith("route del 10.10.11.0/24 via 10.10.10.1 || true")
+        for command in iface.on_down
+    )
+    assert any(
+        command.endswith("route del 172.16.0.0/24 via 10.10.10.1 || true")
+        for command in iface.on_down
+    )
+
+
+def test_get_edit_prefills_managed_local_routes(client):
+    login(client)
+    iface = create_test_iface("iface1", "10.0.0.1/24", 50000)
+    iface.on_up.append("ip route replace 10.10.11.0/24 via 10.10.10.1")
+    iface.on_up.append("ip route replace 172.16.0.0/24 via 10.10.10.1")
+    iface.on_down.append("ip route del 10.10.11.0/24 via 10.10.10.1 || true")
+    iface.on_down.append("ip route del 172.16.0.0/24 via 10.10.10.1 || true")
+    interfaces[iface.uuid] = iface
+
+    response = client.get(f"{url}/{iface.uuid}")
+    assert is_http_success(response.status_code)
+    assert b'name="local_routes_enabled"' in response.data
+    assert b'name="local_route_gateway"' in response.data
+    assert b'value="10.10.10.1"' in response.data
+    assert b"10.10.11.0/24" in response.data
+    assert b"172.16.0.0/24" in response.data
+
+
 def test_get_add(client):
     login(client)
     response = client.get(f"{url}/add")
