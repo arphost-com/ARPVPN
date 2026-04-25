@@ -517,11 +517,11 @@ class AddInterfaceForm(FlaskForm):
     local_routes_enabled = BooleanField("Manage local server routes", default=False)
     local_route_gateway = StringField(
         "Route gateway IP",
-        render_kw={"placeholder": "10.10.10.1"},
+        render_kw={"placeholder": "192.168.1.1"},
     )
     local_routes = TextAreaField(
         "Local route subnets",
-        render_kw={"placeholder": "10.10.11.0/24, 172.16.0.0/24"},
+        render_kw={"placeholder": "192.168.10.0/24, 192.168.1.0/24"},
     )
     on_up = TextAreaField("On up")
     on_down = TextAreaField("On down")
@@ -650,7 +650,7 @@ class AddInterfaceForm(FlaskForm):
             routes = self._parse_local_routes_field(self.local_routes.data)
         except ValueError:
             self.local_routes.errors.append(
-                "must be a comma/newline-separated list of IPv4 CIDR blocks (example: 10.10.11.0/24)."
+                "must be a comma/newline-separated list of IPv4 CIDR blocks (example: 192.168.10.0/24)."
             )
             return False
         if not routes:

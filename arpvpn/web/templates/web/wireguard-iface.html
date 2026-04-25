@@ -182,7 +182,10 @@
                                 </span>
                             </div>
                             <small class="text-muted d-block mt-2">
-                                Use this for reachable LAN subnets behind another router (example: 10.10.11.0/24 via 10.10.10.1).
+                                Use this for reachable LAN subnets behind another router (example: 192.168.10.0/24 via 192.168.1.1).
+                            </small>
+                            <small class="text-muted d-block mt-1">
+                                These routes are saved per interface. Configure each interface independently.
                             </small>
                         </div>
                     </div>
@@ -214,8 +217,8 @@
                                 </small>
                                 <small class="text-muted d-block mb-2">
                                     Example route pair:
-                                    <code>ip route replace 10.10.11.0/24 via 10.10.10.1</code> (On Up) and
-                                    <code>ip route del 10.10.11.0/24 via 10.10.10.1 || true</code> (On Down).
+                                    <code>ip route replace 192.168.10.0/24 via 192.168.1.1</code> (On Up) and
+                                    <code>ip route del 192.168.10.0/24 via 192.168.1.1 || true</code> (On Down).
                                     If remote LAN hosts lack a return route, add matching SNAT lines with
                                     <code>iptables -t nat -I/-D POSTROUTING -o eth1 -j MASQUERADE</code>.
                                 </small>
