@@ -3,14 +3,14 @@ Contributing
 
 .. note::
 
-    This repository is the private ARPVPN line.
+    This repository is the ARPVPN project.
 
-You may contribute by opening issues, commenting on existing ones, and creating merge requests with new features and bug fixes.
+You may contribute by opening issues, commenting on existing ones, and creating pull requests with new features and bug fixes.
 
 Git flow
 --------
 
-Do not work directly on ``main``. Create a feature branch from ``main`` and open a GitLab merge request back into ``main`` once the work is ready.
+Do not work directly on ``main``. Create a feature branch from ``main`` and open a pull request back into ``main`` once the work is ready.
 
 .. code-block:: bash
 
@@ -37,16 +37,15 @@ Dependency management
     poetry config virtualenvs.in-project true
     poetry install
 
-Testing
--------
+Validation
+----------
 
-`PyTest <https://docs.pytest.org/>`__ and `Coverage <https://coverage.readthedocs.io/>`__ are used for tests and coverage reports.
-
-Run the test suite with Poetry:
+Validate the OpenAPI contract and generated artifacts before publishing changes:
 
 .. code-block:: bash
 
-    poetry run pytest
+    python3 scripts/validate_openapi.py
+    ./scripts/check_api_artifacts.sh
 
 Building
 --------
@@ -56,8 +55,8 @@ To build ARPVPN, use ``build.sh``. It generates a ``dist`` folder containing the
 CI/CD
 -----
 
-GitLab CI is used to implement the pipeline. When merge requests targeting ``main`` are opened, the required test and package jobs run automatically.
+Use the repository's configured CI provider to run required test and package jobs for pull requests targeting ``main``.
 
 .. warning::
 
-    The ``main`` branch is used to publish release images and should only receive reviewed merge requests.
+    The ``main`` branch is used to publish release images and should only receive reviewed pull requests.

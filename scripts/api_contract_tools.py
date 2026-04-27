@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import atexit
 from http import HTTPStatus
 import re
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
@@ -13,10 +16,65 @@ except ModuleNotFoundError:  # pragma: no cover - depends on runtime environment
     yaml = None
 
 
-def get_testing_app_instance():
-    from arpvpn.tests.utils import get_testing_app
+_OPENAPI_WORKDIR = ""
 
-    return get_testing_app()
+
+def _fake_network_helpers_if_needed():
+    if shutil.which("ip") is not None:
+        return
+    from arpvpn.common.utils import network as network_utils
+
+    fake_interfaces = {
+        "lo": {
+            "ifname": "lo",
+            "flags": ["LOOPBACK", "UP", "LOWER_UP"],
+            "operstate": "UNKNOWN",
+            "address": "00:00:00:00:00:00",
+            "addr_info": [],
+        },
+        "eth0": {
+            "ifname": "eth0",
+            "flags": ["BROADCAST", "MULTICAST", "UP", "LOWER_UP"],
+            "operstate": "UP",
+            "address": "02:00:00:00:00:00",
+            "addr_info": [],
+        },
+    }
+    network_utils.get_system_interfaces = lambda: fake_interfaces
+    network_utils.get_default_gateway = lambda: "eth0"
+    network_utils.get_routing_table = lambda: [
+        {"dst": "default", "gateway": "192.0.2.1", "dev": "eth0"},
+    ]
+
+
+def _cleanup_openapi_workdir():
+    if _OPENAPI_WORKDIR:
+        shutil.rmtree(_OPENAPI_WORKDIR, ignore_errors=True)
+
+
+def get_testing_app_instance():
+    global _OPENAPI_WORKDIR
+    if not _OPENAPI_WORKDIR:
+        _OPENAPI_WORKDIR = tempfile.mkdtemp(prefix="arpvpn-openapi-")
+        atexit.register(_cleanup_openapi_workdir)
+
+    from arpvpn.common.properties import global_properties
+
+    sys.argv = [sys.argv[0], _OPENAPI_WORKDIR]
+    global_properties.setup_required = False
+    global_properties.dev_env = True
+    _fake_network_helpers_if_needed()
+
+    from arpvpn.__main__ import app
+    from arpvpn.core.config.wireguard import config as wireguard_config
+
+    wireguard_config.wg_bin = "/bin/echo"
+    wireguard_config.wg_quick_bin = "/bin/echo"
+    wireguard_config.iptables_bin = "/bin/echo"
+    app.config["TESTING"] = True
+    app.config["WTF_CSRF_ENABLED"] = False
+    app.config["API_CSRF_ENABLED"] = False
+    return app
 
 
 def iter_live_api_operations() -> List[Dict[str, Any]]:

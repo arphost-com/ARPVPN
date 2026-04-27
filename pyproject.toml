@@ -31,13 +31,8 @@ requests = "^2.32.5"
 urllib3 = "^2.6.3"
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^8.4.2"
-coverage = "^7.11.0"
 Sphinx = "^4.2.0"
 sphinx-rtd-theme = "^1.0.0"
-
-[tool.coverage.run]
-omit = ["*/site-packages/*"]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
