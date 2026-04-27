@@ -49,19 +49,27 @@ unit_tests:
       arpvpn/tests/default/test_login.py
       arpvpn/tests/default/test_profile.py
       arpvpn/tests/default/test_password_reset.py
+      arpvpn/tests/default/test_mfa.py
       arpvpn/tests/default/test_theme_api.py
+      arpvpn/tests/default/test_documentation_page.py
       arpvpn/tests/default/test_statistics_page.py
       arpvpn/tests/default/test_statistics_api.py
       arpvpn/tests/default/test_tls_api.py
+      arpvpn/tests/default/test_tls_manager.py
       arpvpn/tests/default/test_https_redirect.py
       arpvpn/tests/default/test_traffic_driver.py
+      arpvpn/tests/default/test_settings.py
+      arpvpn/tests/default/test_interface.py
       arpvpn/tests/default/test_interface_state.py
+      arpvpn/tests/default/test_peers.py
       arpvpn/tests/default/test_wireguard_utils.py
       arpvpn/tests/default/test_rrd_graph_generation.py
+      arpvpn/tests/default/test_rrd_graphs_access.py
       arpvpn/tests/default/test_api_auth.py
       arpvpn/tests/default/test_api_schema_registry.py
       arpvpn/tests/default/test_api_ui_parity.py
       arpvpn/tests/default/test_system_api.py
+      arpvpn/tests/default/test_tenancy_phase1.py
       arpvpn/tests/default/test_tenant_user_invitation_api.py
       arpvpn/tests/default/test_users_roles.py::test_admin_can_create_client_user
       arpvpn/tests/default/test_users_roles.py::test_admin_can_edit_user_name_role_and_password

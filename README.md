@@ -191,6 +191,19 @@ High-confidence active components:
 
 ## Development and Quality Gates
 
+Default GitLab `unit_tests` includes regression coverage for:
+
+- `test_documentation_page.py`: in-app documentation content, TLS/API guidance, and site-to-site guide visibility.
+- `test_interface.py`: interface edit/add validation plus managed local route command handling.
+- `test_mfa.py`: MFA login, profile setup/disable flow, and client config access after MFA verification.
+- `test_peers.py`: peer edit validation, enable/disable behavior, site-to-site subnets, and full-tunnel config output.
+- `test_rrd_graphs_access.py`: RRD page authorization, graph caching, and dashboard graph links for staff/client views.
+- `test_settings.py`: settings page load/save validation, including TLS hostname validation.
+- `test_tenancy_phase1.py`: tenancy schema creation and import of legacy users/interfaces into the tenancy database.
+- `test_tls_manager.py`: TLS mode application for HTTP, self-signed, Let's Encrypt, reverse proxy, and custom ports.
+
+Common local commands:
+
 - Validate OpenAPI:
 
 ```bash
