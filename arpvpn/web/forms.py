@@ -18,7 +18,7 @@ from arpvpn.common.utils.strings import list_to_str
 from arpvpn.core.config.logger import config as logger_config
 from arpvpn.core.config.traffic import config as traffic_config
 from arpvpn.core.config.web import config as web_config
-from arpvpn.core.config.wireguard import config as wireguard_config
+from arpvpn.core.config.wireguard import config as wireguard_config, detect_wireguard_binary
 from arpvpn.core.managers import traffic_storage
 from arpvpn.core.managers.config import config_manager
 from arpvpn.core.models import Interface, Peer, interfaces
@@ -37,6 +37,20 @@ def derive_peer_name(source: str) -> str:
     if candidate and Peer.is_name_valid(candidate):
         return candidate
     return Peer.generate_valid_name()
+
+
+def fill_missing_wireguard_binary_fields(form):
+    defaults = {
+        "app_wg_bin": detect_wireguard_binary("wg"),
+        "app_wg_quick_bin": detect_wireguard_binary("wg-quick"),
+        "app_iptables_bin": detect_wireguard_binary("iptables"),
+    }
+    for field_name, detected_path in defaults.items():
+        if not detected_path:
+            continue
+        field = getattr(form, field_name, None)
+        if field is not None and not (field.data or "").strip():
+            field.data = detected_path
 
 
 class LoginForm(FlaskForm):
@@ -271,6 +285,7 @@ class SettingsForm(FlaskForm):
     submit = SubmitField('Save')
 
     def validate(self, extra_validators=None):
+        fill_missing_wireguard_binary_fields(self)
         valid = super().validate(extra_validators)
         mode = (self.web_tls_mode.data or web_config.TLS_MODE_HTTP).strip()
         if mode not in web_config.TLS_MODES:
@@ -358,6 +373,7 @@ class SettingsForm(FlaskForm):
         form.app_wg_bin.data = wireguard_config.wg_bin
         form.app_wg_quick_bin.data = wireguard_config.wg_quick_bin
         form.app_iptables_bin.data = wireguard_config.iptables_bin
+        fill_missing_wireguard_binary_fields(form)
 
         form.log_overwrite.data = logger_config.overwrite
         form.log_file.data = logger_config.logfile
@@ -422,7 +438,12 @@ class SetupForm(FlaskForm):
 
     submit = SubmitField('Next')
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        fill_missing_wireguard_binary_fields(self)
+
     def validate(self, extra_validators=None):
+        fill_missing_wireguard_binary_fields(self)
         valid = super().validate(extra_validators)
         mode = (self.web_tls_mode.data or web_config.TLS_MODE_HTTP).strip()
         if mode not in web_config.TLS_MODES:
