@@ -1,18 +1,15 @@
 
 # ARPVPN
-### by https://arphost.com
+### by ARPHost, LLC. https://arphost.com
 
 ## ARPVPN is a self-hosted WireGuard control plane with a web UI and API for operating client VPN and site-to-site connectivity.
 
 <img width="1382" height="895" alt="Screenshot 2026-04-28 at 7 41 37 PM" src="https://github.com/user-attachments/assets/c824c399-e905-44f8-ab17-86e7f4a09375" />
 <img width="1394" height="959" alt="Screenshot 2026-04-28 at 7 41 46 PM" src="https://github.com/user-attachments/assets/b036ffe1-4828-429c-9505-206afdf10caf" />
 <img width="1224" height="549" alt="Screenshot 2026-04-28 at 7 15 46 PM" src="https://github.com/user-attachments/assets/8400efb6-4100-4624-b4af-799295bd2b1e" />
-
-<img width="1487" height="887" alt="Screenshot 2026-04-28 at 7 16 14 PM" src="https://github.com/user-attachments/assets/0787937a-138c-4b30-8829-0d8821477a2b" />
 <img width="1491" height="866" alt="Screenshot 2026-04-28 at 7 16 25 PM" src="https://github.com/user-attachments/assets/38cad4f9-899d-44be-aaac-196d7b66d3a5" />
-<img width="1499" height="885" alt="Screenshot 2026-04-28 at 7 16 32 PM" src="https://github.com/user-attachments/assets/392217fa-7fe4-4106-8ffe-24d323916d97" />
+<img width="1487" height="887" alt="Screenshot 2026-04-28 at 7 16 14 PM" src="https://github.com/user-attachments/assets/0787937a-138c-4b30-8829-0d8821477a2b" />
 <img width="1480" height="892" alt="Screenshot 2026-04-28 at 7 16 45 PM" src="https://github.com/user-attachments/assets/1135b8ad-202c-463f-9544-1b9f73327111" />
-<img width="1478" height="878" alt="Screenshot 2026-04-28 at 7 17 27 PM" src="https://github.com/user-attachments/assets/2051b362-0710-42bb-b787-aabbebb59729" />
 
 
 ## Project Origin and Thanks
