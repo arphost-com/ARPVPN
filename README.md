@@ -103,15 +103,30 @@ cp .env.example .env
 sudo chown -R "$(id -u):$(id -g)" ./data
 ```
 
-Important `.env` values:
-- `ARPVPN_IMAGE`
-- `ARPVPN_RUNTIME_USER`
-- `ARPVPN_CONTAINER_NAME`
-- `ARPVPN_COOKIE_SUFFIX`
-- `ARPVPN_HTTP_PORT`
-- `ARPVPN_HTTPS_PORT`
-- `ARPVPN_SECURE_COOKIES`
-- `DATA_FOLDER`
+Important Docker `.env` values:
+- `ARPVPN_IMAGE`: image/tag to run; default local build is `arpvpn:local`.
+- `ARPVPN_UID` / `ARPVPN_GID`: UID/GID created for the image's `arpvpn` user; defaults are `1000:1000`, but set these to match the owner of `DATA_FOLDER` on your host when needed.
+- `ARPVPN_RUNTIME_USER`: container runtime user; keep `arpvpn` unless you built a matching custom user/sudo policy.
+- `ARPVPN_CONTAINER_NAME`: container name and default cookie namespace source.
+- `ARPVPN_COOKIE_SUFFIX`: optional explicit cookie namespace suffix; if unset, ARPVPN uses `ARPVPN_CONTAINER_NAME`, then Docker Compose's `COMPOSE_PROJECT_NAME`, then `arpvpn`.
+- `ARPVPN_SESSION_COOKIE_NAME` / `ARPVPN_REMEMBER_COOKIE_NAME`: optional explicit cookie names for side-by-side installs.
+- `ARPVPN_HTTP_PORT` / `ARPVPN_HTTPS_PORT`: host-network listener ports, default `8085` and `8086`.
+- `ARPVPN_SECURE_COOKIES`: `0` for mixed HTTP/HTTPS access, `1` for strict HTTPS-only cookie behavior.
+- `DATA_FOLDER`: host path mounted to `/data`.
+
+The `docker/up.sh` wrapper reads `docker/.env` by default. Set `ENV_FILE=/path/to/envfile` when you want the wrapper and Compose to use a different env file.
+
+Optional runtime tuning env variables:
+- `ARPVPN_HIGH_TRAFFIC_THRESHOLD_MB`: peer traffic alert threshold, default `1024`.
+- `ARPVPN_RRD_GRAPH_CACHE_TTL_SECONDS`: RRD graph cache TTL, default `10800`.
+- `ARPVPN_LOG_DIAGNOSTICS_CACHE_TTL_SECONDS` / `ARPVPN_LOG_DIAGNOSTICS_READ_BLOCK_BYTES`: log diagnostic cache/read sizing.
+- `ARPVPN_API_ACCESS_TTL_SECONDS` / `ARPVPN_API_REFRESH_TTL_SECONDS`: API token lifetimes.
+- `ARPVPN_API_AUTH_WINDOW_SECONDS` / `ARPVPN_API_AUTH_MAX_ATTEMPTS` / `ARPVPN_API_AUTH_LOCKOUT_SECONDS`: API auth rate/lockout controls.
+- `ARPVPN_API_RATE_LIMIT_WINDOW_SECONDS` / `ARPVPN_API_RATE_LIMIT_MAX_REQUESTS`: general API rate limit controls.
+- `ARPVPN_FEATURE_API_AUTH`, `ARPVPN_FEATURE_API_STATS`, `ARPVPN_FEATURE_API_SYSTEM`, `ARPVPN_FEATURE_API_TLS`, `ARPVPN_FEATURE_API_CONFIG`, `ARPVPN_FEATURE_API_TENANTS`, `ARPVPN_FEATURE_API_WIREGUARD`: set to `0`/`false` to disable an API group.
+- `ARPVPN_AUDIT_SIGNING_KEY`: optional audit event signing key override.
+- `ARPVPN_TENANT_RUNTIME_PORT_STRIDE`, `ARPVPN_TENANT_RUNTIME_HTTP_BASE`, `ARPVPN_TENANT_RUNTIME_HTTPS_BASE`, `ARPVPN_TENANT_RUNTIME_VPN_BASE`: tenant runtime port allocation controls.
+- `ARPVPN_REPOSITORY_URL` / `ARPVPN_LICENSE_URL`: optional links shown in app metadata/templates.
 
 ## Systemd Install
 
