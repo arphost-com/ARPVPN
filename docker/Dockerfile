@@ -1,4 +1,4 @@
-FROM python:3.12-slim-trixie
+FROM python:3.14-slim-trixie
 
 ARG ARPVPN_UID=1000
 ARG ARPVPN_GID=1000
@@ -35,7 +35,7 @@ COPY . /tmp/arpvpn
 
 RUN set -eu; \
     if [ ! -f requirements.txt ] && [ -f pyproject.toml ]; then \
-      python3 -m pip install --no-cache-dir poetry==1.8.3; \
+      python3 -m pip install --no-cache-dir poetry==2.3.4 poetry-plugin-export==1.10.0; \
       poetry export --without-hashes -f requirements.txt -o requirements.txt; \
     fi; \
     if [ -x ./install.sh ]; then \
