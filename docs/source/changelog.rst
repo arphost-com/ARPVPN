@@ -6,8 +6,8 @@ All notable changes to this project will be documented here.
 .. note::
     ARPVPN is adhered to `Semantic Versioning <https://semver.org/>`__.
 
-Unreleased
-----------
+3.0.0
+-----
 
 Major Upgrade
 ~~~~~~~~~~~~~
