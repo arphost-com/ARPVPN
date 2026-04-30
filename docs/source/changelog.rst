@@ -6,6 +6,19 @@ All notable changes to this project will be documented here.
 .. note::
     ARPVPN is adhered to `Semantic Versioning <https://semver.org/>`__.
 
+Unreleased
+----------
+
+Major Upgrade
+~~~~~~~~~~~~~
+
+* Upgraded the Docker runtime base image to ``python:3.14-slim-trixie``.
+* Upgraded core runtime dependencies, including ``cryptography`` 47.0.0 and ``Faker`` 40.15.0.
+* Refreshed the Poetry lockfile and exported runtime requirements with Poetry 2.3.4.
+* Upgraded documentation tooling to Sphinx 9.1.0 and sphinx-rtd-theme 3.1.0 for Python 3.12+ doc builds.
+* Updated the generated Python SDK dependency floor to ``requests>=2.33.1``.
+* Validated the upgraded build on docker02 with API contract tests, server tests, Docker image build, and a healthy container smoke test.
+
 1.1.0
 -----
 

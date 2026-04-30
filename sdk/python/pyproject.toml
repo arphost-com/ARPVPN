@@ -3,7 +3,7 @@ name = "arpvpn-api-client"
 version = "0.1.0"
 description = "Generated Python client for ARPVPN"
 requires-python = ">=3.10"
-dependencies = ["requests>=2.32.0"]
+dependencies = ["requests>=2.33.1"]
 
 [build-system]
 requires = ["setuptools>=68"]
