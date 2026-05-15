@@ -644,18 +644,7 @@ class AddInterfaceForm(FlaskForm):
 
     @staticmethod
     def _default_nat_commands(name: str, gateway_iface: str) -> Tuple[List[str], List[str]]:
-        return (
-            [
-                f"{wireguard_config.iptables_bin} -I FORWARD -i {name} -j ACCEPT",
-                f"{wireguard_config.iptables_bin} -I FORWARD -o {name} -j ACCEPT",
-                f"{wireguard_config.iptables_bin} -t nat -I POSTROUTING -o {gateway_iface} -j MASQUERADE",
-            ],
-            [
-                f"{wireguard_config.iptables_bin} -D FORWARD -i {name} -j ACCEPT",
-                f"{wireguard_config.iptables_bin} -D FORWARD -o {name} -j ACCEPT",
-                f"{wireguard_config.iptables_bin} -t nat -D POSTROUTING -o {gateway_iface} -j MASQUERADE",
-            ],
-        )
+        return Interface.default_forwarding_commands(name, gateway_iface, wireguard_config.iptables_bin)
 
     def validate(self, extra_validators=None):
         valid = super().validate(extra_validators)

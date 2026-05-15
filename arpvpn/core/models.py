@@ -24,6 +24,7 @@ from arpvpn.core.utils.wireguard import get_wg_interface_status
 class Interface(YamlAble):
     MIN_PORT_NUMBER = 50000
     MAX_PORT_NUMBER = 65535
+    DEFAULT_MTU = 1380
 
     MIN_NAME_LENGTH = 2
     MAX_NAME_LENGTH = 15
@@ -105,15 +106,58 @@ class Interface(YamlAble):
                           public_key=public_key, on_up=on_up, on_down=on_down, peers=peers, tenant_id=tenant_id)
         return iface
 
+    @classmethod
+    def default_forwarding_commands(cls, name: str, gateway_iface: str, iptables_bin: str) -> tuple[List[str], List[str]]:
+        on_up = [
+            f"{iptables_bin} -I FORWARD -i {name} -j ACCEPT",
+            f"{iptables_bin} -I FORWARD -o {name} -j ACCEPT",
+            f"{iptables_bin} -t nat -I POSTROUTING -o {gateway_iface} -j MASQUERADE",
+            f"{iptables_bin} -t mangle -I FORWARD -i {name} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu",
+            f"{iptables_bin} -t mangle -I FORWARD -o {name} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu",
+        ]
+        on_down = [
+            f"{iptables_bin} -D FORWARD -i {name} -j ACCEPT",
+            f"{iptables_bin} -D FORWARD -o {name} -j ACCEPT",
+            f"{iptables_bin} -t nat -D POSTROUTING -o {gateway_iface} -j MASQUERADE",
+            f"{iptables_bin} -t mangle -D FORWARD -i {name} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu",
+            f"{iptables_bin} -t mangle -D FORWARD -o {name} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu",
+        ]
+        return on_up, on_down
+
+    @classmethod
+    def managed_mss_clamp_commands(cls, name: str, iptables_bin: str) -> tuple[List[str], List[str]]:
+        on_up = [
+            f"{iptables_bin} -t mangle -I FORWARD -i {name} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu",
+            f"{iptables_bin} -t mangle -I FORWARD -o {name} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu",
+        ]
+        on_down = [
+            f"{iptables_bin} -t mangle -D FORWARD -i {name} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu",
+            f"{iptables_bin} -t mangle -D FORWARD -o {name} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu",
+        ]
+        return on_up, on_down
+
+    def _managed_hook_commands(self) -> tuple[List[str], List[str]]:
+        from arpvpn.core.config.wireguard import config
+        on_up, on_down = self.managed_mss_clamp_commands(self.name, config.iptables_bin)
+        extra_on_up = [command for command in on_up if command not in self.on_up]
+        extra_on_down = [command for command in on_down if command not in self.on_down]
+        return extra_on_up, extra_on_down
+
     def generate_conf(self) -> str:
         """Generate the wireguard configuration for this interface."""
         iface = ("[Interface]\n"
                  f"PrivateKey = {self.private_key}\n"
                  f"Address = {self.ipv4_address}\n"
-                 f"ListenPort = {self.listen_port}\n")
+                 f"ListenPort = {self.listen_port}\n"
+                 f"MTU = {self.DEFAULT_MTU}\n")
         for cmd in self.on_up:
             iface += f"PostUp = {cmd}\n"
         for cmd in self.on_down:
+            iface += f"PostDown = {cmd}\n"
+        managed_on_up, managed_on_down = self._managed_hook_commands()
+        for cmd in managed_on_up:
+            iface += f"PostUp = {cmd}\n"
+        for cmd in managed_on_down:
             iface += f"PostDown = {cmd}\n"
 
         peers = ""
@@ -426,6 +470,7 @@ class Peer(YamlAble):
         iface = f"[Interface]\n" \
                 f"PrivateKey = {self.private_key}\n"
         iface += f"Address = {self.ipv4_address}\n"
+        iface += f"MTU = {Interface.DEFAULT_MTU}\n"
         if self.dns1:
             iface += f"DNS = {self.dns1}"
             if self.dns2:
