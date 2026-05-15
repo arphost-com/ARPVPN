@@ -194,6 +194,115 @@
                     </div>
                 </div>
             </form>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="fas fa-code mr-1"></i>
+                    API tokens
+                </div>
+                <div class="card-body">
+                    {% if issued_api_tokens %}
+                        <div class="alert alert-warning">
+                            These token values are shown once. Store them before leaving this page.
+                        </div>
+                        <div class="form-group">
+                            <label class="small font-weight-bold">Access token</label>
+                            <textarea class="form-control" rows="3" readonly>{{ issued_api_tokens.access_token }}</textarea>
+                            <small class="form-text text-muted">Expires at {{ issued_api_tokens.access_expires_at }}.</small>
+                        </div>
+                        <div class="form-group">
+                            <label class="small font-weight-bold">Refresh token</label>
+                            <textarea class="form-control" rows="3" readonly>{{ issued_api_tokens.refresh_token }}</textarea>
+                            <small class="form-text text-muted">Expires at {{ issued_api_tokens.refresh_expires_at }}.</small>
+                        </div>
+                    {% endif %}
+
+                    <form action="{{ request.url }}" method="post" novalidate>
+                        {{ api_token_form.hidden_tag() }}
+                        <div id="api-token-alerts">
+                            {% for error in api_token_form.password.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ api_token_form.password.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in api_token_form.scope.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ api_token_form.scope.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in api_token_form.mfa_code.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ api_token_form.mfa_code.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-4">
+                                {{ api_token_form.password.label() }}
+                                {{ api_token_form.password(class="form-control") }}
+                            </div>
+                            <div class="form-group col-md-3">
+                                {{ api_token_form.scope.label() }}
+                                {{ api_token_form.scope(class="form-control") }}
+                            </div>
+                            <div class="form-group col-md-3">
+                                {{ api_token_form.mfa_code.label() }}
+                                {{ api_token_form.mfa_code(class="form-control") }}
+                            </div>
+                            <div class="form-group col-md-2 d-flex align-items-end">
+                                {{ api_token_form.issue_api_token(class="btn btn-warning btn-block") }}
+                            </div>
+                        </div>
+                    </form>
+
+                    <hr>
+
+                    {% if api_tokens %}
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped mb-3">
+                                <thead>
+                                    <tr>
+                                        <th>Token ID</th>
+                                        <th>Kind</th>
+                                        <th>Issued</th>
+                                        <th>Expires</th>
+                                        <th>MFA</th>
+                                        <th>IP</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for token in api_tokens %}
+                                        <tr>
+                                            <td><code>{{ token.token_id }}</code></td>
+                                            <td>{{ token.token_kind }}</td>
+                                            <td>{{ token.issued_at }}</td>
+                                            <td>{{ token.expires_at }}</td>
+                                            <td>{% if token.mfa_verified %}yes{% else %}no{% endif %}</td>
+                                            <td>{{ token.issued_ip }}</td>
+                                            <td class="text-right">
+                                                <form action="{{ request.url }}" method="post" class="d-inline">
+                                                    {% if api_token_revoke_form.csrf_token is defined %}
+                                                        {{ api_token_revoke_form.csrf_token }}
+                                                    {% endif %}
+                                                    {{ api_token_revoke_form.token_id(value=token.token_id) }}
+                                                    {{ api_token_revoke_form.revoke_api_token(class="btn btn-outline-danger btn-sm") }}
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        <form action="{{ request.url }}" method="post">
+                            {{ api_token_revoke_all_form.hidden_tag() }}
+                            {{ api_token_revoke_all_form.revoke_all_api_tokens(class="btn btn-outline-danger") }}
+                        </form>
+                    {% else %}
+                        <p class="text-muted mb-0">No active API tokens.</p>
+                    {% endif %}
+                </div>
+            </div>
         </div>
     </main>
 {% endblock %}

@@ -336,6 +336,10 @@ class ArpvpnApiClient:
         path = "/api/v1/wireguard/interfaces"
         return self._request("POST", path, params=params, payload=payload, headers=headers)
 
+    def export_wireguard_interfaces(self, payload: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None, headers: Optional[Dict[str, str]] = None) -> Any:
+        path = "/api/v1/wireguard/interfaces/export"
+        return self._request("GET", path, params=params, payload=payload, headers=headers)
+
     def delete_wireguard_interface(self, interface_id, payload: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None, headers: Optional[Dict[str, str]] = None) -> Any:
         path = f"/api/v1/wireguard/interfaces/{interface_id}"
         return self._request("DELETE", path, params=params, payload=payload, headers=headers)
@@ -367,6 +371,10 @@ class ArpvpnApiClient:
     def create_wireguard_peer(self, payload: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None, headers: Optional[Dict[str, str]] = None) -> Any:
         path = "/api/v1/wireguard/peers"
         return self._request("POST", path, params=params, payload=payload, headers=headers)
+
+    def export_wireguard_peers(self, payload: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None, headers: Optional[Dict[str, str]] = None) -> Any:
+        path = "/api/v1/wireguard/peers/export"
+        return self._request("GET", path, params=params, payload=payload, headers=headers)
 
     def delete_wireguard_peer(self, peer_id, payload: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None, headers: Optional[Dict[str, str]] = None) -> Any:
         path = f"/api/v1/wireguard/peers/{peer_id}"

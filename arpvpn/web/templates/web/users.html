@@ -57,6 +57,11 @@
                                   Error in field <strong>{{ create_form.role.label.text }}</strong>: {{ error }}
                                 </div>
                             {% endfor %}
+                            {% for error in create_form.tenant_id.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ create_form.tenant_id.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
                             {% for error in create_form.create_peer.errors %}
                                 <div class="alert alert-danger" role="alert">
                                   Error in field <strong>{{ create_form.create_peer.label.text }}</strong>: {{ error }}
@@ -94,21 +99,25 @@
                             {% endfor %}
                         </div>
                         <div class="form-row">
-                            <div class="form-group col-md-3">
+                            <div class="form-group col-md-2">
                                 {{ create_form.username.label() }}
                                 {{ create_form.username(class="form-control") }}
                             </div>
-                            <div class="form-group col-md-3">
+                            <div class="form-group col-md-2">
                                 {{ create_form.password.label() }}
                                 {{ create_form.password(class="form-control") }}
                             </div>
-                            <div class="form-group col-md-3">
+                            <div class="form-group col-md-2">
                                 {{ create_form.confirm.label() }}
                                 {{ create_form.confirm(class="form-control") }}
                             </div>
                             <div class="form-group col-md-3">
                                 {{ create_form.role.label() }}
                                 {{ create_form.role(class="form-control") }}
+                            </div>
+                            <div class="form-group col-md-3">
+                                {{ create_form.tenant_id.label() }}
+                                {{ create_form.tenant_id(class="form-control") }}
                             </div>
                         </div>
                         <div class="form-group mb-0">
@@ -195,6 +204,106 @@
                 </div>
             </form>
 
+            <div>
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="fas fa-envelope mr-1"></i>
+                        Invitations
+                    </div>
+                    <div class="card-body">
+                        <form action="/invitations" method="post" novalidate>
+                        {{ invitation_form.hidden_tag() }}
+                        <div id="invitation-alerts">
+                            {% for error in invitation_form.email.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ invitation_form.email.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in invitation_form.role.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ invitation_form.role.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in invitation_form.tenant_id.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ invitation_form.tenant_id.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in invitation_form.expires_in_hours.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                  Error in field <strong>{{ invitation_form.expires_in_hours.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-4">
+                                {{ invitation_form.email.label() }}
+                                {{ invitation_form.email(class="form-control") }}
+                            </div>
+                            <div class="form-group col-md-3">
+                                {{ invitation_form.role.label() }}
+                                {{ invitation_form.role(class="form-control") }}
+                            </div>
+                            <div class="form-group col-md-3">
+                                {{ invitation_form.tenant_id.label() }}
+                                {{ invitation_form.tenant_id(class="form-control") }}
+                            </div>
+                            <div class="form-group col-md-2">
+                                {{ invitation_form.expires_in_hours.label() }}
+                                {{ invitation_form.expires_in_hours(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="form-group mb-0">
+                            {{ invitation_form.submit(class="btn btn-warning") }}
+                        </div>
+                        </form>
+
+                        {% if invitations_list %}
+                            <hr>
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead>
+                                    <tr>
+                                        <th>Email</th>
+                                        <th>Role</th>
+                                        <th>Tenant</th>
+                                        <th>Status</th>
+                                        <th>Expires</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    {% for invitation in invitations_list %}
+                                        <tr>
+                                            <td>{{ invitation.email }}</td>
+                                            <td><span class="badge badge-secondary">{{ invitation.role }}</span></td>
+                                            <td>{{ tenant_names.get(invitation.tenant_id or "", "Unknown") }}</td>
+                                            <td>{{ invitation.current_status() }}</td>
+                                            <td>{{ invitation.expires_at }}</td>
+                                            <td>
+                                                {% if invitation.current_status() == "pending" %}
+                                                    <form action="/invitations/{{ invitation.id }}/resend" method="post" class="d-inline">
+                                                        {{ invitation_action_form.hidden_tag() }}
+                                                        <button class="btn btn-sm btn-outline-primary" type="submit">Resend</button>
+                                                    </form>
+                                                    <form action="/invitations/{{ invitation.id }}/revoke" method="post" class="d-inline">
+                                                        {{ invitation_action_form.hidden_tag() }}
+                                                        <button class="btn btn-sm btn-outline-danger" type="submit">Revoke</button>
+                                                    </form>
+                                                {% else %}
+                                                    <span class="text-muted small">No action</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
             <div class="card mb-4">
                 <div class="card-header">
                     <i class="fas fa-users mr-1"></i>
@@ -207,6 +316,7 @@
                             <tr>
                                 <th>Username</th>
                                 <th>Role</th>
+                                <th>Tenant</th>
                                 <th>VPN access</th>
                                 <th>Actions</th>
                             </tr>
@@ -216,6 +326,7 @@
                                 <tr>
                                     <td>{{ user_item.name }}</td>
                                     <td><span class="badge badge-secondary">{{ user_item.role }}</span></td>
+                                    <td>{{ tenant_names.get(user_item.tenant_id or "", "Control plane") }}</td>
                                     <td>
                                         {% set vpn_access = user_vpn_access[user_item.id] %}
                                         {% if vpn_access %}

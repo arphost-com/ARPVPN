@@ -84,6 +84,7 @@ Status:
 - Supports cookie/session auth and bearer token auth.
 - Includes rate limiting, lockout handling, revocation, and audit logging.
 - Cookie-authenticated API writes require CSRF tokens; bearer-token writes do not.
+- RBAC exposes `super_admin`, `support_admin`, `tenant_admin`, and `client` capabilities. Only the super-admin role can create, update, or delete tenants.
 
 ### Traffic, usage, and RRD
 
@@ -114,6 +115,23 @@ Implemented:
 Status:
 
 - Intended for admin and tenant-admin workflows where applicable.
+- Tenant admins can only read/update configuration for their assigned tenant.
+
+### Tenants, users, and invitations
+
+Implemented:
+
+- Tenant lifecycle endpoints under `/api/v1/tenants`
+- Tenant member endpoints under `/api/v1/tenants/<tenant_id>/members`
+- User import/export endpoints under `/api/v1/users`
+- Invitation create/list/get/resend/revoke/accept endpoints under `/api/v1/invitations`
+
+Status:
+
+- Super admins manage tenant records and all tenant-scoped users.
+- Support users can manage client accounts but cannot create tenants.
+- Tenant admins can manage client accounts, invitations, WireGuard interfaces, and peers only inside their assigned tenant.
+- Browser workflows mirror the API constraints for user and invitation management.
 
 ### System and setup
 

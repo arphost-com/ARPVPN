@@ -458,6 +458,147 @@ class TenancyManager:
             f"users={len(legacy_users)}, vpn_instances={imported_instances}, vpn_clients={imported_clients}"
         )
 
+    def _sync_identity_state(
+        self,
+        connection: sqlite3.Connection,
+        legacy_users: Mapping[str, Any],
+        legacy_tenants: Mapping[str, Any],
+        legacy_invitations: Mapping[str, Any],
+    ):
+        now = self._utc_now()
+        status_map = {
+            "active": "active",
+            "suspended": "disabled",
+            "disabled": "disabled",
+            "archived": "archived",
+        }
+
+        for tenant in legacy_tenants.values():
+            tenant_id = getattr(tenant, "id", None)
+            name = (getattr(tenant, "name", "") or "").strip()
+            slug = (getattr(tenant, "slug", "") or "").strip()
+            if not tenant_id or not name:
+                continue
+            status = status_map.get((getattr(tenant, "status", "") or "").strip().lower(), "active")
+            connection.execute(
+                """
+                INSERT INTO mt_tenants(id, slug, name, status, created_at, updated_at)
+                VALUES(?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    slug = excluded.slug,
+                    name = excluded.name,
+                    status = excluded.status,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    tenant_id,
+                    slug or f"tenant-{str(tenant_id)[:8]}",
+                    name,
+                    status,
+                    getattr(tenant, "created_at", None) or now,
+                    getattr(tenant, "updated_at", None) or now,
+                ),
+            )
+
+        role_map = {
+            "admin": [("super_admin", None)],
+            "support": [("support_admin", None)],
+            "tenant_admin": [("tenant_admin", None)],
+            "client": [("client", None)],
+        }
+        for user in legacy_users.values():
+            user_id = getattr(user, "id", None)
+            username = (getattr(user, "name", "") or "").strip()
+            password_hash = (getattr(user, "password", "") or "").strip()
+            role = (getattr(user, "role", "") or "").strip().lower()
+            tenant_id = (getattr(user, "tenant_id", "") or "").strip() or None
+            if not user_id or not username or not password_hash:
+                continue
+            connection.execute(
+                """
+                INSERT INTO mt_users(id, username, password_hash, legacy_role, created_at, updated_at)
+                VALUES(?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    username = excluded.username,
+                    password_hash = excluded.password_hash,
+                    legacy_role = excluded.legacy_role,
+                    updated_at = excluded.updated_at
+                """,
+                (user_id, username, password_hash, role, now, now),
+            )
+            connection.execute("DELETE FROM mt_memberships WHERE user_id = ?", (user_id,))
+            for membership_role, explicit_tenant_id in role_map.get(role, [("client", None)]):
+                membership_tenant_id = explicit_tenant_id
+                if membership_role in ("tenant_admin", "client"):
+                    membership_tenant_id = tenant_id
+                if membership_role in ("tenant_admin", "client") and not membership_tenant_id:
+                    continue
+                connection.execute(
+                    """
+                    INSERT INTO mt_memberships(
+                        id, user_id, tenant_id, role, status, created_at, updated_at
+                    )
+                    VALUES(?, ?, ?, ?, 'active', ?, ?)
+                    """,
+                    (gen_uuid().hex, user_id, membership_tenant_id, membership_role, now, now),
+                )
+
+        for invitation in legacy_invitations.values():
+            invitation_id = getattr(invitation, "id", None)
+            tenant_id = (getattr(invitation, "tenant_id", "") or "").strip()
+            email = (getattr(invitation, "email", "") or "").strip().lower()
+            role = (getattr(invitation, "role", "") or "client").strip().lower()
+            token_hash = (getattr(invitation, "token_hash", "") or "").strip()
+            if not invitation_id or not tenant_id or not email or not token_hash:
+                continue
+            if role not in ("tenant_admin", "client"):
+                role = "client"
+            connection.execute(
+                """
+                INSERT INTO mt_invites(
+                    id, tenant_id, email, role, token_hash, invited_by_user_id, expires_at,
+                    accepted_at, revoked_at, created_at
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    tenant_id = excluded.tenant_id,
+                    email = excluded.email,
+                    role = excluded.role,
+                    token_hash = excluded.token_hash,
+                    invited_by_user_id = excluded.invited_by_user_id,
+                    expires_at = excluded.expires_at,
+                    accepted_at = excluded.accepted_at,
+                    revoked_at = excluded.revoked_at
+                """,
+                (
+                    invitation_id,
+                    tenant_id,
+                    email,
+                    role,
+                    token_hash,
+                    (getattr(invitation, "invited_by_user_id", "") or "").strip() or None,
+                    getattr(invitation, "expires_at", "") or now,
+                    (getattr(invitation, "accepted_at", "") or "").strip() or None,
+                    (getattr(invitation, "revoked_at", "") or "").strip() or None,
+                    getattr(invitation, "created_at", "") or now,
+                ),
+            )
+
+    def sync_identity_state(
+        self,
+        legacy_users: Mapping[str, Any],
+        legacy_tenants: Mapping[str, Any],
+        legacy_invitations: Mapping[str, Any],
+    ):
+        if not global_properties.workdir:
+            return
+        try_makedir(os.path.dirname(self.db_path))
+        with self._connect() as connection:
+            self._create_schema(connection)
+            self._ensure_default_tenant(connection)
+            self._sync_identity_state(connection, legacy_users, legacy_tenants, legacy_invitations)
+            connection.commit()
+
     def initialize(
         self,
         legacy_users: Mapping[str, Any],
@@ -478,6 +619,8 @@ class TenancyManager:
                 web_config=web_config,
                 wireguard_config=wireguard_config,
             )
+            from arpvpn.common.models.tenant import tenants, invitations
+            self._sync_identity_state(connection, legacy_users, tenants, invitations)
             connection.commit()
 
 

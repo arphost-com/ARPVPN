@@ -127,6 +127,11 @@ class ConfigManager:
         ConfigManager.__save_encrypted_store__(users, web_config.credentials_file)
         ConfigManager.__save_encrypted_store__(tenants, web_config.tenants_file)
         ConfigManager.__save_encrypted_store__(invitations, web_config.invitations_file)
+        try:
+            from arpvpn.core.managers.tenancy import tenancy_manager
+            tenancy_manager.sync_identity_state(users, tenants, invitations)
+        except Exception as exc:
+            warning("Unable to sync tenancy mirror: %s", exc)
 
     @staticmethod
     def __save_encrypted_store__(store, path: str):
