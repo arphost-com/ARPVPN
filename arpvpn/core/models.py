@@ -24,7 +24,6 @@ from arpvpn.core.utils.wireguard import get_wg_interface_status
 class Interface(YamlAble):
     MIN_PORT_NUMBER = 50000
     MAX_PORT_NUMBER = 65535
-    DEFAULT_MTU = 1380
 
     MIN_NAME_LENGTH = 2
     MAX_NAME_LENGTH = 15
@@ -148,8 +147,7 @@ class Interface(YamlAble):
         iface = ("[Interface]\n"
                  f"PrivateKey = {self.private_key}\n"
                  f"Address = {self.ipv4_address}\n"
-                 f"ListenPort = {self.listen_port}\n"
-                 f"MTU = {self.DEFAULT_MTU}\n")
+                 f"ListenPort = {self.listen_port}\n")
         for cmd in self.on_up:
             iface += f"PostUp = {cmd}\n"
         for cmd in self.on_down:
@@ -470,7 +468,6 @@ class Peer(YamlAble):
         iface = f"[Interface]\n" \
                 f"PrivateKey = {self.private_key}\n"
         iface += f"Address = {self.ipv4_address}\n"
-        iface += f"MTU = {Interface.DEFAULT_MTU}\n"
         if self.dns1:
             iface += f"DNS = {self.dns1}"
             if self.dns2:
