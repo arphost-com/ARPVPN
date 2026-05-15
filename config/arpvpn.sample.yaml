@@ -12,10 +12,14 @@ wireguard: !yamlable/wireguard
       - /usr/sbin/iptables -D FORWARD -i tough-moth -j ACCEPT
       - /usr/sbin/iptables -D FORWARD -o tough-moth -j ACCEPT
       - /usr/sbin/iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
+      - /usr/sbin/iptables -t mangle -D FORWARD -i tough-moth -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+      - /usr/sbin/iptables -t mangle -D FORWARD -o tough-moth -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
       on_up:
       - /usr/sbin/iptables -I FORWARD -i tough-moth -j ACCEPT
       - /usr/sbin/iptables -I FORWARD -o tough-moth -j ACCEPT
       - /usr/sbin/iptables -t nat -I POSTROUTING -o eth0 -j MASQUERADE
+      - /usr/sbin/iptables -t mangle -I FORWARD -i tough-moth -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+      - /usr/sbin/iptables -t mangle -I FORWARD -o tough-moth -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
       peers: !yamlable/peers
         9ea085f97fdd4022a16df6f0a70b24db: !yamlable/peer
           description: ''
