@@ -229,6 +229,21 @@ python3 scripts/validate_openapi.py
 ./scripts/check_api_artifacts.sh
 ```
 
+## Private Deployment Pipeline
+
+`.gitlab-ci.yml` is safe for this public repository because it contains no secret
+values. The GitLab workflow only runs in a private GitLab project, and deployment
+only runs on a protected default branch with masked/protected CI variables.
+
+Pipeline order:
+- Local/API tests and generated artifact checks run first.
+- The Docker image is published to the private GitLab registry.
+- docker02 staging deploy and smoke validation run automatically.
+- Production deploy is a manual GitLab job and uses the same tested image.
+
+Keep SSH keys, registry tokens, hostnames, deploy paths, and health-check URLs in
+private CI/CD variables only. See `docs/source/gitlab-deployment.rst`.
+
 ## Security Notes
 
 - Keep TLS enabled in production environments.

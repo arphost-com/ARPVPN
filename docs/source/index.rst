@@ -24,6 +24,7 @@ Contents
     :maxdepth: 2
 
     installation
+    gitlab-deployment
     in-depth
     api
     contributing
