@@ -340,6 +340,7 @@ def maybe_redirect_http_to_https():
 def inject_user_access_context():
     role = None
     can_manage_users = False
+    can_manage_tenants = False
     can_manage_wireguard = False
     is_staff = False
     impersonator_name = None
@@ -349,6 +350,7 @@ def inject_user_access_context():
         role = getattr(current_user, "role", User.ROLE_CLIENT)
         is_staff = role in (User.ROLE_ADMIN, User.ROLE_SUPPORT)
         can_manage_users = role in (User.ROLE_ADMIN, User.ROLE_SUPPORT, User.ROLE_TENANT_ADMIN)
+        can_manage_tenants = role == User.ROLE_ADMIN
         can_manage_wireguard = role in (User.ROLE_ADMIN, User.ROLE_SUPPORT, User.ROLE_TENANT_ADMIN)
         impersonator_id = session.get("impersonator_user_id")
         if impersonator_id:
@@ -356,6 +358,7 @@ def inject_user_access_context():
             if impersonator and impersonator.id != current_user.id:
                 impersonating = True
                 can_manage_users = False
+                can_manage_tenants = False
                 can_manage_wireguard = False
                 impersonator_name = impersonator.name
                 impersonator_role = impersonator.role
@@ -366,6 +369,7 @@ def inject_user_access_context():
         "current_user_role": role,
         "current_user_is_staff": is_staff,
         "current_user_can_manage_users": can_manage_users,
+        "current_user_can_manage_tenants": can_manage_tenants,
         "current_user_can_manage_wireguard": can_manage_wireguard,
         "is_impersonating": impersonating,
         "impersonator_name": impersonator_name,

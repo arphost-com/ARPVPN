@@ -1,0 +1,146 @@
+{% extends "web/web-main.html" %}
+
+{% block content %}
+    <main>
+        <div class="container-fluid">
+            <div class="my-4">
+                <h1 class="my-4">{{ title }}</h1>
+                <ol class="breadcrumb mb-4">
+                    <li class="breadcrumb-item active">Create and review tenant workspaces.</li>
+                </ol>
+            </div>
+
+            <div id="global-alerts">
+                {% if success %}
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <strong>Done!</strong> {{ success_details }}
+                        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                {% elif error %}
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <strong>Unexpected error:</strong> {{ error_details }}
+                        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                {% endif %}
+            </div>
+
+            <form action="/tenants" method="post" novalidate>
+                {{ form.hidden_tag() }}
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="fas fa-building mr-1"></i>
+                        Create tenant
+                    </div>
+                    <div class="card-body">
+                        <div id="tenant-alerts">
+                            {% for error in form.name.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                    Error in field <strong>{{ form.name.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in form.slug.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                    Error in field <strong>{{ form.slug.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in form.domains.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                    Error in field <strong>{{ form.domains.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in form.ips.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                    Error in field <strong>{{ form.ips.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                            {% for error in form.status.errors %}
+                                <div class="alert alert-danger" role="alert">
+                                    Error in field <strong>{{ form.status.label.text }}</strong>: {{ error }}
+                                </div>
+                            {% endfor %}
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-4">
+                                {{ form.name.label() }}
+                                {{ form.name(class="form-control") }}
+                            </div>
+                            <div class="form-group col-md-4">
+                                {{ form.slug.label() }}
+                                {{ form.slug(class="form-control") }}
+                            </div>
+                            <div class="form-group col-md-4">
+                                {{ form.status.label() }}
+                                {{ form.status(class="form-control") }}
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-6">
+                                {{ form.domains.label() }}
+                                {{ form.domains(class="form-control", rows="2") }}
+                                <small class="text-muted">Comma-separated DNS names attached to this tenant.</small>
+                            </div>
+                            <div class="form-group col-md-6">
+                                {{ form.ips.label() }}
+                                {{ form.ips(class="form-control", rows="2") }}
+                                <small class="text-muted">Comma-separated public IP metadata for tenant routing records.</small>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-8">
+                                {{ form.description.label() }}
+                                {{ form.description(class="form-control", rows="2") }}
+                            </div>
+                        </div>
+                        <div class="form-group mb-0">
+                            {{ form.submit(class="btn btn-warning") }}
+                        </div>
+                    </div>
+                </div>
+            </form>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="fas fa-list mr-1"></i>
+                    Tenants
+                    <span class="badge badge-secondary ml-2">{{ total_tenants }}</span>
+                </div>
+                <div class="card-body table-responsive">
+                    <table class="table table-bordered table-hover mb-0">
+                        <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Slug</th>
+                            <th>Status</th>
+                            <th>Domains</th>
+                            <th>IP metadata</th>
+                            <th>Created</th>
+                            <th>Description</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for tenant in tenants_list %}
+                            <tr>
+                                <td>{{ tenant.name }}</td>
+                                <td><code>{{ tenant.slug }}</code></td>
+                                <td>{{ tenant.status }}</td>
+                                <td>{{ tenant.domains | join(", ") }}</td>
+                                <td>{{ tenant.ips | join(", ") }}</td>
+                                <td>{{ tenant.created_at }}</td>
+                                <td>{{ tenant.description }}</td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="7" class="text-center text-muted">No tenants have been created.</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+{% endblock %}
