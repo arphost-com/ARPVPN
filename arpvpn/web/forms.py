@@ -13,6 +13,7 @@ from wtforms.fields import HiddenField
 from wtforms.validators import DataRequired, InputRequired
 
 from arpvpn.common.models.user import User
+from arpvpn.common.models.tenant import Tenant
 from arpvpn.common.utils.encryption import CryptoUtils
 from arpvpn.common.utils.network import get_system_interfaces, get_default_gateway
 from arpvpn.common.utils.strings import list_to_str
@@ -251,6 +252,25 @@ class InvitationAcceptForm(FlaskForm):
     confirm = PasswordField("Confirm password", validators=[DataRequired(), SignupPasswordValidator()],
                             render_kw={"placeholder": "Confirm password", "autocomplete": "new-password"})
     submit = SubmitField("Accept invitation")
+
+
+class TenantForm(FlaskForm):
+    name = StringField("Name", validators=[DataRequired()],
+                       render_kw={"placeholder": "Tenant name"})
+    slug = StringField("Slug", render_kw={"placeholder": "tenant-name"})
+    domains = TextAreaField("Domains", render_kw={"placeholder": "vpn.example.com, clients.example.com"})
+    ips = TextAreaField("Allowed IP metadata", render_kw={"placeholder": "203.0.113.10, 198.51.100.25"})
+    status = SelectField(
+        "Status",
+        choices=[
+            (Tenant.STATUS_ACTIVE, "Active"),
+            (Tenant.STATUS_SUSPENDED, "Suspended"),
+            (Tenant.STATUS_DISABLED, "Disabled"),
+        ],
+        default=Tenant.STATUS_ACTIVE,
+    )
+    description = TextAreaField("Description", render_kw={"placeholder": "Optional tenant notes"})
+    submit = SubmitField("Create tenant")
 
 
 class SettingsForm(FlaskForm):

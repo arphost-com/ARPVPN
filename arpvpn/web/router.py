@@ -77,6 +77,7 @@ ALLOWED_NEXT_ENDPOINTS = {
     "/network": "router.network",
     "/wireguard": "router.wireguard",
     "/settings": "router.settings",
+    "/tenants": "router.manage_tenants",
     "/users": "router.manage_users",
     "/themes": "router.themes",
     "/documentation": "router.documentation",
@@ -4468,6 +4469,27 @@ def validate_unique_username(username: str, exclude_id: str = ""):
         abort(CONFLICT, "Username already exists.")
 
 
+def create_tenant_from_payload(payload: Dict[str, Any]) -> Tenant:
+    name = parse_non_empty_string(payload.get("name"), "name")
+    slug = slugify_name(payload.get("slug") or name) or f"tenant-{secrets.token_hex(4)}"
+    validate_unique_tenant_fields(name, slug)
+    tenant = Tenant(
+        name=name,
+        slug=slug,
+        domains=parse_string_list_value(payload.get("domains", []), "domains"),
+        ips=parse_ip_metadata(payload.get("ips", [])),
+        status=parse_tenant_status(payload.get("status", Tenant.STATUS_ACTIVE)),
+        description=parse_optional_string(payload.get("description")),
+        settings={},
+    )
+    tenant.settings = parse_tenant_settings(payload.get("settings", {}), tenant)
+    tenants[tenant.id] = tenant
+    tenants.sort()
+    config_manager.save_identity_state()
+    log_audit_event("tenant.create", status="success", details={"tenant_id": tenant.id, "tenant_name": tenant.name})
+    return tenant
+
+
 @router.route("/api/v1/tenants", methods=["GET"])
 @login_required
 @role_required(*USER_MANAGEMENT_ROLES)
@@ -4491,23 +4513,7 @@ def api_list_tenants():
 @setup_required
 def api_create_tenant():
     payload = parse_json_payload()
-    name = parse_non_empty_string(payload.get("name"), "name")
-    slug = slugify_name(payload.get("slug") or name) or f"tenant-{secrets.token_hex(4)}"
-    validate_unique_tenant_fields(name, slug)
-    tenant = Tenant(
-        name=name,
-        slug=slug,
-        domains=parse_string_list_value(payload.get("domains", []), "domains"),
-        ips=parse_ip_metadata(payload.get("ips", [])),
-        status=parse_tenant_status(payload.get("status", Tenant.STATUS_ACTIVE)),
-        description=parse_optional_string(payload.get("description")),
-        settings={},
-    )
-    tenant.settings = parse_tenant_settings(payload.get("settings", {}), tenant)
-    tenants[tenant.id] = tenant
-    tenants.sort()
-    config_manager.save_identity_state()
-    log_audit_event("tenant.create", status="success", details={"tenant_id": tenant.id, "tenant_name": tenant.name})
+    tenant = create_tenant_from_payload(payload)
     return api_success(tenant_to_api_dict(tenant), status_code=201)
 
 
@@ -6706,6 +6712,19 @@ def tenant_name_lookup() -> Dict[str, str]:
     return lookup
 
 
+def get_tenants_management_context(form=None) -> Dict[str, Any]:
+    from arpvpn.web.forms import TenantForm
+    form = form or TenantForm()
+    tenants_list = list(tenants.values())
+    tenants_list.sort(key=lambda tenant: tenant.name.lower())
+    return {
+        "title": "Tenants",
+        "form": form,
+        "tenants_list": tenants_list,
+        "total_tenants": len(tenants_list),
+    }
+
+
 def configure_user_management_forms(create_form=None, edit_form=None, invitation_form=None):
     from arpvpn.web.forms import CreateUserForm, EditUserForm, InvitationForm
     create_form = create_form or CreateUserForm()
@@ -7068,6 +7087,47 @@ def accept_invitation(invitation_id: str):
 def manage_users():
     context = get_users_management_context()
     return ViewController("web/users.html", **context).load()
+
+
+@router.route("/tenants", methods=["GET"])
+@login_required
+@role_required(User.ROLE_ADMIN)
+@setup_required
+def manage_tenants():
+    context = get_tenants_management_context()
+    return ViewController("web/tenants.html", **context).load()
+
+
+@router.route("/tenants", methods=["POST"])
+@login_required
+@role_required(User.ROLE_ADMIN)
+@setup_required
+def create_tenant():
+    from arpvpn.web.forms import TenantForm
+    form = TenantForm(request.form)
+    context = get_tenants_management_context(form)
+    if not form.validate():
+        details = summarize_form_errors(form) or "unknown validation error"
+        context["error"] = True
+        context["error_details"] = f"Unable to create tenant: {details}"
+        return ViewController("web/tenants.html", **context).load()
+    try:
+        tenant = create_tenant_from_payload({
+            "name": form.name.data,
+            "slug": form.slug.data,
+            "domains": form.domains.data,
+            "ips": form.ips.data,
+            "status": form.status.data,
+            "description": form.description.data,
+        })
+        context = get_tenants_management_context()
+        context["success"] = True
+        context["success_details"] = f"Tenant {tenant.name} created successfully."
+        return ViewController("web/tenants.html", **context).load()
+    except HTTPException as e:
+        context["error"] = True
+        context["error_details"] = e.description
+        return ViewController("web/tenants.html", **context).load()
 
 
 @router.route("/users", methods=["POST"])

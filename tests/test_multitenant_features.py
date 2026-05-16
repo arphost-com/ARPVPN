@@ -192,6 +192,49 @@ def test_invitation_accept_creates_user_in_invitation_tenant(app):
     assert invitation.accepted_user_id == created.id
 
 
+def test_admin_can_create_tenant_from_browser_ui(app):
+    admin = make_user("admin", User.ROLE_ADMIN)
+    client = app.test_client()
+    assert client.get(f"/test-login/{admin.id}").status_code == 200
+
+    page = client.get("/tenants")
+    assert page.status_code == 200
+    assert "Create tenant" in page.get_data(as_text=True)
+
+    response = client.post(
+        "/tenants",
+        data={
+            "name": "Acme VPN",
+            "slug": "acme-vpn",
+            "domains": "vpn.acme.example, clients.acme.example",
+            "ips": "203.0.113.10",
+            "status": Tenant.STATUS_ACTIVE,
+            "description": "Production tenant",
+        },
+    )
+
+    assert response.status_code == 200
+    created = next(iter(tenants.values()))
+    assert created.name == "Acme VPN"
+    assert created.slug == "acme-vpn"
+    assert created.domains == ["vpn.acme.example", "clients.acme.example"]
+    assert created.ips == ["203.0.113.10"]
+    response_text = response.get_data(as_text=True)
+    assert "Tenant Acme VPN created successfully." in response_text
+    assert "acme-vpn" in response_text
+
+
+def test_only_admin_can_open_tenant_browser_ui(app):
+    tenant = Tenant("Tenant One", slug="tenant-one")
+    tenants[tenant.id] = tenant
+    tenant_admin = make_user("tenant-admin", User.ROLE_TENANT_ADMIN, tenant.id)
+    client = app.test_client()
+    assert client.get(f"/test-login/{tenant_admin.id}").status_code == 200
+
+    assert client.get("/tenants").status_code == 403
+    assert client.post("/tenants", data={"name": "Blocked"}).status_code == 403
+
+
 def test_wireguard_peer_config_modes_and_disabled_peer_generation():
     iface = make_interface("wgtenant", "tenant-1")
     disabled = Peer(
