@@ -1934,19 +1934,37 @@ def update_global_config_from_payload(payload: Dict[str, Any]):
 def build_system_health_payload() -> Dict[str, Any]:
     from arpvpn import __version__
 
-    return {
+    visible_interfaces = get_visible_interfaces_for_current_user()
+    scoped_peer_runtime = get_scoped_peer_runtime_summary()
+    payload = {
         "status": "ok",
         "release": getattr(__version__, "release", "unknown"),
         "commit": getattr(__version__, "commit", "unknown"),
         "scope": current_scope_label(),
         "setup_required": bool(global_properties.setup_required and not global_properties.setup_file_exists()),
         "uptime_seconds": int((datetime.now(timezone.utc) - PROCESS_STARTED_AT).total_seconds()),
-        "http_port": web_config.http_port,
-        "https_port": web_config.https_port,
-        "tls_mode": web_config.tls_mode,
-        "interfaces_total": len(interfaces),
-        "peers_total": len(get_all_peers()),
+        "interfaces_total": len(visible_interfaces),
+        "peers_total": scoped_peer_runtime["totals"]["peers"],
     }
+    if current_user.has_role(*STAFF_ROLES):
+        payload.update({
+            "http_port": web_config.http_port,
+            "https_port": web_config.https_port,
+            "tls_mode": web_config.tls_mode,
+        })
+    return payload
+
+
+def build_wireguard_about_payload() -> Dict[str, Any]:
+    peer_runtime = get_scoped_peer_runtime_summary()
+    payload = {
+        "summary": "WireGuard is a modern VPN protocol focused on simplicity, performance, and strong cryptography.",
+        "interfaces_total": len(get_visible_interfaces_for_current_user()),
+        "peers_total": peer_runtime["totals"]["peers"],
+    }
+    if current_user.has_role(*STAFF_ROLES):
+        payload["endpoint"] = wireguard_config.endpoint
+    return payload
 
 
 def build_system_diagnostics_payload() -> Dict[str, Any]:
@@ -2007,12 +2025,7 @@ def build_about_payload() -> Dict[str, Any]:
             "summary": "ARPHost packages and operates ARPVPN for customer VPN management, observability, and hosted delivery.",
             "documentation_url": url_for("router.documentation", _external=False),
         },
-        "wireguard": {
-            "summary": "WireGuard is a modern VPN protocol focused on simplicity, performance, and strong cryptography.",
-            "endpoint": wireguard_config.endpoint,
-            "interfaces_total": len(interfaces),
-            "peers_total": len(get_all_peers()),
-        },
+        "wireguard": build_wireguard_about_payload(),
         "system": build_system_health_payload(),
     }
 
@@ -4499,6 +4512,8 @@ def api_list_tenants():
     tenant_id_filter = parse_optional_string(request.args.get("tenant_id", ""))
     items = get_accessible_tenants(actor)
     if tenant_id_filter:
+        if not actor_can_access_tenant(tenant_id_filter, actor):
+            abort(FORBIDDEN, "Insufficient permissions.")
         items = [tenant for tenant in items if tenant.id == tenant_id_filter]
     return api_success({
         "items": [tenant_to_api_dict(tenant) for tenant in items],
