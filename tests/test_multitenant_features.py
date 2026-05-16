@@ -167,6 +167,135 @@ def test_tenant_admin_wireguard_api_cannot_see_control_plane_interface(app):
     assert exported_peer_names == ["tenant-peer"]
 
 
+def test_tenant_admin_cannot_access_other_tenant_users_networks_or_settings(app):
+    tenant_one = Tenant("Tenant One", slug="tenant-one", settings={"branding": {"name": "Tenant One"}})
+    tenant_two = Tenant("Tenant Two", slug="tenant-two", settings={"branding": {"name": "Tenant Two"}})
+    tenants[tenant_one.id] = tenant_one
+    tenants[tenant_two.id] = tenant_two
+    tenant_admin = make_user("tenant-one-admin", User.ROLE_TENANT_ADMIN, tenant_one.id)
+    tenant_one_client = make_user("tenant-one-client", User.ROLE_CLIENT, tenant_one.id)
+    tenant_two_client = make_user("tenant-two-client", User.ROLE_CLIENT, tenant_two.id)
+
+    tenant_one_iface = make_interface("wg-tenant-one", tenant_one.id)
+    tenant_two_iface = Interface(
+        name="wg-tenant-two",
+        description="",
+        gw_iface="eth0",
+        ipv4_address="10.81.0.1/24",
+        listen_port=51822,
+        auto=False,
+        on_up=[],
+        on_down=[],
+        private_key="wg-tenant-two-private",
+        public_key="wg-tenant-two-public",
+        tenant_id=tenant_two.id,
+    )
+    interfaces[tenant_two_iface.uuid] = tenant_two_iface
+    tenant_one_peer = Peer(
+        name="tenant-one-client",
+        description="",
+        ipv4_address="10.80.0.2/24",
+        nat=False,
+        interface=tenant_one_iface,
+        dns1="8.8.8.8",
+        private_key="tenant-one-private",
+        public_key="tenant-one-public",
+        tenant_id=tenant_one.id,
+        owner_user_id=tenant_one_client.id,
+    )
+    tenant_two_peer = Peer(
+        name="tenant-two-client",
+        description="",
+        ipv4_address="10.81.0.2/24",
+        nat=False,
+        interface=tenant_two_iface,
+        dns1="8.8.8.8",
+        private_key="tenant-two-private",
+        public_key="tenant-two-public",
+        tenant_id=tenant_two.id,
+        owner_user_id=tenant_two_client.id,
+    )
+    tenant_one_iface.add_peer(tenant_one_peer)
+    tenant_two_iface.add_peer(tenant_two_peer)
+
+    client = app.test_client()
+    assert client.get(f"/test-login/{tenant_admin.id}").status_code == 200
+    csrf_token = client.get("/api/v1/auth/csrf").get_json()["data"]["csrf_token"]
+    csrf_headers = {"X-CSRFToken": csrf_token}
+
+    users_response = client.get("/api/v1/users")
+    assert users_response.status_code == 200
+    usernames = [item["username"] for item in users_response.get_json()["data"]["items"]]
+    assert usernames == ["tenant-one-client", "tenant-one-admin"]
+    assert client.get(f"/api/v1/users?tenant_id={tenant_two.id}").status_code == 403
+    assert client.get(f"/api/v1/users/{tenant_two_client.id}").status_code == 403
+    assert client.get(f"/users/{tenant_two_client.id}/edit").status_code == 403
+
+    assert client.get(f"/api/v1/tenants?tenant_id={tenant_two.id}").status_code == 403
+    assert client.get(f"/api/v1/tenants/{tenant_two.id}/config").status_code == 403
+    assert client.put(
+        f"/api/v1/tenants/{tenant_two.id}/config",
+        json={"branding": {"name": "Blocked"}},
+        headers=csrf_headers,
+    ).status_code == 403
+    assert client.get(f"/api/v1/tenants/{tenant_two.id}/tls/status").status_code == 403
+    assert client.get(f"/api/v1/tenants/{tenant_two.id}/runtime").status_code == 403
+    assert client.get("/api/v1/config/global").status_code == 403
+    assert client.get("/settings").status_code == 403
+
+    interfaces_response = client.get("/api/v1/wireguard/interfaces")
+    assert interfaces_response.status_code == 200
+    interface_names = [item["name"] for item in interfaces_response.get_json()["data"]["items"]]
+    assert interface_names == ["wg-tenant-one"]
+    assert client.get(f"/api/v1/wireguard/interfaces?tenant_id={tenant_two.id}").status_code == 403
+    assert client.get(f"/api/v1/wireguard/interfaces/{tenant_two_iface.uuid}").status_code == 403
+    assert client.post(
+        f"/api/v1/wireguard/interfaces/{tenant_two_iface.uuid}/restart",
+        json={},
+        headers=csrf_headers,
+    ).status_code == 403
+    assert client.get(f"/api/v1/wireguard/peers/{tenant_two_peer.uuid}").status_code == 403
+    assert client.put(
+        f"/api/v1/wireguard/peers/{tenant_two_peer.uuid}",
+        json={
+            "name": "tenant-two-client",
+            "interface_uuid": tenant_two_iface.uuid,
+            "ipv4": "10.81.0.3/24",
+            "dns1": "8.8.8.8",
+        },
+        headers=csrf_headers,
+    ).status_code == 403
+
+    peers_response = client.get("/api/v1/wireguard/peers")
+    assert peers_response.status_code == 200
+    peer_names = [item["name"] for item in peers_response.get_json()["data"]["items"]]
+    assert peer_names == ["tenant-one-client"]
+
+    wireguard_page = client.get("/wireguard")
+    assert wireguard_page.status_code == 200
+    wireguard_html = wireguard_page.get_data(as_text=True)
+    assert "wg-tenant-one" in wireguard_html
+    assert "tenant-one-client" in wireguard_html
+    assert "wg-tenant-two" not in wireguard_html
+    assert "tenant-two-client" not in wireguard_html
+
+    health_response = client.get("/api/v1/system/health")
+    assert health_response.status_code == 200
+    health = health_response.get_json()["data"]
+    assert health["interfaces_total"] == 1
+    assert health["peers_total"] == 1
+    assert "http_port" not in health
+    assert "https_port" not in health
+    assert "tls_mode" not in health
+
+    about_response = client.get("/api/v1/about")
+    assert about_response.status_code == 200
+    about = about_response.get_json()["data"]
+    assert about["wireguard"]["interfaces_total"] == 1
+    assert about["wireguard"]["peers_total"] == 1
+    assert "endpoint" not in about["wireguard"]
+
+
 def test_invitation_accept_creates_user_in_invitation_tenant(app):
     tenant = Tenant("Tenant One", slug="tenant-one")
     tenants[tenant.id] = tenant
