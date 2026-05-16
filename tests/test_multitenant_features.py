@@ -1,0 +1,322 @@
+import os
+import sys
+import tempfile
+from datetime import datetime
+from pathlib import Path
+
+import pytest
+from flask import Flask
+from flask_login import LoginManager, login_user
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from arpvpn.common.properties import global_properties
+
+
+_TEST_WORKDIR = tempfile.mkdtemp(prefix="arpvpn-tests-")
+global_properties.workdir = _TEST_WORKDIR
+open(global_properties.setup_filepath, "w", encoding="utf-8").close()
+
+from arpvpn.common.models.tenant import Invitation, Tenant, invitations, tenants  # noqa: E402
+from arpvpn.common.models.user import User, users  # noqa: E402
+from arpvpn.common.utils.mfa import generate_mfa_code, hash_recovery_code  # noqa: E402
+from arpvpn.core.models import Interface, Peer, interfaces  # noqa: E402
+from arpvpn.web import router as router_module  # noqa: E402
+from arpvpn.web.security_api import ApiTokenStore, AuthLockoutManager, SlidingWindowRateLimiter  # noqa: E402
+
+
+def make_user(username: str, role: str, tenant_id: str = "") -> User:
+    user = User(username, role=role)
+    user.tenant_id = tenant_id or None
+    user.password = "correct horse battery staple"
+    users[user.id] = user
+    return user
+
+
+def make_interface(name: str, tenant_id: str = "") -> Interface:
+    iface = Interface(
+        name=name,
+        description="",
+        gw_iface="eth0",
+        ipv4_address="10.80.0.1/24",
+        listen_port=51820 if not tenant_id else 51821,
+        auto=False,
+        on_up=[],
+        on_down=[],
+        private_key=f"{name}-private",
+        public_key=f"{name}-public",
+        tenant_id=tenant_id,
+    )
+    interfaces[iface.uuid] = iface
+    return iface
+
+
+@pytest.fixture(autouse=True)
+def reset_state():
+    users.clear()
+    tenants.clear()
+    invitations.clear()
+    interfaces.clear()
+    router_module.api_token_store.reset_for_tests()
+    yield
+    users.clear()
+    tenants.clear()
+    invitations.clear()
+    interfaces.clear()
+    router_module.api_token_store.reset_for_tests()
+
+
+@pytest.fixture()
+def app():
+    app = Flask(
+        __name__,
+        template_folder=os.path.join(os.getcwd(), "arpvpn", "web", "templates"),
+        static_folder=os.path.join(os.getcwd(), "arpvpn", "web", "static"),
+    )
+    app.secret_key = "test-secret"
+    app.config["WTF_CSRF_ENABLED"] = False
+    app.config["TESTING"] = True
+
+    login_manager = LoginManager()
+    login_manager.init_app(app)
+
+    @login_manager.user_loader
+    def load_user(user_id):
+        return users.get(user_id)
+
+    @app.route("/test-login/<user_id>")
+    def test_login(user_id):
+        user = users[user_id]
+        user.set_authenticated(True)
+        login_user(user)
+        return "ok"
+
+    app.register_blueprint(router_module.router)
+    return app
+
+
+def test_tenant_admin_wireguard_api_cannot_see_control_plane_interface(app):
+    tenant = Tenant("Tenant One", slug="tenant-one")
+    tenants[tenant.id] = tenant
+    tenant_admin = make_user("tenant-admin", User.ROLE_TENANT_ADMIN, tenant.id)
+    control_plane_iface = make_interface("wgmain")
+    tenant_iface = make_interface("wgtenant", tenant.id)
+    control_peer = Peer(
+        name="control-peer",
+        description="",
+        ipv4_address="10.80.0.2/24",
+        nat=False,
+        interface=control_plane_iface,
+        dns1="8.8.8.8",
+        private_key="control-private",
+        public_key="control-public",
+    )
+    tenant_peer = Peer(
+        name="tenant-peer",
+        description="",
+        ipv4_address="10.80.0.3/24",
+        nat=False,
+        interface=tenant_iface,
+        dns1="8.8.8.8",
+        private_key="tenant-private",
+        public_key="tenant-public",
+        tenant_id=tenant.id,
+    )
+    control_plane_iface.add_peer(control_peer)
+    tenant_iface.add_peer(tenant_peer)
+
+    client = app.test_client()
+    assert client.get(f"/test-login/{tenant_admin.id}").status_code == 200
+
+    response = client.get("/api/v1/wireguard/interfaces")
+    assert response.status_code == 200
+    items = response.get_json()["data"]["items"]
+    assert [item["id"] for item in items] == [tenant_iface.uuid]
+
+    assert client.get(f"/api/v1/wireguard/interfaces/{tenant_iface.uuid}").status_code == 200
+    assert client.get(f"/api/v1/wireguard/interfaces/{control_plane_iface.uuid}").status_code == 403
+    assert router_module.can_manage_wireguard_interface(control_plane_iface, tenant_admin) is False
+    assert router_module.can_manage_wireguard_interface(tenant_iface, tenant_admin) is True
+
+    stats_response = client.get("/api/v1/stats/peers")
+    assert stats_response.status_code == 200
+    peer_names = [item["peer_name"] for item in stats_response.get_json()["data"]["peers"]]
+    assert peer_names == ["tenant-peer"]
+
+    csv_response = client.get("/api/v1/stats/peers.csv")
+    assert csv_response.status_code == 200
+    csv_text = csv_response.get_data(as_text=True)
+    assert "tenant-peer" in csv_text
+    assert "control-peer" not in csv_text
+
+    interface_export = client.get("/api/v1/wireguard/interfaces/export?format=csv")
+    assert interface_export.status_code == 200
+    interface_csv = interface_export.get_data(as_text=True)
+    assert "wgtenant" in interface_csv
+    assert "wgmain" not in interface_csv
+
+    peer_export_csv = client.get("/api/v1/wireguard/peers/export?format=csv")
+    assert peer_export_csv.status_code == 200
+    peer_csv = peer_export_csv.get_data(as_text=True)
+    assert "tenant-peer" in peer_csv
+    assert "control-peer" not in peer_csv
+
+    peer_export_json = client.get("/api/v1/wireguard/peers/export?format=json")
+    assert peer_export_json.status_code == 200
+    exported_peer_names = [item["name"] for item in peer_export_json.get_json()["data"]["items"]]
+    assert exported_peer_names == ["tenant-peer"]
+
+
+def test_invitation_accept_creates_user_in_invitation_tenant(app):
+    tenant = Tenant("Tenant One", slug="tenant-one")
+    tenants[tenant.id] = tenant
+    invitation = Invitation(tenant.id, "client@example.com", role=User.ROLE_CLIENT)
+    raw_token = invitation.raw_token
+    invitations[invitation.id] = invitation
+
+    response = app.test_client().post(
+        f"/invitations/{invitation.id}/accept",
+        data={
+            "token": raw_token,
+            "username": "tenant-client",
+            "password": "client-password",
+            "confirm": "client-password",
+        },
+    )
+
+    assert response.status_code == 200
+    created = users.get_value_by_attr("name", "tenant-client")
+    assert created is not None
+    assert created.role == User.ROLE_CLIENT
+    assert created.tenant_id == tenant.id
+    assert invitation.accepted_user_id == created.id
+
+
+def test_wireguard_peer_config_modes_and_disabled_peer_generation():
+    iface = make_interface("wgtenant", "tenant-1")
+    disabled = Peer(
+        name="disabled-peer",
+        description="",
+        ipv4_address="10.80.0.2/24",
+        nat=False,
+        interface=iface,
+        dns1="8.8.8.8",
+        private_key="disabled-private",
+        public_key="disabled-public",
+        enabled=False,
+        tenant_id="tenant-1",
+    )
+    site = Peer(
+        name="site-peer",
+        description="",
+        ipv4_address="10.80.0.3/24",
+        nat=False,
+        interface=iface,
+        dns1="",
+        private_key="site-private",
+        public_key="site-public",
+        mode=Peer.MODE_SITE_TO_SITE,
+        site_to_site_subnets=["192.168.50.0/24"],
+        full_tunnel=True,
+        tenant_id="tenant-1",
+    )
+    iface.add_peer(disabled)
+    iface.add_peer(site)
+
+    server_conf = iface.generate_conf()
+    assert "disabled-public" not in server_conf
+    assert "site-public" in server_conf
+    assert "AllowedIPs = 10.80.0.3/32, 192.168.50.0/24" in server_conf
+    assert "AllowedIPs = 0.0.0.0/0" in site.generate_conf()
+
+
+def test_api_token_lifecycle():
+    store = ApiTokenStore("secret")
+    pair = store.issue_pair("user-1", 60, 120, "127.0.0.1", "pytest", mfa_verified=True)
+    access_token = pair["access"]["raw_token"]
+    refresh_token = pair["refresh"]["raw_token"]
+
+    assert store.validate_access_token(access_token).user_id == "user-1"
+    assert store.validate_refresh_token(refresh_token).user_id == "user-1"
+    listed = store.list_user_tokens("user-1")
+    assert [record.token_kind for record in listed] == ["refresh", "access"]
+    assert store.revoke_user_token_id("user-1", listed[0].token_id) is True
+    assert len(store.list_user_tokens("user-1")) == 1
+    assert store.revoke_token(access_token) is True
+    assert store.validate_access_token(access_token) is None
+    assert store.revoke_user_tokens("user-1") == 0
+    assert store.validate_refresh_token(refresh_token) is None
+
+
+def test_profile_api_token_ui_issue_and_revoke(app):
+    admin = make_user("admin", User.ROLE_ADMIN)
+    admin.login_date = datetime.now()
+    client = app.test_client()
+    assert client.get(f"/test-login/{admin.id}").status_code == 200
+
+    response = client.post(
+        "/profile",
+        data={
+            "password": "correct horse battery staple",
+            "scope": "all",
+            "issue_api_token": "Issue API token",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Access token" in response.get_data(as_text=True)
+    active_tokens = router_module.api_token_store.list_user_tokens(admin.id)
+    assert len(active_tokens) == 2
+
+    response = client.post(
+        "/profile",
+        data={
+            "token_id": active_tokens[0].token_id,
+            "revoke_api_token": "Revoke",
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(router_module.api_token_store.list_user_tokens(admin.id)) == 1
+
+    response = client.post("/profile", data={"revoke_all_api_tokens": "Revoke all tokens"})
+
+    assert response.status_code == 200
+    assert router_module.api_token_store.list_user_tokens(admin.id) == []
+
+
+def test_cookie_api_writes_require_csrf_and_lockouts_rate_limit(app):
+    admin = make_user("admin", User.ROLE_ADMIN)
+    client = app.test_client()
+    assert client.get(f"/test-login/{admin.id}").status_code == 200
+
+    response = client.post(
+        "/api/v1/users",
+        json={"username": "blocked", "password": "password", "role": User.ROLE_CLIENT},
+    )
+    assert response.status_code == 400
+    assert response.get_json()["error"]["code"] == "csrf_failed"
+
+    limiter = SlidingWindowRateLimiter()
+    assert limiter.allow("bucket", max_requests=1, window_seconds=60) == (True, 0)
+    allowed, retry_after = limiter.allow("bucket", max_requests=1, window_seconds=60)
+    assert allowed is False
+    assert retry_after > 0
+
+    lockouts = AuthLockoutManager()
+    assert lockouts.register_failure("login", max_attempts=2, window_seconds=60, lockout_seconds=60) == 1
+    assert lockouts.register_failure("login", max_attempts=2, window_seconds=60, lockout_seconds=60) == 0
+    locked, retry_after = lockouts.is_locked("login")
+    assert locked is True
+    assert retry_after > 0
+
+
+def test_totp_and_recovery_code_consumption():
+    user = User("client", role=User.ROLE_CLIENT)
+    secret = "JBSWY3DPEHPK3PXP"
+    recovery_code = "ABCD-EFGH-IJKL-MNOP"
+    user.enable_mfa(secret, [hash_recovery_code(recovery_code)])
+
+    assert user.verify_mfa(generate_mfa_code(secret), allow_recovery_codes=False) == (True, False)
+    assert user.verify_mfa(recovery_code) == (True, True)
+    assert user.verify_mfa(recovery_code) == (False, False)

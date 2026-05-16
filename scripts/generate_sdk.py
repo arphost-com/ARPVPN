@@ -95,7 +95,7 @@ def write_sdk(document: Dict[str, Any], output_dir: Path):
         encoding="utf-8",
     )
     (output_dir / "pyproject.toml").write_text(
-        """[project]\nname = \"arpvpn-api-client\"\nversion = \"0.1.0\"\ndescription = \"Generated Python client for ARPVPN\"\nrequires-python = \">=3.10\"\ndependencies = [\"requests>=2.32.0\"]\n\n[build-system]\nrequires = [\"setuptools>=68\"]\nbuild-backend = \"setuptools.build_meta\"\n""",
+        """[project]\nname = \"arpvpn-api-client\"\nversion = \"0.1.0\"\ndescription = \"Generated Python client for ARPVPN\"\nrequires-python = \">=3.10\"\ndependencies = [\"requests>=2.33.1\"]\n\n[build-system]\nrequires = [\"setuptools>=68\"]\nbuild-backend = \"setuptools.build_meta\"\n""",
         encoding="utf-8",
     )
 

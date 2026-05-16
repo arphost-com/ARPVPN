@@ -32,15 +32,32 @@ Using docker
    Important variables:
 
    * ``ARPVPN_IMAGE`` (image or tag to run)
+   * ``ARPVPN_UID`` / ``ARPVPN_GID`` (UID/GID created for the image's ``arpvpn`` runtime user; defaults to ``1000:1000``)
    * ``ARPVPN_RUNTIME_USER`` (runtime user inside container, default ``arpvpn``)
    * ``ARPVPN_CONTAINER_NAME`` (container name; set unique value per stack)
-   * ``ARPVPN_COOKIE_SUFFIX`` (optional cookie namespace suffix; defaults to container name)
+   * ``ARPVPN_COOKIE_SUFFIX`` (optional cookie namespace suffix; defaults to container name, then Docker Compose's ``COMPOSE_PROJECT_NAME``, then ``arpvpn``)
+   * ``ARPVPN_SESSION_COOKIE_NAME`` / ``ARPVPN_REMEMBER_COOKIE_NAME`` (optional explicit cookie names)
    * ``ARPVPN_SECURE_COOKIES`` (``0`` for mixed HTTP or HTTPS, ``1`` for strict HTTPS)
    * ``ARPVPN_HTTP_PORT`` (HTTP bind port, default ``8085``)
    * ``ARPVPN_HTTPS_PORT`` (HTTPS bind port, default ``8086``)
    * ``DATA_FOLDER`` (host path mounted to ``/data``)
 
-   The default ``ARPVPN_IMAGE=arpvpn:local`` builds and runs a local image from the bundle. The wrapper script seeds ``.env`` from ``.env.example`` automatically on first run.
+   Set ``ARPVPN_UID`` and ``ARPVPN_GID`` when your host ``DATA_FOLDER`` is owned by a user/group other than ``1000:1000``. Rebuild the image after changing those values so the container's ``arpvpn`` user matches the host permissions.
+
+   Optional runtime tuning variables:
+
+   * ``ARPVPN_HIGH_TRAFFIC_THRESHOLD_MB`` (peer traffic alert threshold; default ``1024``)
+   * ``ARPVPN_RRD_GRAPH_CACHE_TTL_SECONDS`` (RRD graph cache TTL; default ``10800``)
+   * ``ARPVPN_LOG_DIAGNOSTICS_CACHE_TTL_SECONDS`` / ``ARPVPN_LOG_DIAGNOSTICS_READ_BLOCK_BYTES`` (log diagnostic cache/read sizing)
+   * ``ARPVPN_API_ACCESS_TTL_SECONDS`` / ``ARPVPN_API_REFRESH_TTL_SECONDS`` (API token lifetimes)
+   * ``ARPVPN_API_AUTH_WINDOW_SECONDS`` / ``ARPVPN_API_AUTH_MAX_ATTEMPTS`` / ``ARPVPN_API_AUTH_LOCKOUT_SECONDS`` (API auth rate/lockout controls)
+   * ``ARPVPN_API_RATE_LIMIT_WINDOW_SECONDS`` / ``ARPVPN_API_RATE_LIMIT_MAX_REQUESTS`` (general API rate limiting)
+   * ``ARPVPN_FEATURE_API_AUTH``, ``ARPVPN_FEATURE_API_STATS``, ``ARPVPN_FEATURE_API_SYSTEM``, ``ARPVPN_FEATURE_API_TLS``, ``ARPVPN_FEATURE_API_CONFIG``, ``ARPVPN_FEATURE_API_TENANTS``, ``ARPVPN_FEATURE_API_WIREGUARD`` (set to ``0``/``false`` to disable an API group)
+   * ``ARPVPN_AUDIT_SIGNING_KEY`` (optional audit event signing key override)
+   * ``ARPVPN_TENANT_RUNTIME_PORT_STRIDE``, ``ARPVPN_TENANT_RUNTIME_HTTP_BASE``, ``ARPVPN_TENANT_RUNTIME_HTTPS_BASE``, ``ARPVPN_TENANT_RUNTIME_VPN_BASE`` (tenant runtime port allocation controls)
+   * ``ARPVPN_REPOSITORY_URL`` / ``ARPVPN_LICENSE_URL`` (optional app metadata/template links)
+
+   The default ``ARPVPN_IMAGE=arpvpn:local`` builds and runs a local image from the bundle. The wrapper script seeds ``.env`` from ``.env.example`` automatically on first run. Set ``ENV_FILE=/path/to/envfile`` when you want ``docker/up.sh`` and Compose to use a different env file.
 
 3. Build and start:
 

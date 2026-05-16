@@ -15,6 +15,41 @@ from arpvpn.common.utils.system import Command
 from arpvpn.core.config.base import BaseConfig
 
 
+WIREGUARD_BINARY_CANDIDATES = {
+    "wg": (
+        "wg",
+        "/usr/bin/wg",
+        "/usr/local/bin/wg",
+        "/usr/sbin/wg",
+        "/sbin/wg",
+    ),
+    "wg-quick": (
+        "wg-quick",
+        "/usr/bin/wg-quick",
+        "/usr/local/bin/wg-quick",
+        "/usr/sbin/wg-quick",
+        "/sbin/wg-quick",
+    ),
+    "iptables": (
+        "iptables",
+        "/usr/sbin/iptables",
+        "/sbin/iptables",
+        "/usr/bin/iptables",
+        "/bin/iptables",
+    ),
+}
+
+
+def detect_wireguard_binary(name: str) -> str:
+    for candidate in WIREGUARD_BINARY_CANDIDATES.get(name, (name,)):
+        resolved = which(candidate) if os.path.sep not in candidate else None
+        if resolved:
+            return resolved
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return ""
+
+
 class _LegacyMeshDict(EnhancedDict, YamlAble, Mapping[K, V]):
     """Compatibility shim for legacy mesh YAML tags found in older config files."""
 
@@ -96,9 +131,9 @@ class WireguardConfig(BaseConfig):
         self.iptables_bin = ""
         self.wg_bin = ""
         self.wg_quick_bin = ""
-        self.wg_bin = which("wg") or ""
-        self.wg_quick_bin = which("wg-quick") or ""
-        self.iptables_bin = which("iptables") or ""
+        self.wg_bin = detect_wireguard_binary("wg")
+        self.wg_quick_bin = detect_wireguard_binary("wg-quick")
+        self.iptables_bin = detect_wireguard_binary("iptables")
         from arpvpn.core.models import interfaces
         self.interfaces = interfaces
 

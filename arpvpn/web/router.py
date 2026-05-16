@@ -443,24 +443,28 @@ def build_rbac_matrix() -> Dict[str, Dict[str, bool]]:
     return {
         "super_admin": {
             "maps_to_role": User.ROLE_ADMIN,
+            "manage_tenants": True,
             "impersonate_clients": True,
             "manage_users": True,
             "manage_tls": True,
         },
         "support_admin": {
             "maps_to_role": User.ROLE_SUPPORT,
+            "manage_tenants": False,
             "impersonate_clients": True,
             "manage_users": True,
             "manage_tls": False,
         },
         "tenant_admin": {
             "maps_to_role": User.ROLE_TENANT_ADMIN,
+            "manage_tenants": False,
             "impersonate_clients": True,
             "manage_users": True,
             "manage_tls": True,
         },
         "client": {
             "maps_to_role": User.ROLE_CLIENT,
+            "manage_tenants": False,
             "impersonate_clients": False,
             "manage_users": False,
             "manage_tls": False,
@@ -562,6 +566,19 @@ def build_token_response_payload(token_pair: Dict[str, Any], scope: str) -> Dict
         "refresh_token_id": refresh["token_id"],
         "refresh_expires_at": refresh["expires_at"].isoformat().replace("+00:00", "Z"),
         "refresh_expires_in": refresh["expires_in"],
+    }
+
+
+def api_token_record_to_dict(record) -> Dict[str, Any]:
+    return {
+        "token_id": record.token_id,
+        "token_kind": record.token_kind,
+        "user_id": record.user_id,
+        "issued_at": record.issued_at.isoformat().replace("+00:00", "Z"),
+        "expires_at": record.expires_at.isoformat().replace("+00:00", "Z"),
+        "issued_ip": record.issued_ip,
+        "issued_user_agent": record.issued_user_agent,
+        "mfa_verified": record.mfa_verified,
     }
 
 
@@ -781,7 +798,7 @@ def clear_session_mfa_verification():
 
 
 def mark_session_mfa_verified(user: Optional[User] = None):
-    actor = user or current_actor()
+    actor = current_actor() if user is None else user
     if not actor:
         clear_session_mfa_verification()
         return
@@ -790,7 +807,7 @@ def mark_session_mfa_verified(user: Optional[User] = None):
 
 
 def current_request_has_mfa_verification(actor: Optional[User] = None) -> bool:
-    actor = actor or current_actor()
+    actor = current_actor() if actor is None else actor
     if not actor or not actor.has_mfa():
         return False
     token_record = getattr(g, "api_token_record", None)
@@ -1670,7 +1687,7 @@ def get_visible_interfaces_for_current_user() -> Dict[str, Interface]:
     for iface in interfaces.values():
         visible_peers = [
             peer for peer in iface.peers.values()
-            if peer.name.lower() == client_name
+            if peer_visible_to_actor(peer, current_user)
         ]
         if not visible_peers:
             continue
@@ -1696,6 +1713,10 @@ def resolve_connection_item(uuid: str) -> Tuple[str, Union[Peer, Interface]]:
 def user_can_access_connection(item_type: str, item: Union[Peer, Interface]) -> bool:
     if current_user.has_role(*STAFF_ROLES):
         return True
+    if current_user.has_role(User.ROLE_TENANT_ADMIN):
+        if item_type == "peer":
+            return peer_visible_to_actor(item, current_user)
+        return interface_visible_to_actor(item, current_user)
     if not current_user.has_role(User.ROLE_CLIENT):
         return False
     if item_type == "peer":
@@ -2009,7 +2030,11 @@ def build_profile_payload(user_item: Optional[User] = None) -> Dict[str, Any]:
             "login_at": login_date.isoformat() if login_date else None,
             "login_ago": get_time_ago(login_date) if login_date else None,
             "is_impersonating": is_impersonating(),
-        }
+        },
+        "api_tokens": [
+            api_token_record_to_dict(record)
+            for record in api_token_store.list_user_tokens(getattr(user_item, "id", ""))
+        ],
     }
 
 
@@ -2841,17 +2866,17 @@ def parse_json_bool(payload: Dict[str, Any], key: str, default: bool = False) ->
 
 
 def actor_is_global_staff(actor: Optional[User] = None) -> bool:
-    actor = actor or current_actor()
+    actor = current_actor() if actor is None else actor
     return bool(actor and actor.has_role(User.ROLE_ADMIN, User.ROLE_SUPPORT))
 
 
 def actor_is_tenant_admin(actor: Optional[User] = None) -> bool:
-    actor = actor or current_actor()
+    actor = current_actor() if actor is None else actor
     return bool(actor and actor.has_role(User.ROLE_TENANT_ADMIN))
 
 
 def get_actor_tenant_id(actor: Optional[User] = None) -> Optional[str]:
-    actor = actor or current_actor()
+    actor = current_actor() if actor is None else actor
     tenant_id = getattr(actor, "tenant_id", None) if actor else None
     return str(tenant_id or "").strip() or None
 
@@ -2865,7 +2890,7 @@ def sync_invitation_status(invitation: Invitation) -> str:
 
 
 def actor_can_access_tenant(tenant_id: Optional[str], actor: Optional[User] = None) -> bool:
-    actor = actor or current_actor()
+    actor = current_actor() if actor is None else actor
     if not actor:
         return False
     if actor_is_global_staff(actor):
@@ -2879,7 +2904,7 @@ def tenant_visible_to_actor(tenant: Tenant, actor: Optional[User] = None) -> boo
 
 
 def user_visible_to_actor(user_item: User, actor: Optional[User] = None) -> bool:
-    actor = actor or current_actor()
+    actor = current_actor() if actor is None else actor
     if not actor:
         return False
     if actor_is_global_staff(actor):
@@ -2895,21 +2920,21 @@ def invitation_visible_to_actor(invitation: Invitation, actor: Optional[User] = 
 
 
 def get_accessible_tenants(actor: Optional[User] = None) -> List[Tenant]:
-    actor = actor or current_actor()
+    actor = current_actor() if actor is None else actor
     items = [tenant for tenant in tenants.values() if tenant_visible_to_actor(tenant, actor)]
     items.sort(key=lambda tenant: tenant.name.lower())
     return items
 
 
 def get_accessible_users(actor: Optional[User] = None) -> List[User]:
-    actor = actor or current_actor()
+    actor = current_actor() if actor is None else actor
     items = [user_item for user_item in users.values() if user_visible_to_actor(user_item, actor)]
     items.sort(key=lambda user_item: (user_item.role, user_item.name.lower()))
     return items
 
 
 def get_accessible_invitations(actor: Optional[User] = None) -> List[Invitation]:
-    actor = actor or current_actor()
+    actor = current_actor() if actor is None else actor
     items: List[Invitation] = []
     for invitation in invitations.values():
         sync_invitation_status(invitation)
@@ -3361,7 +3386,7 @@ def resolve_interface_tenant_id(iface: Interface) -> Optional[str]:
 
 
 def peer_visible_to_actor(peer: Peer, actor: Optional[User] = None) -> bool:
-    actor = actor or current_actor()
+    actor = current_actor() if actor is None else actor
     if not actor:
         return False
     if actor.has_role(*STAFF_ROLES):
@@ -3379,7 +3404,7 @@ def peer_visible_to_actor(peer: Peer, actor: Optional[User] = None) -> bool:
 
 
 def interface_visible_to_actor(iface: Interface, actor: Optional[User] = None) -> bool:
-    actor = actor or current_actor()
+    actor = current_actor() if actor is None else actor
     if not actor:
         return False
     if actor.has_role(*STAFF_ROLES):
@@ -3396,21 +3421,21 @@ def interface_visible_to_actor(iface: Interface, actor: Optional[User] = None) -
 
 
 def get_accessible_interfaces(actor: Optional[User] = None) -> List[Interface]:
-    actor = actor or current_actor()
+    actor = current_actor() if actor is None else actor
     if not actor:
         return []
     return [iface for iface in interfaces.values() if interface_visible_to_actor(iface, actor)]
 
 
 def get_accessible_peers(actor: Optional[User] = None) -> List[Peer]:
-    actor = actor or current_actor()
+    actor = current_actor() if actor is None else actor
     if not actor:
         return []
     return [peer for peer in get_all_peers().values() if peer_visible_to_actor(peer, actor)]
 
 
 def can_manage_wireguard_interface(iface: Interface, actor: Optional[User] = None) -> bool:
-    actor = actor or current_actor()
+    actor = current_actor() if actor is None else actor
     if not actor:
         return False
     if actor.has_role(*STAFF_ROLES):
@@ -3423,16 +3448,16 @@ def can_manage_wireguard_interface(iface: Interface, actor: Optional[User] = Non
         if iface_tenant_id:
             return iface_tenant_id == actor_tenant_id
         if not iface.peers:
-            return True
+            return False
         return all(
-            resolve_peer_tenant_id(peer) in (None, actor_tenant_id)
+            resolve_peer_tenant_id(peer) == actor_tenant_id
             for peer in iface.peers.values()
         )
     return False
 
 
 def can_manage_wireguard_peer(peer: Peer, actor: Optional[User] = None) -> bool:
-    actor = actor or current_actor()
+    actor = current_actor() if actor is None else actor
     if not actor:
         return False
     if actor.has_role(*STAFF_ROLES):
@@ -3444,7 +3469,7 @@ def can_manage_wireguard_peer(peer: Peer, actor: Optional[User] = None) -> bool:
 
 
 def interface_to_api_dict(iface: Interface, include_peers: bool = False, actor: Optional[User] = None) -> Dict[str, Any]:
-    actor = actor or current_actor()
+    actor = current_actor() if actor is None else actor
     payload: Dict[str, Any] = {
         "id": iface.uuid,
         "uuid": iface.uuid,
@@ -3470,6 +3495,25 @@ def interface_to_api_dict(iface: Interface, include_peers: bool = False, actor: 
             if actor is None or peer_visible_to_actor(peer, actor) or actor.has_role(*STAFF_ROLES)
         ]
     return payload
+
+
+def interface_export_row(iface: Interface, actor: Optional[User] = None) -> Dict[str, Any]:
+    row = interface_to_api_dict(iface, include_peers=False, actor=actor)
+    return {
+        "uuid": row["uuid"],
+        "name": row["name"],
+        "description": row["description"],
+        "gateway": row["gateway"],
+        "ipv4": row["ipv4"],
+        "listen_port": row["listen_port"],
+        "auto": row["auto"],
+        "status": row["status"],
+        "tenant_id": row["tenant_id"],
+        "public_key": row["public_key"],
+        "peer_count": row["peer_count"],
+        "on_up": "\n".join(row["on_up"]),
+        "on_down": "\n".join(row["on_down"]),
+    }
 
 
 def peer_to_api_dict(peer: Peer) -> Dict[str, Any]:
@@ -3499,8 +3543,32 @@ def peer_to_api_dict(peer: Peer) -> Dict[str, Any]:
     }
 
 
+def peer_export_row(peer: Peer) -> Dict[str, Any]:
+    row = peer_to_api_dict(peer)
+    return {
+        "uuid": row["uuid"],
+        "name": row["name"],
+        "description": row["description"],
+        "ipv4": row["ipv4"],
+        "nat": row["nat"],
+        "mode": row["mode"],
+        "full_tunnel": row["full_tunnel"],
+        "site_to_site_subnets": "\n".join(row["site_to_site_subnets"]),
+        "enabled": row["enabled"],
+        "dns1": row["dns1"],
+        "dns2": row["dns2"],
+        "tenant_id": row["tenant_id"],
+        "owner_user_id": row["owner_user_id"],
+        "owner_username": row["owner_username"],
+        "interface_uuid": row["interface_uuid"],
+        "interface_name": row["interface_name"],
+        "public_key": row["public_key"],
+        "endpoint": row["endpoint"],
+    }
+
+
 def resolve_wireguard_tenant_for_actor(requested_tenant_id: Optional[str], actor: Optional[User] = None) -> Optional[str]:
-    actor = actor or current_actor()
+    actor = current_actor() if actor is None else actor
     if not actor:
         abort(UNAUTHORIZED)
     tenant_id = str(requested_tenant_id or "").strip() or None
@@ -3974,10 +4042,11 @@ def get_system_interfaces_summary() -> Dict[str, Dict[str, Any]]:
 @setup_required
 def wireguard():
     peer_runtime = filter_peer_runtime_for_current_user(get_peer_runtime_summary())
-    interface_totals = get_interface_totals()
+    visible_interfaces = get_visible_interfaces_for_current_user()
+    interface_totals = calculate_interface_totals(visible_interfaces)
     context = {
         "title": "Wireguard",
-        "interfaces": get_visible_interfaces_for_current_user(),
+        "interfaces": visible_interfaces,
         "peer_runtime": peer_runtime,
         "wireguard_stats": {
             "interfaces_total": interface_totals["total"],
@@ -4336,7 +4405,7 @@ def resolve_user_management_role_and_tenant(
     *,
     actor: Optional[User] = None,
 ) -> Tuple[str, Optional[str]]:
-    actor = actor or current_actor()
+    actor = current_actor() if actor is None else actor
     if not actor:
         abort(UNAUTHORIZED)
 
@@ -5011,19 +5080,62 @@ def api_get_job(job_id: str):
     return api_success(job.to_dict())
 
 
-@router.route("/api/v1/wireguard/interfaces", methods=["GET"])
-@login_required
-@setup_required
-def api_list_wireguard_interfaces():
-    actor = current_actor()
+def get_filtered_wireguard_interfaces_for_request(actor: Optional[User] = None) -> List[Interface]:
+    actor = current_actor() if actor is None else actor
     items = get_accessible_interfaces(actor)
     tenant_id_filter = parse_optional_string(request.args.get("tenant_id", ""))
     if tenant_id_filter:
         if not actor_can_access_tenant(tenant_id_filter, actor):
             abort(FORBIDDEN, "Insufficient permissions.")
         items = [iface for iface in items if resolve_interface_tenant_id(iface) == tenant_id_filter]
+    return items
+
+
+def get_filtered_wireguard_peers_for_request(actor: Optional[User] = None) -> List[Peer]:
+    actor = current_actor() if actor is None else actor
+    items = get_accessible_peers(actor)
+    interface_filter = parse_optional_string(request.args.get("interface_id", ""))
+    tenant_id_filter = parse_optional_string(request.args.get("tenant_id", ""))
+    if interface_filter:
+        items = [peer for peer in items if peer.interface and peer.interface.uuid == interface_filter]
+    if tenant_id_filter:
+        if not actor_can_access_tenant(tenant_id_filter, actor):
+            abort(FORBIDDEN, "Insufficient permissions.")
+        items = [peer for peer in items if resolve_peer_tenant_id(peer) == tenant_id_filter]
+    return items
+
+
+@router.route("/api/v1/wireguard/interfaces", methods=["GET"])
+@login_required
+@setup_required
+def api_list_wireguard_interfaces():
+    actor = current_actor()
+    items = get_filtered_wireguard_interfaces_for_request(actor)
     return api_success({
-        "items": [interface_to_api_dict(iface, include_peers=True) for iface in items],
+        "items": [interface_to_api_dict(iface, include_peers=True, actor=actor) for iface in items],
+        "total": len(items),
+        "scope": current_scope_label(),
+    })
+
+
+@router.route("/api/v1/wireguard/interfaces/export", methods=["GET"])
+@login_required
+@setup_required
+def api_export_wireguard_interfaces():
+    actor = current_actor()
+    export_format = parse_optional_string(request.args.get("format", "json")).lower() or "json"
+    items = get_filtered_wireguard_interfaces_for_request(actor)
+    rows = [interface_export_row(iface, actor=actor) for iface in items]
+    if export_format == "csv":
+        fields = [
+            "uuid", "name", "description", "gateway", "ipv4", "listen_port", "auto", "status",
+            "tenant_id", "public_key", "peer_count", "on_up", "on_down",
+        ]
+        return csv_response("arpvpn-wireguard-interfaces.csv", fields, rows)
+    if export_format != "json":
+        abort(BAD_REQUEST, "format must be json or csv.")
+    return api_success({
+        "items": [interface_to_api_dict(iface, include_peers=True, actor=actor) for iface in items],
         "total": len(items),
         "scope": current_scope_label(),
     })
@@ -5031,7 +5143,7 @@ def api_list_wireguard_interfaces():
 
 @router.route("/api/v1/wireguard/interfaces", methods=["POST"])
 @login_required
-@role_required(User.ROLE_ADMIN)
+@role_required(User.ROLE_ADMIN, User.ROLE_TENANT_ADMIN)
 @setup_required
 def api_create_wireguard_interface():
     replay = parse_idempotency_replay()
@@ -5188,15 +5300,31 @@ def api_wireguard_interface_qr(interface_id: str):
 @setup_required
 def api_list_wireguard_peers():
     actor = current_actor()
-    items = get_accessible_peers(actor)
-    interface_filter = parse_optional_string(request.args.get("interface_id", ""))
-    tenant_id_filter = parse_optional_string(request.args.get("tenant_id", ""))
-    if interface_filter:
-        items = [peer for peer in items if peer.interface and peer.interface.uuid == interface_filter]
-    if tenant_id_filter:
-        if not actor_can_access_tenant(tenant_id_filter, actor):
-            abort(FORBIDDEN, "Insufficient permissions.")
-        items = [peer for peer in items if resolve_peer_tenant_id(peer) == tenant_id_filter]
+    items = get_filtered_wireguard_peers_for_request(actor)
+    return api_success({
+        "items": [peer_to_api_dict(peer) for peer in items],
+        "total": len(items),
+        "scope": current_scope_label(),
+    })
+
+
+@router.route("/api/v1/wireguard/peers/export", methods=["GET"])
+@login_required
+@setup_required
+def api_export_wireguard_peers():
+    export_format = parse_optional_string(request.args.get("format", "json")).lower() or "json"
+    items = get_filtered_wireguard_peers_for_request(current_actor())
+    rows = [peer_export_row(peer) for peer in items]
+    if export_format == "csv":
+        fields = [
+            "uuid", "name", "description", "ipv4", "nat", "mode", "full_tunnel",
+            "site_to_site_subnets", "enabled", "dns1", "dns2", "tenant_id",
+            "owner_user_id", "owner_username", "interface_uuid", "interface_name",
+            "public_key", "endpoint",
+        ]
+        return csv_response("arpvpn-wireguard-peers.csv", fields, rows)
+    if export_format != "json":
+        abort(BAD_REQUEST, "format must be json or csv.")
     return api_success({
         "items": [peer_to_api_dict(peer) for peer in items],
         "total": len(items),
@@ -5580,7 +5708,7 @@ def connection_rrd_graph_png(uuid: str):
 
 @router.route("/wireguard/interfaces/add", methods=['GET'])
 @login_required
-@role_required(User.ROLE_ADMIN)
+@role_required(User.ROLE_ADMIN, User.ROLE_TENANT_ADMIN)
 @setup_required
 def create_wireguard_iface():
     from arpvpn.web.forms import AddInterfaceForm
@@ -5595,7 +5723,7 @@ def create_wireguard_iface():
 
 @router.route("/wireguard/interfaces/add", methods=['POST'])
 @login_required
-@role_required(User.ROLE_ADMIN)
+@role_required(User.ROLE_ADMIN, User.ROLE_TENANT_ADMIN)
 @setup_required
 def add_wireguard_iface():
     from arpvpn.web.forms import AddInterfaceForm
@@ -5763,6 +5891,8 @@ def create_wireguard_peer():
         abort(BAD_REQUEST, "There are no wireguard interfaces!")
     iface_uuid = request.args.get("interface", None)
     iface = interfaces.get(iface_uuid, None)
+    if iface and not can_manage_wireguard_interface(iface):
+        abort(FORBIDDEN, "Insufficient permissions.")
     from arpvpn.web.forms import AddPeerForm
     form = AddPeerForm.populate(AddPeerForm(), iface)
     context = {
@@ -5793,9 +5923,7 @@ def add_wireguard_peer():
     if not form.validate():
         error("Unable to validate form")
         return ViewController(view, **context).load()
-    target_iface = interfaces.get_value_by_attr("name", form.interface.data)
-    if not target_iface or not can_manage_wireguard_interface(target_iface):
-        abort(FORBIDDEN, "Insufficient permissions.")
+    validate_peer_form_actor_scope(form)
     try:
         peer = RestController().add_peer(form)
         # Use url_for instead of constructing URL from request.url_root
@@ -5870,6 +5998,7 @@ def get_wireguard_peer(uuid: str):
         error("Unable to validate form.")
         return ViewController(view, **context).load()
     try:
+        validate_peer_form_actor_scope(form)
         RestController().save_peer(peer, form)
         context["success"] = True
         context["success_details"] = "Peer updated successfully."
@@ -6560,6 +6689,66 @@ def can_manage_user_account(target_user: User) -> bool:
     return False
 
 
+def get_tenant_choices_for_actor(actor: Optional[User] = None, include_control_plane: bool = True) -> List[Tuple[str, str]]:
+    actor = current_actor() if actor is None else actor
+    choices: List[Tuple[str, str]] = []
+    if include_control_plane and actor and actor.has_role(User.ROLE_ADMIN, User.ROLE_SUPPORT):
+        choices.append(("", "Control plane"))
+    for tenant in get_accessible_tenants(actor):
+        choices.append((tenant.id, tenant.name))
+    return choices
+
+
+def tenant_name_lookup() -> Dict[str, str]:
+    lookup = {"": "Control plane"}
+    for tenant in tenants.values():
+        lookup[tenant.id] = tenant.name
+    return lookup
+
+
+def configure_user_management_forms(create_form=None, edit_form=None, invitation_form=None):
+    from arpvpn.web.forms import CreateUserForm, EditUserForm, InvitationForm
+    create_form = create_form or CreateUserForm()
+    edit_form = edit_form or EditUserForm()
+    invitation_form = invitation_form or InvitationForm()
+    tenant_choices = get_tenant_choices_for_actor(current_user)
+
+    create_form.tenant_id.choices = tenant_choices
+    edit_form.tenant_id.choices = tenant_choices
+    invitation_form.tenant_id.choices = [choice for choice in tenant_choices if choice[0]]
+
+    if current_user.has_role(User.ROLE_SUPPORT, User.ROLE_TENANT_ADMIN):
+        create_form.role.choices = [(User.ROLE_CLIENT, "Client")]
+        edit_form.role.choices = [(User.ROLE_CLIENT, "Client")]
+        invitation_form.role.choices = [(User.ROLE_CLIENT, "Client")]
+        if request.method == "GET":
+            create_form.role.data = User.ROLE_CLIENT
+            invitation_form.role.data = User.ROLE_CLIENT
+    else:
+        create_form.role.choices = [
+            (User.ROLE_CLIENT, "Client"),
+            (User.ROLE_TENANT_ADMIN, "Tenant admin"),
+            (User.ROLE_SUPPORT, "Support"),
+            (User.ROLE_ADMIN, "Admin"),
+        ]
+        edit_form.role.choices = list(create_form.role.choices)
+        invitation_form.role.choices = [
+            (User.ROLE_CLIENT, "Client"),
+            (User.ROLE_TENANT_ADMIN, "Tenant admin"),
+        ]
+
+    if request.method == "GET":
+        default_tenant_id = ""
+        if current_user.has_role(User.ROLE_TENANT_ADMIN):
+            default_tenant_id = get_actor_tenant_id(current_user) or ""
+        elif tenant_choices:
+            default_tenant_id = tenant_choices[0][0]
+        create_form.tenant_id.data = default_tenant_id
+        if invitation_form.tenant_id.choices:
+            invitation_form.tenant_id.data = default_tenant_id if default_tenant_id else invitation_form.tenant_id.choices[0][0]
+    return create_form, edit_form, invitation_form
+
+
 def build_user_actions(users_list: List[User]) -> Dict[str, Dict[str, bool]]:
     actions: Dict[str, Dict[str, bool]] = {}
     admin_count = count_users_by_role(User.ROLE_ADMIN)
@@ -6581,17 +6770,27 @@ def build_user_actions(users_list: List[User]) -> Dict[str, Dict[str, bool]]:
 
 
 def get_users_management_context(create_form=None, edit_form=None, delete_form=None,
-                                 impersonate_form=None, stop_form=None) -> Dict[str, Any]:
-    from arpvpn.web.forms import CreateUserForm, EditUserForm, DeleteUserForm, ImpersonateClientForm, ImpersonationStopForm
+                                 impersonate_form=None, stop_form=None, invitation_form=None,
+                                 invitation_action_form=None) -> Dict[str, Any]:
+    from arpvpn.web.forms import (
+        CreateUserForm,
+        EditUserForm,
+        DeleteUserForm,
+        ImpersonateClientForm,
+        ImpersonationStopForm,
+        InvitationForm,
+        InvitationActionForm,
+    )
     create_form = create_form or CreateUserForm()
     edit_form = edit_form or EditUserForm()
+    invitation_form = invitation_form or InvitationForm()
+    create_form, edit_form, invitation_form = configure_user_management_forms(
+        create_form=create_form,
+        edit_form=edit_form,
+        invitation_form=invitation_form,
+    )
     delete_form = delete_form or DeleteUserForm()
     create_form.peer_interface.choices = []
-    if current_user.has_role(User.ROLE_SUPPORT, User.ROLE_TENANT_ADMIN):
-        create_form.role.choices = [(User.ROLE_CLIENT, "Client")]
-        if request.method == "GET":
-            create_form.role.data = User.ROLE_CLIENT
-        edit_form.role.choices = [(User.ROLE_CLIENT, "Client")]
     from arpvpn.web.forms import AddPeerForm
     create_form.peer_interface.choices = AddPeerForm.get_choices()
     if request.method == "GET" and create_form.role.data == User.ROLE_CLIENT and create_form.peer_interface.choices:
@@ -6613,17 +6812,23 @@ def get_users_management_context(create_form=None, edit_form=None, delete_form=N
             create_form.peer_site_to_site_subnets.data = peer_form.site_to_site_subnets.data
     impersonate_form = impersonate_form or ImpersonateClientForm()
     stop_form = stop_form or ImpersonationStopForm()
+    invitation_action_form = invitation_action_form or InvitationActionForm()
     users_list = get_accessible_users(current_user)
+    accessible_invitations = get_accessible_invitations(current_user)
     return {
         "title": "Users",
         "create_form": create_form,
         "edit_form": edit_form,
         "delete_form": delete_form,
+        "invitation_form": invitation_form,
+        "invitation_action_form": invitation_action_form,
         "impersonate_form": impersonate_form,
         "stop_impersonation_form": stop_form,
         "users_list": users_list,
+        "invitations_list": accessible_invitations,
         "user_actions": build_user_actions(users_list),
         "user_vpn_access": {user_item.id: build_user_vpn_access_summary(user_item) for user_item in users_list},
+        "tenant_names": tenant_name_lookup(),
         "is_impersonating": is_impersonating(),
     }
 
@@ -6668,9 +6873,197 @@ def provision_peer_for_created_client(created_user: User, payload: Dict[str, Any
     return RestController().add_peer(peer_form)
 
 
+def validate_peer_form_actor_scope(form) -> None:
+    target_iface = interfaces.get_value_by_attr("name", form.interface.data)
+    if not target_iface or not can_manage_wireguard_interface(target_iface):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    owner = users.get_value_by_attr("name", form.name.data)
+    if owner and not user_visible_to_actor(owner):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    owner_tenant_id = str(getattr(owner, "tenant_id", "") or "").strip() if owner else ""
+    iface_tenant_id = resolve_interface_tenant_id(target_iface) or ""
+    if owner_tenant_id and iface_tenant_id and owner_tenant_id != iface_tenant_id:
+        abort(CONFLICT, "Peer owner tenant does not match the target interface tenant.")
+
+
+@router.route("/invitations", methods=["POST"])
+@login_required
+@role_required(*USER_MANAGEMENT_ROLES)
+@setup_required
+def create_invitation():
+    from arpvpn.web.forms import (
+        CreateUserForm,
+        DeleteUserForm,
+        EditUserForm,
+        ImpersonateClientForm,
+        ImpersonationStopForm,
+        InvitationForm,
+    )
+    form = InvitationForm(request.form)
+    context = get_users_management_context(
+        create_form=CreateUserForm(),
+        edit_form=EditUserForm(),
+        delete_form=DeleteUserForm(),
+        impersonate_form=ImpersonateClientForm(),
+        stop_form=ImpersonationStopForm(),
+        invitation_form=form,
+    )
+    if not form.validate():
+        details = summarize_form_errors(form) or "unknown validation error"
+        context["error"] = True
+        context["error_details"] = f"Unable to create invitation: {details}"
+        return ViewController("web/users.html", **context).load()
+    try:
+        resolved_role, resolved_tenant_id = resolve_invitation_role_and_tenant(
+            form.role.data or User.ROLE_CLIENT,
+            form.tenant_id.data or "",
+            actor=current_user,
+        )
+        invitation = Invitation(
+            tenant_id=resolved_tenant_id,
+            email=form.email.data,
+            role=resolved_role,
+            invited_by_user_id=current_user.id,
+            expires_in_hours=parse_expiry_hours(form.expires_in_hours.data),
+        )
+        invitations[invitation.id] = invitation
+        invitations.sort()
+        config_manager.save_identity_state()
+        log_audit_event(
+            "invitation.create",
+            details={"invitation_id": invitation.id, "tenant_id": invitation.tenant_id, "email": invitation.email},
+        )
+        context = get_users_management_context()
+        context["success"] = True
+        accept_url = url_for(
+            "router.accept_invitation",
+            invitation_id=invitation.id,
+            token=invitation.raw_token,
+            _external=False,
+        )
+        context["success_details"] = f"Invitation created. Acceptance URL: {accept_url}"
+        return ViewController("web/users.html", **context).load()
+    except HTTPException as e:
+        context["error"] = True
+        context["error_details"] = e.description
+        return ViewController("web/users.html", **context).load()
+
+
+@router.route("/invitations/<invitation_id>/resend", methods=["POST"])
+@login_required
+@role_required(*USER_MANAGEMENT_ROLES)
+@setup_required
+def resend_invitation(invitation_id: str):
+    from arpvpn.web.forms import InvitationActionForm
+    form = InvitationActionForm(request.form)
+    if not form.validate():
+        abort(BAD_REQUEST, "Invalid invitation request.")
+    invitation = get_invitation_or_404(invitation_id)
+    if not invitation_visible_to_actor(invitation):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    raw_token = invitation.issue_token()
+    config_manager.save_identity_state()
+    log_audit_event(
+        "invitation.resend",
+        details={"invitation_id": invitation.id, "tenant_id": invitation.tenant_id, "email": invitation.email},
+    )
+    context = get_users_management_context()
+    context["success"] = True
+    accept_url = url_for("router.accept_invitation", invitation_id=invitation.id, token=raw_token, _external=False)
+    context["success_details"] = f"Invitation token refreshed. Acceptance URL: {accept_url}"
+    return ViewController("web/users.html", **context).load()
+
+
+@router.route("/invitations/<invitation_id>/revoke", methods=["POST"])
+@login_required
+@role_required(*USER_MANAGEMENT_ROLES)
+@setup_required
+def revoke_invitation(invitation_id: str):
+    from arpvpn.web.forms import InvitationActionForm
+    form = InvitationActionForm(request.form)
+    if not form.validate():
+        abort(BAD_REQUEST, "Invalid invitation request.")
+    invitation = get_invitation_or_404(invitation_id)
+    if not invitation_visible_to_actor(invitation):
+        abort(FORBIDDEN, "Insufficient permissions.")
+    invitation.revoke()
+    config_manager.save_identity_state()
+    log_audit_event(
+        "invitation.revoke",
+        details={"invitation_id": invitation.id, "tenant_id": invitation.tenant_id, "email": invitation.email},
+    )
+    context = get_users_management_context()
+    context["success"] = True
+    context["success_details"] = "Invitation revoked."
+    return ViewController("web/users.html", **context).load()
+
+
+@router.route("/invitations/<invitation_id>/accept", methods=["GET", "POST"])
+@setup_required
+def accept_invitation(invitation_id: str):
+    from arpvpn.web.forms import InvitationAcceptForm
+    invitation = get_invitation_or_404(invitation_id)
+    tenant = tenants.get(invitation.tenant_id, None)
+    form = InvitationAcceptForm(request.form if request.method == "POST" else None)
+    if request.method == "GET":
+        form.token.data = request.args.get("token", "")
+        return ViewController(
+            "web/invitation-accept.html",
+            title="Accept invitation",
+            form=form,
+            invitation=invitation,
+            tenant=tenant,
+        ).load()
+    context = {
+        "title": "Accept invitation",
+        "form": form,
+        "invitation": invitation,
+        "tenant": tenant,
+    }
+    if not form.validate():
+        context["error"] = True
+        context["error_details"] = summarize_form_errors(form) or "Unable to accept invitation."
+        return ViewController("web/invitation-accept.html", **context).load()
+    try:
+        if invitation.current_status() == Invitation.STATUS_REVOKED:
+            abort(FORBIDDEN, "Invitation has been revoked.")
+        if invitation.current_status() == Invitation.STATUS_ACCEPTED:
+            abort(CONFLICT, "Invitation has already been accepted.")
+        if invitation.current_status() == Invitation.STATUS_EXPIRED:
+            abort(FORBIDDEN, "Invitation has expired.")
+        if not invitation.matches_token(form.token.data):
+            abort(UNAUTHORIZED, "Invalid invitation token.")
+        validate_unique_username(form.username.data)
+        tenant = get_tenant_or_404(invitation.tenant_id)
+        created = RestController.create_user(
+            form.username.data,
+            form.password.data,
+            invitation.role,
+            tenant_id=tenant.id,
+        )
+        invitation.accept(created.id)
+        config_manager.save_identity_state()
+        log_audit_event(
+            "invitation.accept",
+            details={
+                "invitation_id": invitation.id,
+                "tenant_id": invitation.tenant_id,
+                "target_user_id": created.id,
+                "target_user_name": created.name,
+            },
+        )
+        context["success"] = True
+        context["success_details"] = "Account created. You can log in now."
+        return ViewController("web/invitation-accept.html", **context).load()
+    except HTTPException as e:
+        context["error"] = True
+        context["error_details"] = e.description
+        return ViewController("web/invitation-accept.html", **context).load()
+
+
 @router.route("/users", methods=["GET"])
 @login_required
-@role_required(*STAFF_ROLES)
+@role_required(*USER_MANAGEMENT_ROLES)
 @setup_required
 def manage_users():
     context = get_users_management_context()
@@ -6679,7 +7072,7 @@ def manage_users():
 
 @router.route("/users", methods=["POST"])
 @login_required
-@role_required(*STAFF_ROLES)
+@role_required(*USER_MANAGEMENT_ROLES)
 @setup_required
 def create_user():
     from arpvpn.web.forms import (
@@ -6709,10 +7102,27 @@ def create_user():
         context["error"] = True
         context["error_details"] = "Support users can only create client accounts."
         return ViewController("web/users.html", **context).load()
+    requested_role = form.role.data or User.ROLE_CLIENT
+    requested_tenant_id = form.tenant_id.data or ""
+    try:
+        resolved_role, resolved_tenant_id = resolve_user_management_role_and_tenant(
+            requested_role,
+            requested_tenant_id,
+            actor=current_user,
+        )
+    except HTTPException as e:
+        context["error"] = True
+        context["error_details"] = e.description
+        return ViewController("web/users.html", **context).load()
     created_user = None
     created_peer = None
     try:
-        created_user = RestController.create_user(form.username.data, form.password.data, form.role.data)
+        created_user = RestController.create_user(
+            form.username.data,
+            form.password.data,
+            resolved_role,
+            tenant_id=resolved_tenant_id or "",
+        )
         if form.create_peer.data and created_user.role == User.ROLE_CLIENT:
             peer_form = AddPeerForm(meta={"csrf": False})
             peer_form.name.data = derive_peer_name(created_user.name)
@@ -6755,7 +7165,7 @@ def create_user():
 
 @router.route("/users/<user_id>/edit", methods=["GET"])
 @login_required
-@role_required(*STAFF_ROLES)
+@role_required(*USER_MANAGEMENT_ROLES)
 @setup_required
 def edit_user(user_id: str):
     from arpvpn.web.forms import EditUserForm
@@ -6766,10 +7176,10 @@ def edit_user(user_id: str):
         abort(FORBIDDEN, "Insufficient permissions.")
 
     form = EditUserForm()
-    if current_user.has_role(User.ROLE_SUPPORT):
-        form.role.choices = [(User.ROLE_CLIENT, "Client")]
+    _, form, _ = configure_user_management_forms(edit_form=form)
     form.username.data = target_user.name
     form.role.data = target_user.role
+    form.tenant_id.data = target_user.tenant_id or ""
 
     context = {
         "title": "Edit user",
@@ -6781,7 +7191,7 @@ def edit_user(user_id: str):
 
 @router.route("/users/<user_id>/edit", methods=["POST"])
 @login_required
-@role_required(*STAFF_ROLES)
+@role_required(*USER_MANAGEMENT_ROLES)
 @setup_required
 def save_user(user_id: str):
     from arpvpn.web.forms import EditUserForm
@@ -6792,8 +7202,7 @@ def save_user(user_id: str):
         abort(FORBIDDEN, "Insufficient permissions.")
 
     form = EditUserForm(request.form)
-    if current_user.has_role(User.ROLE_SUPPORT):
-        form.role.choices = [(User.ROLE_CLIENT, "Client")]
+    _, form, _ = configure_user_management_forms(edit_form=form)
 
     view = "web/user-edit.html"
     context = {
@@ -6808,6 +7217,7 @@ def save_user(user_id: str):
 
     requested_username = (form.username.data or "").strip()
     requested_role = form.role.data or target_user.role
+    requested_tenant_id = form.tenant_id.data or ""
 
     existing_user = users.get_value_by_attr("name", requested_username)
     if existing_user and existing_user.id != target_user.id:
@@ -6818,22 +7228,33 @@ def save_user(user_id: str):
         form.role.errors.append("Support users can only assign the client role.")
         return ViewController(view, **context).load()
 
-    if target_user.id == current_user.id and requested_role != target_user.role:
+    try:
+        resolved_role, resolved_tenant_id = resolve_user_management_role_and_tenant(
+            requested_role,
+            requested_tenant_id,
+            actor=current_user,
+        )
+    except HTTPException as e:
+        form.role.errors.append(e.description)
+        return ViewController(view, **context).load()
+
+    if target_user.id == current_user.id and resolved_role != target_user.role:
         form.role.errors.append("You cannot change your own role from this page.")
         return ViewController(view, **context).load()
 
-    if target_user.role == User.ROLE_ADMIN and requested_role != User.ROLE_ADMIN:
+    if target_user.role == User.ROLE_ADMIN and resolved_role != User.ROLE_ADMIN:
         if count_users_by_role(User.ROLE_ADMIN) <= 1:
             form.role.errors.append("Cannot demote the last admin user.")
             return ViewController(view, **context).load()
 
     try:
         target_user.name = requested_username
-        target_user.role = requested_role
+        target_user.role = resolved_role
+        target_user.tenant_id = resolved_tenant_id or None
         if form.new_password.data:
             target_user.password = form.new_password.data
         users.sort()
-        users.save(web_config.credentials_file, web_config.secret_key)
+        config_manager.save_identity_state()
 
         context = get_users_management_context()
         context["success"] = True
@@ -6848,7 +7269,7 @@ def save_user(user_id: str):
 
 @router.route("/users/<user_id>/delete", methods=["POST"])
 @login_required
-@role_required(*STAFF_ROLES)
+@role_required(*USER_MANAGEMENT_ROLES)
 @setup_required
 def delete_user(user_id: str):
     from arpvpn.web.forms import DeleteUserForm
@@ -6874,7 +7295,7 @@ def delete_user(user_id: str):
 
     try:
         del users[target_user.id]
-        users.save(web_config.credentials_file, web_config.secret_key)
+        config_manager.save_identity_state()
         context = get_users_management_context()
         context["success"] = True
         context["success_details"] = "User deleted successfully."
@@ -6889,7 +7310,7 @@ def delete_user(user_id: str):
 
 @router.route("/users/<user_id>/impersonate", methods=["POST"])
 @login_required
-@role_required(*STAFF_ROLES)
+@role_required(*USER_MANAGEMENT_ROLES)
 @setup_required
 def start_impersonation(user_id: str):
     from arpvpn.web.forms import ImpersonateClientForm
@@ -6903,6 +7324,8 @@ def start_impersonation(user_id: str):
         abort(NOT_FOUND, "User not found.")
     if target_user.role != User.ROLE_CLIENT:
         abort(BAD_REQUEST, "Only client users can be impersonated.")
+    if not can_manage_user_account(target_user):
+        abort(FORBIDDEN, "Insufficient permissions.")
     if target_user.id == current_user.id:
         abort(BAD_REQUEST, "Cannot impersonate your own account.")
     session[IMPERSONATOR_SESSION_KEY] = current_user.id
@@ -7005,27 +7428,8 @@ def about():
 @login_required
 @setup_required
 def profile():
-    from arpvpn.web.forms import MfaForm, ProfileForm, PasswordResetForm
-    profile_form = ProfileForm()
-    profile_form.username.data = current_user.name
-    if request.form:
-        password_reset_form = PasswordResetForm(request.form)
-    else:
-        password_reset_form = PasswordResetForm()
-    mfa_form = MfaForm()
-    mfa_provisioning_uri = current_user.mfa_provisioning_uri(APP_NAME) if current_user.mfa_secret else None
     view = "web/profile.html"
-    context = {
-        "title": "Profile",
-        "profile_form": profile_form,
-        "password_reset_form": password_reset_form,
-        "mfa_form": mfa_form,
-        "mfa_enabled": current_user.mfa_enabled,
-        "mfa_secret": current_user.mfa_secret,
-        "mfa_provisioning_uri": mfa_provisioning_uri,
-        "mfa_recovery_codes": [],
-        "login_ago": get_time_ago(current_user.login_date),
-    }
+    context = build_profile_view_context()
     return ViewController(view, **context).load()
 
 
@@ -7037,22 +7441,16 @@ def save_profile():
         return update_profile_mfa()
     if "new_password" in request.form:
         return password_reset()
-    from arpvpn.web.forms import MfaForm, ProfileForm, PasswordResetForm
+    if (
+        "issue_api_token" in request.form
+        or "revoke_api_token" in request.form
+        or "revoke_all_api_tokens" in request.form
+    ):
+        return update_profile_api_tokens()
+    from arpvpn.web.forms import ProfileForm
     view = "web/profile.html"
     profile_form = ProfileForm(request.form)
-    password_reset_form = PasswordResetForm()
-    mfa_form = MfaForm()
-    context = {
-        "title": "Profile",
-        "profile_form": profile_form,
-        "password_reset_form": password_reset_form,
-        "mfa_form": mfa_form,
-        "mfa_enabled": current_user.mfa_enabled,
-        "mfa_secret": current_user.mfa_secret,
-        "mfa_provisioning_uri": current_user.mfa_provisioning_uri(APP_NAME) if current_user.mfa_secret else None,
-        "mfa_recovery_codes": [],
-        "login_ago": get_time_ago(current_user.login_date),
-    }
+    context = build_profile_view_context(profile_form=profile_form)
     if not profile_form.validate():
         error("Unable to validate form")
         return ViewController(view, **context).load()
@@ -7071,13 +7469,23 @@ def save_profile():
     return ViewController(view, **context).load()
 
 
-def update_profile_mfa():
-    from arpvpn.web.forms import MfaForm, ProfileForm, PasswordResetForm
-    view = "web/profile.html"
-    profile_form = ProfileForm()
-    profile_form.username.data = current_user.name
-    password_reset_form = PasswordResetForm()
-    mfa_form = MfaForm(request.form)
+def build_profile_view_context(**overrides) -> Dict[str, Any]:
+    from arpvpn.web.forms import (
+        ApiTokenIssueForm,
+        ApiTokenRevokeAllForm,
+        ApiTokenRevokeForm,
+        MfaForm,
+        PasswordResetForm,
+        ProfileForm,
+    )
+    profile_form = overrides.pop("profile_form", None) or ProfileForm()
+    if not getattr(profile_form.username, "data", None):
+        profile_form.username.data = current_user.name
+    password_reset_form = overrides.pop("password_reset_form", None) or PasswordResetForm()
+    mfa_form = overrides.pop("mfa_form", None) or MfaForm()
+    api_token_form = overrides.pop("api_token_form", None) or ApiTokenIssueForm()
+    api_token_revoke_form = overrides.pop("api_token_revoke_form", None) or ApiTokenRevokeForm()
+    api_token_revoke_all_form = overrides.pop("api_token_revoke_all_form", None) or ApiTokenRevokeAllForm()
     context = {
         "title": "Profile",
         "profile_form": profile_form,
@@ -7087,8 +7495,110 @@ def update_profile_mfa():
         "mfa_secret": current_user.mfa_secret,
         "mfa_provisioning_uri": current_user.mfa_provisioning_uri(APP_NAME) if current_user.mfa_secret else None,
         "mfa_recovery_codes": [],
+        "api_token_form": api_token_form,
+        "api_token_revoke_form": api_token_revoke_form,
+        "api_token_revoke_all_form": api_token_revoke_all_form,
+        "api_tokens": [
+            api_token_record_to_dict(record)
+            for record in api_token_store.list_user_tokens(current_user.id)
+        ],
+        "issued_api_tokens": None,
         "login_ago": get_time_ago(current_user.login_date),
     }
+    context.update(overrides)
+    return context
+
+
+def update_profile_api_tokens():
+    from arpvpn.web.forms import ApiTokenIssueForm, ApiTokenRevokeAllForm, ApiTokenRevokeForm
+    view = "web/profile.html"
+    if "issue_api_token" in request.form:
+        api_token_form = ApiTokenIssueForm(request.form)
+        context = build_profile_view_context(api_token_form=api_token_form)
+        if not api_token_form.validate():
+            error("Unable to validate API token form")
+            return ViewController(view, **context).load()
+        scope = normalize_auth_scope(api_token_form.scope.data)
+        api_token_form.scope.data = scope
+        if not role_allowed_in_scope(current_user.role, scope):
+            api_token_form.scope.errors.append(f"Role '{current_user.role}' cannot request scope '{scope}'.")
+            return ViewController(view, **context).load()
+        if not current_user.check_password(api_token_form.password.data):
+            api_token_form.password.errors.append("is incorrect.")
+            return ViewController(view, **context).load()
+        mfa_verified = False
+        mfa_recovery_consumed = False
+        if current_user.has_mfa():
+            if not (api_token_form.mfa_code.data or "").strip():
+                api_token_form.mfa_code.errors.append("is required for this account.")
+                return ViewController(view, **context).load()
+            mfa_verified, mfa_recovery_consumed = current_user.verify_mfa(api_token_form.mfa_code.data)
+            if not mfa_verified:
+                api_token_form.mfa_code.errors.append("is invalid.")
+                return ViewController(view, **context).load()
+            mark_session_mfa_verified(current_user)
+        token_pair = api_token_store.issue_pair(
+            user_id=current_user.id,
+            access_ttl_seconds=API_AUTH_ACCESS_TTL_SECONDS,
+            refresh_ttl_seconds=API_AUTH_REFRESH_TTL_SECONDS,
+            issued_ip=get_request_ip(),
+            issued_user_agent=get_request_user_agent(),
+            mfa_verified=mfa_verified,
+        )
+        if mfa_recovery_consumed:
+            config_manager.save_credentials()
+        log_audit_event(
+            "auth.token.issue",
+            status="success",
+            details={"target_user_id": current_user.id, "target_user_name": current_user.name, "scope": scope},
+        )
+        context = build_profile_view_context(
+            success=True,
+            success_details="API token pair issued. Copy the token values now; they will not be shown again.",
+            issued_api_tokens=build_token_response_payload(token_pair, scope),
+        )
+        return ViewController(view, **context).load()
+
+    if "revoke_all_api_tokens" in request.form:
+        api_token_revoke_all_form = ApiTokenRevokeAllForm(request.form)
+        context = build_profile_view_context(api_token_revoke_all_form=api_token_revoke_all_form)
+        if not api_token_revoke_all_form.validate():
+            return ViewController(view, **context).load()
+        revoked = api_token_store.revoke_user_tokens(current_user.id)
+        log_audit_event(
+            "auth.token.revoke_all",
+            status="success",
+            details={"target_user_id": current_user.id, "revoked_tokens": revoked},
+        )
+        context = build_profile_view_context(
+            success=True,
+            success_details=f"Revoked {revoked} API token(s).",
+        )
+        return ViewController(view, **context).load()
+
+    api_token_revoke_form = ApiTokenRevokeForm(request.form)
+    context = build_profile_view_context(api_token_revoke_form=api_token_revoke_form)
+    if not api_token_revoke_form.validate():
+        return ViewController(view, **context).load()
+    token_id = str(api_token_revoke_form.token_id.data or "").strip()
+    if not api_token_store.revoke_user_token_id(current_user.id, token_id):
+        context["warning"] = True
+        context["warning_details"] = "API token was not found for this account."
+        return ViewController(view, **context).load()
+    log_audit_event(
+        "auth.token.revoke",
+        status="success",
+        details={"revoked_token_id": token_id, "target_user_id": current_user.id},
+    )
+    context = build_profile_view_context(success=True, success_details="API token revoked.")
+    return ViewController(view, **context).load()
+
+
+def update_profile_mfa():
+    from arpvpn.web.forms import MfaForm
+    view = "web/profile.html"
+    mfa_form = MfaForm(request.form)
+    context = build_profile_view_context(mfa_form=mfa_form)
     if mfa_form.generate_secret.data:
         secret = generate_mfa_secret()
         recovery_codes = generate_recovery_codes()
@@ -7141,22 +7651,9 @@ def update_profile_mfa():
 
 def password_reset():
     view = "web/profile.html"
-    from arpvpn.web.forms import MfaForm, PasswordResetForm, ProfileForm
-    profile_form = ProfileForm()
-    profile_form.username.data = current_user.name
+    from arpvpn.web.forms import PasswordResetForm
     password_reset_form = PasswordResetForm(request.form)
-    mfa_form = MfaForm()
-    context = {
-        "title": "Profile",
-        "profile_form": profile_form,
-        "password_reset_form": password_reset_form,
-        "mfa_form": mfa_form,
-        "mfa_enabled": current_user.mfa_enabled,
-        "mfa_secret": current_user.mfa_secret,
-        "mfa_provisioning_uri": current_user.mfa_provisioning_uri(APP_NAME) if current_user.mfa_secret else None,
-        "mfa_recovery_codes": [],
-        "login_ago": get_time_ago(current_user.login_date),
-    }
+    context = build_profile_view_context(password_reset_form=password_reset_form)
     if not password_reset_form.validate():
         error("Unable to validate form")
         return ViewController(view, **context).load()

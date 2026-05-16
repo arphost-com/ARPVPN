@@ -9,6 +9,7 @@ from flask_login import current_user
 from flask_wtf import FlaskForm
 from wtforms import StringField, BooleanField, PasswordField, SubmitField, SelectField, IntegerField, \
     TextAreaField
+from wtforms.fields import HiddenField
 from wtforms.validators import DataRequired, InputRequired
 
 from arpvpn.common.models.user import User
@@ -18,7 +19,7 @@ from arpvpn.common.utils.strings import list_to_str
 from arpvpn.core.config.logger import config as logger_config
 from arpvpn.core.config.traffic import config as traffic_config
 from arpvpn.core.config.web import config as web_config
-from arpvpn.core.config.wireguard import config as wireguard_config
+from arpvpn.core.config.wireguard import config as wireguard_config, detect_wireguard_binary
 from arpvpn.core.managers import traffic_storage
 from arpvpn.core.managers.config import config_manager
 from arpvpn.core.models import Interface, Peer, interfaces
@@ -37,6 +38,20 @@ def derive_peer_name(source: str) -> str:
     if candidate and Peer.is_name_valid(candidate):
         return candidate
     return Peer.generate_valid_name()
+
+
+def fill_missing_wireguard_binary_fields(form):
+    defaults = {
+        "app_wg_bin": detect_wireguard_binary("wg"),
+        "app_wg_quick_bin": detect_wireguard_binary("wg-quick"),
+        "app_iptables_bin": detect_wireguard_binary("iptables"),
+    }
+    for field_name, detected_path in defaults.items():
+        if not detected_path:
+            continue
+        field = getattr(form, field_name, None)
+        if field is not None and not (field.data or "").strip():
+            field.data = detected_path
 
 
 class LoginForm(FlaskForm):
@@ -78,11 +93,13 @@ class CreateUserForm(FlaskForm):
         "Role",
         choices=[
             (User.ROLE_CLIENT, "Client"),
+            (User.ROLE_TENANT_ADMIN, "Tenant admin"),
             (User.ROLE_SUPPORT, "Support"),
             (User.ROLE_ADMIN, "Admin"),
         ],
         default=User.ROLE_CLIENT,
     )
+    tenant_id = SelectField("Tenant", choices=[], validate_choice=False)
     create_peer = BooleanField("Provision WireGuard connection", default=False)
     peer_interface = SelectField("WireGuard interface", validate_choice=False)
     peer_mode = SelectField(
@@ -156,11 +173,13 @@ class EditUserForm(FlaskForm):
         "Role",
         choices=[
             (User.ROLE_CLIENT, "Client"),
+            (User.ROLE_TENANT_ADMIN, "Tenant admin"),
             (User.ROLE_SUPPORT, "Support"),
             (User.ROLE_ADMIN, "Admin"),
         ],
         default=User.ROLE_CLIENT,
     )
+    tenant_id = SelectField("Tenant", choices=[], validate_choice=False)
     new_password = PasswordField('New password', render_kw={"placeholder": "Leave blank to keep current password"})
     confirm = PasswordField('Confirm new password', render_kw={"placeholder": "Confirm new password"})
     submit = SubmitField('Save user')
@@ -192,6 +211,46 @@ class ImpersonationStopForm(FlaskForm):
 
 class ImpersonateClientForm(FlaskForm):
     submit = SubmitField("Impersonate")
+
+
+class InvitationForm(FlaskForm):
+    email = StringField("Email", validators=[DataRequired(), EmailValidator()],
+                        render_kw={"placeholder": "user@example.com", "autocomplete": "email"})
+    role = SelectField(
+        "Role",
+        choices=[
+            (User.ROLE_CLIENT, "Client"),
+            (User.ROLE_TENANT_ADMIN, "Tenant admin"),
+        ],
+        default=User.ROLE_CLIENT,
+    )
+    tenant_id = SelectField("Tenant", choices=[], validate_choice=False)
+    expires_in_hours = IntegerField(
+        "Expires in hours",
+        validators=[InputRequired(), PositiveIntegerValidator()],
+        default=168,
+        render_kw={"type": "number", "min": "1", "max": "720"},
+    )
+    submit = SubmitField("Invite")
+
+
+class InvitationActionForm(FlaskForm):
+    submit = SubmitField("Submit")
+
+
+class InvitationAcceptForm(FlaskForm):
+    token = StringField("Invitation token", validators=[DataRequired()],
+                        render_kw={"autocomplete": "one-time-code"})
+    username = StringField("Username", validators=[DataRequired(), SignupUsernameValidator()],
+                           render_kw={"placeholder": "Enter username", "autocomplete": "username"})
+    password = PasswordField(
+        "Password",
+        validators=[DataRequired()],
+        render_kw={"placeholder": "Enter password", "autocomplete": "new-password"},
+    )
+    confirm = PasswordField("Confirm password", validators=[DataRequired(), SignupPasswordValidator()],
+                            render_kw={"placeholder": "Confirm password", "autocomplete": "new-password"})
+    submit = SubmitField("Accept invitation")
 
 
 class SettingsForm(FlaskForm):
@@ -271,6 +330,7 @@ class SettingsForm(FlaskForm):
     submit = SubmitField('Save')
 
     def validate(self, extra_validators=None):
+        fill_missing_wireguard_binary_fields(self)
         valid = super().validate(extra_validators)
         mode = (self.web_tls_mode.data or web_config.TLS_MODE_HTTP).strip()
         if mode not in web_config.TLS_MODES:
@@ -358,6 +418,7 @@ class SettingsForm(FlaskForm):
         form.app_wg_bin.data = wireguard_config.wg_bin
         form.app_wg_quick_bin.data = wireguard_config.wg_quick_bin
         form.app_iptables_bin.data = wireguard_config.iptables_bin
+        fill_missing_wireguard_binary_fields(form)
 
         form.log_overwrite.data = logger_config.overwrite
         form.log_file.data = logger_config.logfile
@@ -422,7 +483,12 @@ class SetupForm(FlaskForm):
 
     submit = SubmitField('Next')
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        fill_missing_wireguard_binary_fields(self)
+
     def validate(self, extra_validators=None):
+        fill_missing_wireguard_binary_fields(self)
         valid = super().validate(extra_validators)
         mode = (self.web_tls_mode.data or web_config.TLS_MODE_HTTP).strip()
         if mode not in web_config.TLS_MODES:
@@ -805,14 +871,13 @@ class AddPeerForm(FlaskForm):
     @classmethod
     def get_choices(cls) -> List[Tuple[str, str]]:
         choices = []
+        if current_user and current_user.is_authenticated and current_user.has_role(User.ROLE_TENANT_ADMIN):
+            from arpvpn.web.router import can_manage_wireguard_interface
+        else:
+            can_manage_wireguard_interface = None
         for iface in interfaces.values():
-            if (
-                current_user and current_user.is_authenticated and
-                getattr(current_user, "role", "") == User.ROLE_TENANT_ADMIN
-            ):
-                iface_tenant_id = str(getattr(iface, "tenant_id", "") or "")
-                actor_tenant_id = str(getattr(current_user, "tenant_id", "") or "")
-                if iface_tenant_id and iface_tenant_id != actor_tenant_id:
+            if can_manage_wireguard_interface is not None:
+                if not can_manage_wireguard_interface(iface, current_user):
                     continue
             choices.append((iface.name, f"{iface.name} ({iface.ipv4_address})"))
         return choices
@@ -844,8 +909,11 @@ class AddPeerForm(FlaskForm):
         form.interface.choices = cls.get_choices()
         if iface:
             form.interface.data = iface.name
-        else:
+        elif form.interface.choices:
             iface = interfaces.get_value_by_attr("name", form.interface.choices[0][0])
+        else:
+            form.ipv4.data = "No accessible interfaces available."
+            return form
         iface_network = ipaddress.IPv4Interface(iface.ipv4_address).network
         peer_ip = "No addresses available for this network!"
         for host in iface_network.hosts():
@@ -925,3 +993,34 @@ class MfaForm(FlaskForm):
     generate_secret = SubmitField("Generate MFA secret")
     enable = SubmitField("Enable MFA")
     disable = SubmitField("Disable MFA")
+
+
+class ApiTokenIssueForm(FlaskForm):
+    password = PasswordField(
+        "Current password",
+        validators=[DataRequired()],
+        render_kw={"placeholder": "Confirm current password", "autocomplete": "current-password"},
+    )
+    scope = SelectField(
+        "Scope",
+        choices=[
+            ("all", "All allowed endpoints"),
+            ("staff", "Staff endpoints"),
+            ("client", "Client endpoints"),
+        ],
+        default="all",
+    )
+    mfa_code = StringField(
+        "MFA code",
+        render_kw={"placeholder": "123456", "autocomplete": "one-time-code"},
+    )
+    issue_api_token = SubmitField("Issue API token")
+
+
+class ApiTokenRevokeForm(FlaskForm):
+    token_id = HiddenField("Token ID", validators=[DataRequired()])
+    revoke_api_token = SubmitField("Revoke")
+
+
+class ApiTokenRevokeAllForm(FlaskForm):
+    revoke_all_api_tokens = SubmitField("Revoke all tokens")

@@ -1,180 +1,223 @@
-default:
-  image: python:3.11-slim
-  tags:
-    - docker02
-  before_script:
-    - cd "$CI_PROJECT_DIR"
-
 stages:
   - test
-  - package
-  - container
+  - build
+  - staging
+  - production
 
-.poetry_job_setup: &poetry_job_setup
-  - apt-get update
-  - apt-get install -y --no-install-recommends iproute2
-  - rm -rf /var/lib/apt/lists/*
-  - rm -rf .ci-venv
-  - python3 -m venv .ci-venv
-  - . .ci-venv/bin/activate
-  - pip install --no-cache-dir poetry==1.8.3
-  - poetry config virtualenvs.create false
-  - poetry install --with dev --no-interaction --no-ansi
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  DOCKER_TLS_CERTDIR: "/certs"
+  ARPVPN_COMMIT_IMAGE: "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA"
+  ARPVPN_STABLE_IMAGE: "$CI_REGISTRY_IMAGE:stable"
+  ARPVPN_COMPOSE_SERVICE: "arpvpn"
 
-.poetry_package_setup: &poetry_package_setup
-  - rm -rf .ci-venv
-  - python3 -m venv .ci-venv
-  - . .ci-venv/bin/activate
-  - pip install --no-cache-dir poetry==1.8.3
-
-unit_tests:
-  stage: test
-  script:
-    - apt-get update
-    - apt-get install -y --no-install-recommends iproute2
-    - rm -rf /var/lib/apt/lists/*
-    - rm -rf .ci-venv
-    - python3 -m venv .ci-venv
-    - . .ci-venv/bin/activate
-    - pip install --no-cache-dir poetry==1.8.3
-    - poetry config virtualenvs.create false
-    - poetry install --with dev --no-interaction --no-ansi
-    - python3 scripts/validate_openapi.py
-    - ./scripts/check_api_artifacts.sh
-    - |
-      UNIT_TEST_TARGETS="
-      arpvpn/tests/test_server.py
-      arpvpn/tests/default/test_setup.py
-      arpvpn/tests/default/test_about_page.py
-      arpvpn/tests/default/test_login.py
-      arpvpn/tests/default/test_profile.py
-      arpvpn/tests/default/test_password_reset.py
-      arpvpn/tests/default/test_theme_api.py
-      arpvpn/tests/default/test_statistics_page.py
-      arpvpn/tests/default/test_statistics_api.py
-      arpvpn/tests/default/test_tls_api.py
-      arpvpn/tests/default/test_https_redirect.py
-      arpvpn/tests/default/test_traffic_driver.py
-      arpvpn/tests/default/test_interface_state.py
-      arpvpn/tests/default/test_wireguard_utils.py
-      arpvpn/tests/default/test_rrd_graph_generation.py
-      arpvpn/tests/default/test_api_auth.py
-      arpvpn/tests/default/test_api_schema_registry.py
-      arpvpn/tests/default/test_api_ui_parity.py
-      arpvpn/tests/default/test_system_api.py
-      arpvpn/tests/default/test_tenant_user_invitation_api.py
-      arpvpn/tests/default/test_users_roles.py::test_admin_can_create_client_user
-      arpvpn/tests/default/test_users_roles.py::test_admin_can_edit_user_name_role_and_password
-      arpvpn/tests/default/test_users_roles.py::test_admin_can_delete_client_user
-      arpvpn/tests/default/test_users_roles.py::test_admin_cannot_delete_own_account
-      arpvpn/tests/default/test_users_roles.py::test_support_can_impersonate_client_and_return
-      arpvpn/tests/default/test_users_roles.py::test_support_can_edit_client_but_cannot_promote_role
-      arpvpn/tests/default/test_users_roles.py::test_support_cannot_delete_admin_user
-      arpvpn/tests/default/test_users_roles.py::test_client_forbidden_on_staff_routes
-      arpvpn/tests/default/test_users_roles.py::test_support_cannot_create_admin_or_support
-      "
-      EXISTING_TARGETS=""
-      for target in $UNIT_TEST_TARGETS; do
-        target_path="${target%%::*}"
-        if [ -e "$target_path" ]; then
-          EXISTING_TARGETS="$EXISTING_TARGETS $target"
-        else
-          echo "Skipping missing unit test target: $target"
-        fi
-      done
-      if [ -z "$EXISTING_TARGETS" ]; then
-        echo "No unit test targets resolved in $CI_PROJECT_DIR"
-        exit 1
-      fi
-      python3 -m pytest -q $EXISTING_TARGETS
-
-integration_tests_env:
-  stage: test
-  allow_failure: true
-  script:
-    - apt-get update
-    - apt-get install -y --no-install-recommends iproute2
-    - rm -rf /var/lib/apt/lists/*
-    - rm -rf .ci-venv
-    - python3 -m venv .ci-venv
-    - . .ci-venv/bin/activate
-    - pip install --no-cache-dir poetry==1.8.3
-    - poetry config virtualenvs.create false
-    - poetry install --with dev --no-interaction --no-ansi
-    - python3 -m pytest -q arpvpn/tests
+workflow:
   rules:
-    - if: '$RUN_ENV_INTEGRATION_TESTS == "1"'
-    - when: never
+    - if: '$CI_PROJECT_VISIBILITY == "private" && $CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PROJECT_VISIBILITY == "private" && $CI_COMMIT_BRANCH'
+    - if: '$CI_PROJECT_VISIBILITY == "private" && $CI_COMMIT_TAG'
 
-api_contract_tests:
+test:
   stage: test
-  allow_failure: true
-  script:
-    - apt-get update
-    - apt-get install -y --no-install-recommends iproute2
-    - rm -rf /var/lib/apt/lists/*
-    - rm -rf .ci-venv
-    - python3 -m venv .ci-venv
-    - . .ci-venv/bin/activate
-    - pip install --no-cache-dir poetry==1.8.3
-    - poetry config virtualenvs.create false
-    - poetry install --with dev --no-interaction --no-ansi
-    - chmod +x scripts/run-api-contract-tests.sh
-    - ./scripts/run-api-contract-tests.sh
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push"'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-
-package_dist:
-  stage: package
-  needs:
-    - unit_tests
-  script:
-    - rm -rf dist
-    - apt-get update
-    - apt-get install -y --no-install-recommends iproute2
-    - rm -rf /var/lib/apt/lists/*
-    - rm -rf .ci-venv
-    - python3 -m venv .ci-venv
-    - . .ci-venv/bin/activate
-    - pip install --no-cache-dir poetry==1.8.3
-    - poetry config virtualenvs.create false
-    - poetry install --with dev --no-interaction --no-ansi
-    - ./build.sh
-  artifacts:
+  image: python:3.14-slim-trixie
+  cache:
+    key: "$CI_COMMIT_REF_SLUG-pip"
     paths:
-      - dist/*.tar.gz
-    expire_in: 1 day
-
-docker_publish:
-  stage: container
-  image: docker:27.1.1
-  needs:
-    - unit_tests
-    - package_dist
+      - .cache/pip
+  before_script:
+    - python -m venv .venv
+    - . .venv/bin/activate
+    - python -m pip install --upgrade pip
+    - python -m pip install -r requirements.txt pytest
   script:
-    - unset DOCKER_HOST
-    - unset DOCKER_TLS_CERTDIR
-    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
-    - |
-      set -euo pipefail
-      if [ -n "${CI_COMMIT_TAG:-}" ]; then
-        docker build --build-arg ARPVPN_UID=1000 --build-arg ARPVPN_GID=1000 -f docker/Dockerfile \
-          -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG" \
-          -t "$CI_REGISTRY_IMAGE:latest" \
-          -t "$CI_REGISTRY_IMAGE:2.x" \
-          .
-        docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG"
-      else
-        docker build --build-arg ARPVPN_UID=1000 --build-arg ARPVPN_GID=1000 -f docker/Dockerfile \
-          -t "$CI_REGISTRY_IMAGE:latest" \
-          -t "$CI_REGISTRY_IMAGE:2.x" \
-          -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA" \
-          .
-        docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
-      fi
-    - docker push "$CI_REGISTRY_IMAGE:latest"
-    - docker push "$CI_REGISTRY_IMAGE:2.x"
+    - . .venv/bin/activate
+    - python -m compileall arpvpn tests
+    - pytest -q
+    - python scripts/validate_openapi.py
+    - PYTHON_BIN=python ./scripts/check_api_artifacts.sh
+
+docker:build:
+  stage: build
+  image: docker:27
+  services:
+    - name: docker:27-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+  before_script:
+    - docker info
+    - printf '%s' "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
+  script:
+    - docker build --pull -f docker/Dockerfile -t "$ARPVPN_COMMIT_IMAGE" .
+    - docker push "$ARPVPN_COMMIT_IMAGE"
+    - docker tag "$ARPVPN_COMMIT_IMAGE" "$ARPVPN_STABLE_IMAGE"
+    - docker push "$ARPVPN_STABLE_IMAGE"
   rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-    - if: '$CI_COMMIT_TAG =~ /^v2\./'
+    - if: '$CI_PROJECT_VISIBILITY == "private" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"'
+
+deploy:docker02:
+  stage: staging
+  image: alpine:3.20
+  needs:
+    - docker:build
+  environment:
+    name: docker02
+    url: $STAGING_URL
+  before_script:
+    - apk add --no-cache bash curl openssh-client
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - eval "$(ssh-agent -s)"
+    - printf '%s\n' "$STAGING_SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - ssh-keyscan -H "$STAGING_SSH_HOST" >> ~/.ssh/known_hosts
+  script:
+    - test -n "$STAGING_SSH_HOST"
+    - test -n "$STAGING_SSH_USER"
+    - test -n "$STAGING_SSH_PRIVATE_KEY"
+    - test -n "$STAGING_DEPLOY_PATH"
+    - test -n "$DEPLOY_REGISTRY_USER"
+    - test -n "$DEPLOY_REGISTRY_PASSWORD"
+    - printf '%s' "$DEPLOY_REGISTRY_PASSWORD" | ssh "$STAGING_SSH_USER@$STAGING_SSH_HOST" "docker login '$CI_REGISTRY' -u '$DEPLOY_REGISTRY_USER' --password-stdin"
+    - |
+      ssh "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+        "ARPVPN_IMAGE='$ARPVPN_COMMIT_IMAGE' DEPLOY_PATH='$STAGING_DEPLOY_PATH' ENV_FILE='${STAGING_ENV_FILE:-.env}' COMPOSE_PROJECT='${STAGING_COMPOSE_PROJECT:-arpvpn_docker02}' SERVICE='${STAGING_SERVICE:-$ARPVPN_COMPOSE_SERVICE}' HEALTH_URL='${STAGING_HEALTH_URL:-}' bash -s" <<'REMOTE'
+      set -euo pipefail
+      cd "$DEPLOY_PATH"
+      test -f docker-compose.yaml -o -f docker-compose.yml
+      touch "$ENV_FILE"
+      cp "$ENV_FILE" "$ENV_FILE.bak.$(date +%Y%m%d%H%M%S)"
+      if grep -q '^ARPVPN_IMAGE=' "$ENV_FILE"; then
+        sed -i "s#^ARPVPN_IMAGE=.*#ARPVPN_IMAGE=$ARPVPN_IMAGE#" "$ENV_FILE"
+      else
+        printf '\nARPVPN_IMAGE=%s\n' "$ARPVPN_IMAGE" >> "$ENV_FILE"
+      fi
+      docker compose --env-file "$ENV_FILE" -p "$COMPOSE_PROJECT" pull "$SERVICE"
+      docker compose --env-file "$ENV_FILE" -p "$COMPOSE_PROJECT" up -d "$SERVICE"
+      for attempt in $(seq 1 30); do
+        container_id="$(docker compose --env-file "$ENV_FILE" -p "$COMPOSE_PROJECT" ps -q "$SERVICE")"
+        status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id")"
+        if [ "$status" = "healthy" ] || [ "$status" = "running" ]; then
+          break
+        fi
+        if [ "$attempt" = "30" ]; then
+          docker compose --env-file "$ENV_FILE" -p "$COMPOSE_PROJECT" logs --tail=120 "$SERVICE"
+          exit 1
+        fi
+        sleep 5
+      done
+      if [ -n "$HEALTH_URL" ]; then
+        curl -fsSL "$HEALTH_URL" >/dev/null
+      fi
+      docker compose --env-file "$ENV_FILE" -p "$COMPOSE_PROJECT" ps "$SERVICE"
+      REMOTE
+  rules:
+    - if: '$CI_PROJECT_VISIBILITY == "private" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"'
+
+deploy:production:
+  stage: production
+  image: alpine:3.20
+  needs:
+    - deploy:docker02
+  environment:
+    name: production
+    url: $PROD_URL
+  before_script:
+    - apk add --no-cache bash curl openssh-client
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - eval "$(ssh-agent -s)"
+    - printf '%s\n' "$PROD_SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - ssh-keyscan -H "$PROD_SSH_HOST" >> ~/.ssh/known_hosts
+  script:
+    - test -n "$PROD_SSH_HOST"
+    - test -n "$PROD_SSH_USER"
+    - test -n "$PROD_SSH_PRIVATE_KEY"
+    - test -n "$PROD_DEPLOY_PATH"
+    - test -n "$DEPLOY_REGISTRY_USER"
+    - test -n "$DEPLOY_REGISTRY_PASSWORD"
+    - printf '%s' "$DEPLOY_REGISTRY_PASSWORD" | ssh "$PROD_SSH_USER@$PROD_SSH_HOST" "docker login '$CI_REGISTRY' -u '$DEPLOY_REGISTRY_USER' --password-stdin"
+    - |
+      ssh "$PROD_SSH_USER@$PROD_SSH_HOST" \
+        "ARPVPN_IMAGE='$ARPVPN_COMMIT_IMAGE' DEPLOY_PATH='$PROD_DEPLOY_PATH' ENV_FILE='${PROD_ENV_FILE:-.env}' COMPOSE_PROJECT='${PROD_COMPOSE_PROJECT:-arpvpn_prod}' SERVICE='${PROD_SERVICE:-$ARPVPN_COMPOSE_SERVICE}' HEALTH_URL='${PROD_HEALTH_URL:-}' bash -s" <<'REMOTE'
+      set -euo pipefail
+      cd "$DEPLOY_PATH"
+      test -f docker-compose.yaml -o -f docker-compose.yml
+      touch "$ENV_FILE"
+      cp "$ENV_FILE" "$ENV_FILE.bak.$(date +%Y%m%d%H%M%S)"
+      if grep -q '^ARPVPN_IMAGE=' "$ENV_FILE"; then
+        sed -i "s#^ARPVPN_IMAGE=.*#ARPVPN_IMAGE=$ARPVPN_IMAGE#" "$ENV_FILE"
+      else
+        printf '\nARPVPN_IMAGE=%s\n' "$ARPVPN_IMAGE" >> "$ENV_FILE"
+      fi
+      docker compose --env-file "$ENV_FILE" -p "$COMPOSE_PROJECT" pull "$SERVICE"
+      docker compose --env-file "$ENV_FILE" -p "$COMPOSE_PROJECT" up -d "$SERVICE"
+      for attempt in $(seq 1 30); do
+        container_id="$(docker compose --env-file "$ENV_FILE" -p "$COMPOSE_PROJECT" ps -q "$SERVICE")"
+        status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id")"
+        if [ "$status" = "healthy" ] || [ "$status" = "running" ]; then
+          break
+        fi
+        if [ "$attempt" = "30" ]; then
+          docker compose --env-file "$ENV_FILE" -p "$COMPOSE_PROJECT" logs --tail=120 "$SERVICE"
+          exit 1
+        fi
+        sleep 5
+      done
+      if [ -n "$HEALTH_URL" ]; then
+        curl -fsSL "$HEALTH_URL" >/dev/null
+      fi
+      docker compose --env-file "$ENV_FILE" -p "$COMPOSE_PROJECT" ps "$SERVICE"
+      REMOTE
+  rules:
+    - if: '$CI_PROJECT_VISIBILITY == "private" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"'
+      when: manual
+      allow_failure: false
+
+rollback:production:
+  stage: production
+  image: alpine:3.20
+  environment:
+    name: production
+    url: $PROD_URL
+  before_script:
+    - apk add --no-cache bash curl openssh-client
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - eval "$(ssh-agent -s)"
+    - printf '%s\n' "$PROD_SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - ssh-keyscan -H "$PROD_SSH_HOST" >> ~/.ssh/known_hosts
+  script:
+    - test -n "$PROD_ROLLBACK_IMAGE"
+    - test -n "$PROD_SSH_HOST"
+    - test -n "$PROD_SSH_USER"
+    - test -n "$PROD_SSH_PRIVATE_KEY"
+    - test -n "$PROD_DEPLOY_PATH"
+    - test -n "$DEPLOY_REGISTRY_USER"
+    - test -n "$DEPLOY_REGISTRY_PASSWORD"
+    - printf '%s' "$DEPLOY_REGISTRY_PASSWORD" | ssh "$PROD_SSH_USER@$PROD_SSH_HOST" "docker login '$CI_REGISTRY' -u '$DEPLOY_REGISTRY_USER' --password-stdin"
+    - |
+      ssh "$PROD_SSH_USER@$PROD_SSH_HOST" \
+        "ARPVPN_IMAGE='$PROD_ROLLBACK_IMAGE' DEPLOY_PATH='$PROD_DEPLOY_PATH' ENV_FILE='${PROD_ENV_FILE:-.env}' COMPOSE_PROJECT='${PROD_COMPOSE_PROJECT:-arpvpn_prod}' SERVICE='${PROD_SERVICE:-$ARPVPN_COMPOSE_SERVICE}' HEALTH_URL='${PROD_HEALTH_URL:-}' bash -s" <<'REMOTE'
+      set -euo pipefail
+      cd "$DEPLOY_PATH"
+      test -f docker-compose.yaml -o -f docker-compose.yml
+      touch "$ENV_FILE"
+      cp "$ENV_FILE" "$ENV_FILE.bak.rollback.$(date +%Y%m%d%H%M%S)"
+      if grep -q '^ARPVPN_IMAGE=' "$ENV_FILE"; then
+        sed -i "s#^ARPVPN_IMAGE=.*#ARPVPN_IMAGE=$ARPVPN_IMAGE#" "$ENV_FILE"
+      else
+        printf '\nARPVPN_IMAGE=%s\n' "$ARPVPN_IMAGE" >> "$ENV_FILE"
+      fi
+      docker compose --env-file "$ENV_FILE" -p "$COMPOSE_PROJECT" pull "$SERVICE"
+      docker compose --env-file "$ENV_FILE" -p "$COMPOSE_PROJECT" up -d "$SERVICE"
+      if [ -n "$HEALTH_URL" ]; then
+        curl -fsSL "$HEALTH_URL" >/dev/null
+      fi
+      docker compose --env-file "$ENV_FILE" -p "$COMPOSE_PROJECT" ps "$SERVICE"
+      REMOTE
+  rules:
+    - if: '$CI_PROJECT_VISIBILITY == "private" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"'
+      when: manual
+      allow_failure: false

@@ -7,7 +7,7 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from threading import Lock
-from typing import Any, Callable, Deque, Dict, Optional, Tuple
+from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 
 
 def now_utc() -> datetime:
@@ -240,6 +240,28 @@ class ApiTokenStore:
             self._cleanup_locked()
             record = self._records.get(str(token_id or "").strip())
             if not record:
+                return False
+            record.revoked = True
+            return True
+
+    def list_user_tokens(self, user_id: str) -> List[ApiTokenRecord]:
+        with self._lock:
+            self._cleanup_locked()
+            return sorted(
+                [
+                    record
+                    for record in self._records.values()
+                    if record.user_id == user_id and not record.revoked
+                ],
+                key=lambda record: record.issued_at,
+                reverse=True,
+            )
+
+    def revoke_user_token_id(self, user_id: str, token_id: str) -> bool:
+        with self._lock:
+            self._cleanup_locked()
+            record = self._records.get(str(token_id or "").strip())
+            if not record or record.user_id != user_id:
                 return False
             record.revoked = True
             return True
