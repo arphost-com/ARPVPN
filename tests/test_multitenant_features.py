@@ -167,6 +167,62 @@ def test_tenant_admin_wireguard_api_cannot_see_control_plane_interface(app):
     assert exported_peer_names == ["tenant-peer"]
 
 
+def test_tenant_admin_cannot_see_control_plane_interface_with_tenant_owned_peer(app):
+    tenant = Tenant("MehHOst", slug="mehhost")
+    tenants[tenant.id] = tenant
+    tenant_admin = make_user("mehmeh", User.ROLE_TENANT_ADMIN, tenant.id)
+    tenant_client = make_user("mehhost-client", User.ROLE_CLIENT, tenant.id)
+    control_plane_iface = make_interface("wg-control")
+    tenant_iface = make_interface("wg-mehhost", tenant.id)
+
+    legacy_control_peer = Peer(
+        name="mehhost-legacy",
+        description="",
+        ipv4_address="10.80.0.2/24",
+        nat=False,
+        interface=control_plane_iface,
+        dns1="8.8.8.8",
+        private_key="legacy-private",
+        public_key="legacy-public",
+        tenant_id=tenant.id,
+        owner_user_id=tenant_client.id,
+    )
+    tenant_peer = Peer(
+        name="mehhost-client",
+        description="",
+        ipv4_address="10.80.0.3/24",
+        nat=False,
+        interface=tenant_iface,
+        dns1="8.8.8.8",
+        private_key="tenant-private",
+        public_key="tenant-public",
+        tenant_id=tenant.id,
+        owner_user_id=tenant_client.id,
+    )
+    control_plane_iface.add_peer(legacy_control_peer)
+    tenant_iface.add_peer(tenant_peer)
+
+    client = app.test_client()
+    assert client.get(f"/test-login/{tenant_admin.id}").status_code == 200
+
+    response = client.get("/api/v1/wireguard/interfaces")
+    assert response.status_code == 200
+    interface_names = [item["name"] for item in response.get_json()["data"]["items"]]
+    assert interface_names == ["wg-mehhost"]
+
+    peer_response = client.get("/api/v1/wireguard/peers")
+    assert peer_response.status_code == 200
+    peer_names = [item["name"] for item in peer_response.get_json()["data"]["items"]]
+    assert peer_names == ["mehhost-client"]
+
+    assert client.get(f"/api/v1/wireguard/interfaces/{control_plane_iface.uuid}").status_code == 403
+    assert client.get(f"/api/v1/wireguard/peers/{legacy_control_peer.uuid}").status_code == 403
+    assert router_module.interface_visible_to_actor(control_plane_iface, tenant_admin) is False
+    assert router_module.peer_visible_to_actor(legacy_control_peer, tenant_admin) is False
+    assert router_module.interface_visible_to_actor(tenant_iface, tenant_admin) is True
+    assert router_module.peer_visible_to_actor(tenant_peer, tenant_admin) is True
+
+
 def test_tenant_admin_cannot_access_other_tenant_users_networks_or_settings(app):
     tenant_one = Tenant("Tenant One", slug="tenant-one", settings={"branding": {"name": "Tenant One"}})
     tenant_two = Tenant("Tenant Two", slug="tenant-two", settings={"branding": {"name": "Tenant Two"}})

@@ -1650,7 +1650,7 @@ def filter_peer_runtime_for_current_user(runtime: Dict[str, Any]) -> Dict[str, A
         alerts = []
         for row in runtime["rows"]:
             peer = get_all_peers().get(row["peer_uuid"], None)
-            if peer and actor_tenant_id and resolve_peer_tenant_id(peer) == actor_tenant_id:
+            if peer and actor_tenant_id and peer_visible_to_actor(peer, current_user):
                 rows.append(row)
         allowed_peer_ids = {row["peer_uuid"] for row in rows}
         for alert in runtime["alerts"]:
@@ -3387,16 +3387,17 @@ def resolve_peer_tenant_id(peer: Peer) -> Optional[str]:
 
 def resolve_interface_tenant_id(iface: Interface) -> Optional[str]:
     explicit_tenant_id = str(getattr(iface, "tenant_id", "") or "").strip() or None
-    if explicit_tenant_id:
-        return explicit_tenant_id
-    peer_tenant_ids = {
-        tenant_id
-        for tenant_id in (resolve_peer_tenant_id(peer) for peer in iface.peers.values())
-        if tenant_id
-    }
-    if len(peer_tenant_ids) == 1:
-        return next(iter(peer_tenant_ids))
-    return None
+    return explicit_tenant_id
+
+
+def peer_is_on_actor_tenant_interface(peer: Peer, actor: Optional[User] = None) -> bool:
+    actor = current_actor() if actor is None else actor
+    actor_tenant_id = get_actor_tenant_id(actor)
+    iface = getattr(peer, "interface", None)
+    iface_tenant_id = resolve_interface_tenant_id(iface) if iface else None
+    if actor_tenant_id:
+        return iface_tenant_id == actor_tenant_id
+    return iface_tenant_id is None
 
 
 def peer_visible_to_actor(peer: Peer, actor: Optional[User] = None) -> bool:
@@ -3408,12 +3409,16 @@ def peer_visible_to_actor(peer: Peer, actor: Optional[User] = None) -> bool:
     peer_tenant_id = resolve_peer_tenant_id(peer)
     if actor.has_role(User.ROLE_TENANT_ADMIN):
         actor_tenant_id = get_actor_tenant_id(actor)
-        return actor_tenant_id is not None and peer_tenant_id == actor_tenant_id
+        return (
+            actor_tenant_id is not None and
+            peer_tenant_id == actor_tenant_id and
+            peer_is_on_actor_tenant_interface(peer, actor)
+        )
     if actor.has_role(User.ROLE_CLIENT):
         owner = resolve_peer_owner(peer)
-        if owner and owner.id == actor.id:
+        if owner and owner.id == actor.id and peer_is_on_actor_tenant_interface(peer, actor):
             return True
-        return peer.name.lower() == actor.name.lower()
+        return peer.name.lower() == actor.name.lower() and peer_is_on_actor_tenant_interface(peer, actor)
     return False
 
 
@@ -3426,9 +3431,7 @@ def interface_visible_to_actor(iface: Interface, actor: Optional[User] = None) -
     iface_tenant_id = resolve_interface_tenant_id(iface)
     if actor.has_role(User.ROLE_TENANT_ADMIN):
         actor_tenant_id = get_actor_tenant_id(actor)
-        if actor_tenant_id and iface_tenant_id == actor_tenant_id:
-            return True
-        return any(peer_visible_to_actor(peer, actor) for peer in iface.peers.values())
+        return actor_tenant_id is not None and iface_tenant_id == actor_tenant_id
     if actor.has_role(User.ROLE_CLIENT):
         return any(peer_visible_to_actor(peer, actor) for peer in iface.peers.values())
     return False
@@ -3459,14 +3462,7 @@ def can_manage_wireguard_interface(iface: Interface, actor: Optional[User] = Non
         if actor_tenant_id is None:
             return False
         iface_tenant_id = resolve_interface_tenant_id(iface)
-        if iface_tenant_id:
-            return iface_tenant_id == actor_tenant_id
-        if not iface.peers:
-            return False
-        return all(
-            resolve_peer_tenant_id(peer) == actor_tenant_id
-            for peer in iface.peers.values()
-        )
+        return iface_tenant_id == actor_tenant_id
     return False
 
 
@@ -3478,7 +3474,11 @@ def can_manage_wireguard_peer(peer: Peer, actor: Optional[User] = None) -> bool:
         return True
     if actor.has_role(User.ROLE_TENANT_ADMIN):
         actor_tenant_id = get_actor_tenant_id(actor)
-        return actor_tenant_id is not None and resolve_peer_tenant_id(peer) == actor_tenant_id
+        return (
+            actor_tenant_id is not None and
+            resolve_peer_tenant_id(peer) == actor_tenant_id and
+            peer_is_on_actor_tenant_interface(peer, actor)
+        )
     return False
 
 
