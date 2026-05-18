@@ -4,13 +4,8 @@
 
 #### ARPVPN is a self-hosted WireGuard control plane with a web UI and API for operating client VPN and site-to-site connectivity.
 
-<img width="1382" height="895" alt="Screenshot 2026-04-28 at 7 41 37 PM" src="https://github.com/user-attachments/assets/c824c399-e905-44f8-ab17-86e7f4a09375" />
-<img width="1394" height="959" alt="Screenshot 2026-04-28 at 7 41 46 PM" src="https://github.com/user-attachments/assets/b036ffe1-4828-429c-9505-206afdf10caf" />
-<img width="1224" height="549" alt="Screenshot 2026-04-28 at 7 15 46 PM" src="https://github.com/user-attachments/assets/8400efb6-4100-4624-b4af-799295bd2b1e" />
-<img width="1491" height="866" alt="Screenshot 2026-04-28 at 7 16 25 PM" src="https://github.com/user-attachments/assets/38cad4f9-899d-44be-aaac-196d7b66d3a5" />
-<img width="1487" height="887" alt="Screenshot 2026-04-28 at 7 16 14 PM" src="https://github.com/user-attachments/assets/0787937a-138c-4b30-8829-0d8821477a2b" />
-<img width="1480" height="892" alt="Screenshot 2026-04-28 at 7 16 45 PM" src="https://github.com/user-attachments/assets/1135b8ad-202c-463f-9544-1b9f73327111" />
-
+<img width="1376" height="1153" alt="Screenshot 2026-05-18 at 6 05 14 AM" src="https://github.com/user-attachments/assets/581a49a7-3c0a-426c-b897-2e2cf99aaa19" />
+<img width="1378" height="1156" alt="Screenshot 2026-05-18 at 6 04 55 AM" src="https://github.com/user-attachments/assets/cc4728e7-9c96-40b1-b4c8-923cec704e6a" />
 
 ## Project Origin and Thanks
 
@@ -250,6 +245,26 @@ private CI/CD variables only. See `docs/source/gitlab-deployment.rst`.
 - Avoid exposing debug Flask mode publicly.
 - Keep dependencies current (`poetry.lock` and `requirements.txt`).
 - Use strong admin credentials and enable MFA for privileged users.
+
+## Screenshots
+<img width="1153" height="1018" alt="Screenshot 2026-05-18 at 5 51 12 AM" src="https://github.com/user-attachments/assets/c8d3ea10-8d8a-4fd9-93a6-5a2004395d0c" />
+<img width="1140" height="641" alt="Screenshot 2026-05-18 at 5 53 25 AM" src="https://github.com/user-attachments/assets/1f4d55d3-ee1c-47d6-b5b2-4fedce6d31d2" />
+<img width="1154" height="845" alt="Screenshot 2026-05-18 at 5 54 46 AM" src="https://github.com/user-attachments/assets/fb516814-140b-408f-a3d6-0a21ad41bfbf" />
+<img width="1124" height="1019" alt="Screenshot 2026-05-18 at 5 54 53 AM" src="https://github.com/user-attachments/assets/6f9b8a89-2bb8-4bea-9d67-cd81373cd4b0" />
+<img width="1165" height="896" alt="Screenshot 2026-05-18 at 5 55 47 AM" src="https://github.com/user-attachments/assets/67ef7a14-b2ad-48d4-aed3-e3c40fcde31a" />
+<img width="1148" height="931" alt="Screenshot 2026-05-18 at 5 56 17 AM" src="https://github.com/user-attachments/assets/c3a43e04-922a-4c89-8049-2ba0de209af1" />
+<img width="1121" height="1092" alt="Screenshot 2026-05-18 at 5 56 42 AM" src="https://github.com/user-attachments/assets/586dbe66-8c3a-471a-aca9-7937edfea66f" />
+<img width="1122" height="288" alt="Screenshot 2026-05-18 at 5 56 55 AM" src="https://github.com/user-attachments/assets/c8c2a055-2098-432a-89d1-3a317173bffc" />
+<img width="1135" height="1110" alt="Screenshot 2026-05-18 at 5 57 21 AM" src="https://github.com/user-attachments/assets/34592744-c0fa-4822-9f44-1a06eddd02ae" />
+<img width="1373" height="1154" alt="Screenshot 2026-05-18 at 5 57 31 AM" src="https://github.com/user-attachments/assets/e5406ae9-058d-4ad7-bcc3-ed456c121f63" />
+<img width="1364" height="1161" alt="Screenshot 2026-05-18 at 5 57 49 AM" src="https://github.com/user-attachments/assets/bb973b6c-1f69-4346-a1be-2068a8f8c0bb" />
+<img width="1369" height="1176" alt="Screenshot 2026-05-18 at 5 58 02 AM" src="https://github.com/user-attachments/assets/9754090c-242e-4f9b-9316-f593f5b3e0ea" />
+<img width="1145" height="1059" alt="Screenshot 2026-05-18 at 6 01 51 AM" src="https://github.com/user-attachments/assets/4ae50a73-bb45-4d34-b1a5-7e7bcda35e7f" />
+<img width="1113" height="906" alt="Screenshot 2026-05-18 at 6 01 59 AM" src="https://github.com/user-attachments/assets/d091dc1d-496b-4297-bcce-ca0df1b88a54" />
+<img width="1378" height="1156" alt="Screenshot 2026-05-18 at 6 04 55 AM" src="https://github.com/user-attachments/assets/0897f8e0-e53a-49b1-9be6-55616dd0a17a" />
+<img width="1376" height="1153" alt="Screenshot 2026-05-18 at 6 05 14 AM" src="https://github.com/user-attachments/assets/64263e09-a6fd-482c-ac50-39fa3aa55145" />
+<img width="1393" height="1190" alt="Screenshot 2026-05-18 at 6 05 28 AM" src="https://github.com/user-attachments/assets/6368951e-8f07-49b7-b285-af70af69aacc" />
+
 
 ## License
 
