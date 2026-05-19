@@ -26,6 +26,49 @@ fi
 
 INSTALL_DIR="/var/www/arpvpn"
 PYTHON_BIN="${PYTHON_BIN:-/usr/bin/python3}"
+WIREGUARD_TOOLS_FROM_SOURCE="${ARPVPN_WIREGUARD_TOOLS_FROM_SOURCE:-1}"
+WIREGUARD_TOOLS_VERSION="${ARPVPN_WIREGUARD_TOOLS_VERSION:-1.0.20260223}"
+WIREGUARD_TOOLS_SHA256="${ARPVPN_WIREGUARD_TOOLS_SHA256:-af459827b80bfd31b83b08077f4b5843acb7d18ad9a33a2ef532d3090f291fbf}"
+
+install_wireguard_tools_from_source() {
+    local version="$WIREGUARD_TOOLS_VERSION"
+    local expected_sha256="$WIREGUARD_TOOLS_SHA256"
+    local actual_sha256
+    local source_url
+    local source_dir
+    local tarball
+    local tmp_dir
+
+    if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]{8}$ ]]; then
+        fatal "Invalid WireGuard Tools version: $version"
+        exit 1
+    fi
+
+    if [[ "$version" != "1.0.20260223" && -z "${ARPVPN_WIREGUARD_TOOLS_SHA256:-}" ]]; then
+        fatal "ARPVPN_WIREGUARD_TOOLS_SHA256 must be set when overriding ARPVPN_WIREGUARD_TOOLS_VERSION."
+        exit 1
+    fi
+
+    tmp_dir="$(mktemp -d)"
+    tarball="$tmp_dir/wireguard-tools-$version.tar.xz"
+    source_dir="$tmp_dir/wireguard-tools-$version"
+    source_url="https://git.zx2c4.com/wireguard-tools/snapshot/wireguard-tools-$version.tar.xz"
+
+    debug "Downloading WireGuard Tools $version from $source_url..."
+    curl -fsSL "$source_url" -o "$tarball"
+    actual_sha256="$(sha256sum "$tarball" | awk '{print $1}')"
+    if [[ "$actual_sha256" != "$expected_sha256" ]]; then
+        rm -rf "$tmp_dir"
+        fatal "WireGuard Tools checksum mismatch: expected $expected_sha256, got $actual_sha256."
+        exit 1
+    fi
+
+    tar -xJf "$tarball" -C "$tmp_dir"
+    make -C "$source_dir/src" WITH_BASHCOMPLETION=no WITH_SYSTEMDUNITS=no PREFIX=/usr
+    make -C "$source_dir/src" WITH_BASHCOMPLETION=no WITH_SYSTEMDUNITS=no PREFIX=/usr install
+    rm -rf "$tmp_dir"
+    info "Installed $(wg --version)."
+}
 
 if [[ ! -x "$PYTHON_BIN" ]]; then
     PYTHON_BIN="$(command -v python3)"
@@ -61,7 +104,13 @@ debug "Updating packages list..."
 export DEBIAN_FRONTEND="${DEBIAN_FRONTEND:-noninteractive}"
 apt-get -qq update
 
-dependencies="sudo python3 python3-venv wireguard-tools iptables uwsgi uwsgi-plugin-python3 iproute2 openssl rrdtool"
+dependencies="sudo python3 python3-venv iptables uwsgi uwsgi-plugin-python3 iproute2 openssl rrdtool bash ca-certificates curl"
+
+if [[ "$WIREGUARD_TOOLS_FROM_SOURCE" == "1" ]]; then
+    dependencies="$dependencies gcc libc6-dev make pkg-config xz-utils"
+else
+    dependencies="$dependencies wireguard-tools"
+fi
 
 # Debian package names changed across releases (PCRE1 -> PCRE2). Pick
 # whichever set is available so container builds keep working on current bases.
@@ -95,6 +144,10 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 rm -rf /var/lib/apt/lists/*
+
+if [[ "$WIREGUARD_TOOLS_FROM_SOURCE" == "1" ]]; then
+    install_wireguard_tools_from_source
+fi
 
 info "Setting up virtual environment..."
 if [[ ! -x "$PYTHON_BIN" ]]; then

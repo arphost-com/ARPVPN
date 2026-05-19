@@ -111,6 +111,7 @@ Important Docker `.env` values:
 - `ARPVPN_IMAGE`: image/tag to run; default local build is `arpvpn:local`.
 - `ARPVPN_UID` / `ARPVPN_GID`: UID/GID created for the image's `arpvpn` user; defaults are `1000:1000`, but set these to match the owner of `DATA_FOLDER` on your host when needed.
 - `ARPVPN_RUNTIME_USER`: container runtime user; keep `arpvpn` unless you built a matching custom user/sudo policy.
+- `WIREGUARD_TOOLS_VERSION` / `WIREGUARD_TOOLS_SHA256`: Docker build inputs for the upstream WireGuard Tools release compiled into the image; defaults track the current verified upstream release used by this repo.
 - `ARPVPN_CONTAINER_NAME`: container name and default cookie namespace source.
 - `ARPVPN_COOKIE_SUFFIX`: optional explicit cookie namespace suffix; if unset, ARPVPN uses `ARPVPN_CONTAINER_NAME`, then Docker Compose's `COMPOSE_PROJECT_NAME`, then `arpvpn`.
 - `ARPVPN_SESSION_COOKIE_NAME` / `ARPVPN_REMEMBER_COOKIE_NAME`: optional explicit cookie names for side-by-side installs.
