@@ -71,14 +71,17 @@ class TrafficStorageDriver(YamlAble):
             dct[iface.uuid] = TrafficData(iface_rx, iface_tx)
         return dct
 
-    def get_session_and_stored_data(self) -> Dict[datetime, Dict[str, TrafficData]]:
+    def get_session_and_stored_data(
+            self,
+            session_traffic: Dict[str, TrafficData] = None,
+    ) -> Dict[datetime, Dict[str, TrafficData]]:
         """
         Get the stored traffic data and merge it with the current session's data.
 
         :return:
         """
         stored_traffic = self.load_data()
-        session_traffic = self.get_session_data()
+        session_traffic = session_traffic if session_traffic is not None else self.get_session_data()
         if len(stored_traffic) > 0:
             for device, traffic in session_traffic.items():
                 # Look for last registered data of device

@@ -1,6 +1,9 @@
 version_file="arpvpn/__version__.py"
 
 version=$(poetry version -s 2>/dev/null || true)
+if [[ -z "$version" && -f pyproject.toml ]]; then
+    version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' pyproject.toml | head -n1)
+fi
 if [[ -z "$version" && "${GITHUB_REF_TYPE:-}" == "tag" && -n "${GITHUB_REF_NAME:-}" ]]; then
     version="${GITHUB_REF_NAME#v}"
 fi

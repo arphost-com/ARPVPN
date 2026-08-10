@@ -6,6 +6,18 @@ All notable changes to this project will be documented here.
 .. note::
     ARPVPN is adhered to `Semantic Versioning <https://semver.org/>`__.
 
+3.0.1
+-----
+
+Performance and UX fixes
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Removed global background RRD prefetching that could monopolize the single request worker.
+* Batched RRD sample updates into one ``rrdtool`` call and limited the graph detail page to its selected time window.
+* Reused unchanged traffic-history parsing and shared live WireGuard telemetry reads within request bursts.
+* Kept optional peer provisioning disabled by default when creating users and limited peer changes to affected interfaces.
+* Added create/delete progress feedback and post/redirect/get completion handling for user management.
+
 3.0.0
 -----
 

@@ -23,7 +23,7 @@ from time import sleep, time
 from typing import List, Dict, Any, Union, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
-from flask import Blueprint, abort, request, Response, redirect, url_for, jsonify, session, g, current_app
+from flask import Blueprint, abort, request, Response, redirect, url_for, jsonify, session, g, current_app, has_request_context
 from flask_login import current_user, login_required, login_user
 from flask_wtf.csrf import generate_csrf, validate_csrf
 from wtforms.validators import ValidationError as WTValidationError
@@ -124,6 +124,9 @@ RRD_GRAPH_CACHE_TTL_SECONDS = get_env_int("ARPVPN_RRD_GRAPH_CACHE_TTL_SECONDS", 
 RRD_GRAPH_CACHE_DIRNAME = "rrd_graph_cache"
 RRD_GRAPH_CACHE_LOCKS: Dict[str, Lock] = {}
 RRD_GRAPH_CACHE_LOCKS_LOCK = Lock()
+TRAFFIC_SESSION_CACHE_TTL_SECONDS = 1.0
+TRAFFIC_SESSION_CACHE_LOCK = Lock()
+TRAFFIC_SESSION_CACHE: Dict[str, Any] = {"loaded_at": 0.0, "data": {}}
 STATISTICS_DIAGNOSTIC_FILTERS = (
     "handshake",
     "auth",
@@ -843,10 +846,7 @@ def is_impersonating() -> bool:
 @login_required
 @setup_required
 def index():
-    if traffic_config.enabled:
-        traffic = traffic_config.driver.get_session_and_stored_data()
-    else:
-        traffic = {datetime.now(): traffic_config.driver.get_session_data()}
+    traffic = load_traffic_history_data(include_session=True)
     peer_runtime = filter_peer_runtime_for_current_user(get_peer_runtime_summary())
     visible_interfaces = get_visible_interfaces_for_current_user()
     sample_counts = get_connection_sample_counts()
@@ -920,13 +920,51 @@ def build_statistics_rows(
     return rows
 
 
+def clone_traffic_data(data: Dict[str, TrafficData]) -> Dict[str, TrafficData]:
+    return {
+        device_uuid: TrafficData(sample.rx, sample.tx, sample.last_handshake)
+        for device_uuid, sample in data.items()
+    }
+
+
+def get_session_traffic_data() -> Dict[str, TrafficData]:
+    request_cache_key = "arpvpn_session_traffic_data"
+    cached_for_request = getattr(g, request_cache_key, None) if has_request_context() else None
+    if cached_for_request is not None:
+        return clone_traffic_data(cached_for_request)
+
+    now = time()
+    with TRAFFIC_SESSION_CACHE_LOCK:
+        cached_at = float(TRAFFIC_SESSION_CACHE.get("loaded_at", 0.0) or 0.0)
+        cached_data = TRAFFIC_SESSION_CACHE.get("data", {})
+        if cached_at > 0 and now - cached_at <= TRAFFIC_SESSION_CACHE_TTL_SECONDS:
+            session_data = clone_traffic_data(cached_data)
+        else:
+            session_data = traffic_config.driver.get_session_data()
+            TRAFFIC_SESSION_CACHE["loaded_at"] = now
+            TRAFFIC_SESSION_CACHE["data"] = clone_traffic_data(session_data)
+
+    if has_request_context():
+        setattr(g, request_cache_key, clone_traffic_data(session_data))
+    return clone_traffic_data(session_data)
+
+
 def load_traffic_history_data(include_session: bool = True) -> Dict[datetime, Dict[str, TrafficData]]:
+    request_cache_key = f"arpvpn_traffic_history_{'session' if include_session else 'stored'}"
+    cached_for_request = getattr(g, request_cache_key, None) if has_request_context() else None
+    if cached_for_request is not None:
+        return cached_for_request
     try:
         if include_session:
             if traffic_config.enabled:
-                return traffic_config.driver.get_session_and_stored_data()
-            return {datetime.now(): traffic_config.driver.get_session_data()}
-        return traffic_config.driver.load_data()
+                history = traffic_config.driver.get_session_and_stored_data(get_session_traffic_data())
+            else:
+                history = {datetime.now(): get_session_traffic_data()}
+        else:
+            history = traffic_config.driver.load_data()
+        if has_request_context():
+            setattr(g, request_cache_key, history)
+        return history
     except Exception as e:
         log_exception(e)
         return {}
@@ -1318,10 +1356,7 @@ def build_statistics_diagnostic_view(
 
 def build_statistics_payload(include_log_issues: bool = False, diagnostic_filter: str = "") -> Dict[str, Any]:
     diagnostics = build_log_diagnostics()
-    if traffic_config.enabled:
-        traffic = traffic_config.driver.get_session_and_stored_data()
-    else:
-        traffic = {datetime.now(): traffic_config.driver.get_session_data()}
+    traffic = load_traffic_history_data(include_session=True)
     peer_runtime = filter_peer_runtime_for_current_user(get_peer_runtime_summary())
     visible_interfaces = get_visible_interfaces_for_current_user()
     sample_counts = get_connection_sample_counts()
@@ -1464,7 +1499,7 @@ def to_human_filesize(size_bytes: int) -> str:
 
 def get_peer_runtime_summary() -> Dict[str, Any]:
     now = datetime.now()
-    session_data = traffic_config.driver.get_session_data()
+    session_data = get_session_traffic_data()
     peer_rows = []
     alerts = []
     totals = {
@@ -2290,16 +2325,17 @@ def _render_rrd_graph_png(uuid: str, window_seconds: int) -> Optional[bytes]:
             err_detail = (created.stderr or created.stdout or "unknown rrdtool error").strip()
             raise RuntimeError(f"Unable to create RRD file: {err_detail}")
 
-        for unix_ts, rx, tx in points:
-            update = subprocess.run(  # nosec B603 B607 - fixed argv, inputs are internal identifiers
-                ["rrdtool", "update", rrd_file, f"{unix_ts}:{rx}:{tx}"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if update.returncode != 0:
-                err_detail = (update.stderr or update.stdout or "unknown rrdtool error").strip()
-                raise RuntimeError(f"Unable to update RRD data: {err_detail}")
+        update_cmd = ["rrdtool", "update", rrd_file]
+        update_cmd.extend(f"{unix_ts}:{rx}:{tx}" for unix_ts, rx, tx in points)
+        updated = subprocess.run(  # nosec B603 B607 - fixed argv, inputs are internal identifiers
+            update_cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if updated.returncode != 0:
+            err_detail = (updated.stderr or updated.stdout or "unknown rrdtool error").strip()
+            raise RuntimeError(f"Unable to update RRD data: {err_detail}")
 
         graph_cmd = [
             "rrdtool",
@@ -5674,24 +5710,17 @@ def connection_rrd_graph(uuid: str):
     requested_window = (request.args.get("window", "24h") or "24h").lower()
     if requested_window not in RRD_GRAPH_WINDOWS_SECONDS:
         abort(BAD_REQUEST, "Unknown graph window.")
-    sorted_windows = sorted(
-        RRD_GRAPH_WINDOWS_SECONDS.keys(),
-        key=lambda key: RRD_GRAPH_WINDOWS_SECONDS[key]
-    )
     context = {
         "title": "Connection graph",
         "connection_type": item_type,
         "connection_uuid": uuid,
         "connection_name": item.name,
         "window": requested_window,
-        "rrd_windows": [
-            {
-                "name": window_name,
-                "label": window_name.upper(),
-                "image_url": url_for("router.connection_rrd_graph_png", uuid=uuid, window=window_name),
-            }
-            for window_name in sorted_windows
-        ],
+        "rrd_image_url": url_for("router.connection_rrd_graph_png", uuid=uuid, window=requested_window),
+        "window_options": sorted(
+            RRD_GRAPH_WINDOWS_SECONDS.keys(),
+            key=lambda key: RRD_GRAPH_WINDOWS_SECONDS[key],
+        ),
     }
     return ViewController("web/traffic-rrd.html", **context).load()
 
@@ -5796,7 +5825,7 @@ def get_wireguard_iface(uuid: str):
         abort(FORBIDDEN, "Insufficient permissions.")
     view = "web/wireguard-iface.html"
     data = load_traffic_data(iface)
-    session_data = traffic_config.driver.get_session_data()
+    session_data = get_session_traffic_data()
     iface_traffic = session_data.get(iface.uuid, TrafficData(0, 0))
     context = {
         "title": "Interface",
@@ -5984,7 +6013,7 @@ def get_wireguard_peer(uuid: str):
         require_client_wireguard_config_mfa()
     view = "web/wireguard-peer.html"
     data = load_traffic_data(peer)
-    session_data = traffic_config.driver.get_session_data().get(peer.uuid, TrafficData(0, 0))
+    session_data = get_session_traffic_data().get(peer.uuid, TrafficData(0, 0))
     handshake_ago = None
     if session_data.last_handshake:
         handshake_ago = get_time_ago(session_data.last_handshake)
@@ -6695,6 +6724,24 @@ def build_user_vpn_access_summary(user_item: User) -> List[Dict[str, Any]]:
     return summaries
 
 
+def build_users_vpn_access_index(users_list: List[User]) -> Dict[str, List[Dict[str, Any]]]:
+    summaries_by_user = {user_item.id: [] for user_item in users_list}
+    for peer in get_all_peers().values():
+        owner = resolve_peer_owner(peer)
+        if not owner or owner.id not in summaries_by_user:
+            continue
+        summaries_by_user[owner.id].append({
+            "peer_id": peer.uuid,
+            "peer_name": peer.name,
+            "interface_name": peer.interface.name if peer.interface else None,
+            "mode": peer.mode,
+            "enabled": bool(peer.enabled),
+            "full_tunnel": bool(peer.full_tunnel),
+            "site_to_site_subnets": list(peer.site_to_site_subnets),
+        })
+    return summaries_by_user
+
+
 def can_manage_user_account(target_user: User) -> bool:
     if current_user.has_role(User.ROLE_ADMIN):
         return True
@@ -6828,7 +6875,7 @@ def get_users_management_context(create_form=None, edit_form=None, delete_form=N
     from arpvpn.web.forms import AddPeerForm
     create_form.peer_interface.choices = AddPeerForm.get_choices()
     if request.method == "GET" and create_form.role.data == User.ROLE_CLIENT and create_form.peer_interface.choices:
-        create_form.create_peer.data = True
+        create_form.create_peer.data = False
         default_iface_name = create_form.peer_interface.choices[0][0]
         create_form.peer_interface.data = default_iface_name
         default_iface = interfaces.get_value_by_attr("name", default_iface_name)
@@ -6861,7 +6908,7 @@ def get_users_management_context(create_form=None, edit_form=None, delete_form=N
         "users_list": users_list,
         "invitations_list": accessible_invitations,
         "user_actions": build_user_actions(users_list),
-        "user_vpn_access": {user_item.id: build_user_vpn_access_summary(user_item) for user_item in users_list},
+        "user_vpn_access": build_users_vpn_access_index(users_list),
         "tenant_names": tenant_name_lookup(),
         "is_impersonating": is_impersonating(),
     }
@@ -7101,6 +7148,10 @@ def accept_invitation(invitation_id: str):
 @setup_required
 def manage_users():
     context = get_users_management_context()
+    notice = session.pop("users_notice", "")
+    if notice:
+        context["success"] = True
+        context["success_details"] = notice
     return ViewController("web/users.html", **context).load()
 
 
@@ -7160,20 +7211,25 @@ def create_user():
         derive_peer_name,
     )
     form = CreateUserForm(request.form)
-    context = get_users_management_context(
-        create_form=form,
-        edit_form=EditUserForm(),
-        delete_form=DeleteUserForm(),
-        impersonate_form=ImpersonateClientForm(),
-        stop_form=ImpersonationStopForm(),
-    )
+
+    def build_error_context():
+        return get_users_management_context(
+            create_form=form,
+            edit_form=EditUserForm(),
+            delete_form=DeleteUserForm(),
+            impersonate_form=ImpersonateClientForm(),
+            stop_form=ImpersonationStopForm(),
+        )
+
     if not form.validate():
         details = summarize_form_errors(form) or "unknown validation error"
         error(f"Unable to validate create-user form: {details}")
+        context = build_error_context()
         context["error"] = True
         context["error_details"] = f"Unable to create user: {details}"
         return ViewController("web/users.html", **context).load()
     if current_user.has_role(User.ROLE_SUPPORT) and form.role.data != User.ROLE_CLIENT:
+        context = build_error_context()
         context["error"] = True
         context["error_details"] = "Support users can only create client accounts."
         return ViewController("web/users.html", **context).load()
@@ -7186,6 +7242,7 @@ def create_user():
             actor=current_user,
         )
     except HTTPException as e:
+        context = build_error_context()
         context["error"] = True
         context["error_details"] = e.description
         return ViewController("web/users.html", **context).load()
@@ -7213,12 +7270,11 @@ def create_user():
             peer_form.dns2.data = form.peer_dns2.data
             peer_form.site_to_site_subnets.data = form.peer_site_to_site_subnets.data
             created_peer = RestController().add_peer(peer_form)
-        context = get_users_management_context()
-        context["success"] = True
         if created_peer:
-            context["success_details"] = "User created successfully and their WireGuard connection was provisioned."
+            session["users_notice"] = "User created successfully and their WireGuard connection was provisioned."
         else:
-            context["success_details"] = "User created successfully."
+            session["users_notice"] = "User created successfully."
+        return redirect(url_for("router.manage_users"))
     except Exception as e:
         if created_peer:
             try:
@@ -7233,6 +7289,7 @@ def create_user():
             except Exception as rollback_error:
                 log_exception(rollback_error)
         log_exception(e)
+        context = build_error_context()
         context["error"] = True
         context["error_details"] = e
     return ViewController("web/users.html", **context).load()
@@ -7330,11 +7387,8 @@ def save_user(user_id: str):
             target_user.password = form.new_password.data
         users.sort()
         config_manager.save_identity_state()
-
-        context = get_users_management_context()
-        context["success"] = True
-        context["success_details"] = "User updated successfully."
-        return ViewController("web/users.html", **context).load()
+        session["users_notice"] = "User updated successfully."
+        return redirect(url_for("router.manage_users"))
     except Exception as e:
         log_exception(e)
         context["error"] = True
@@ -7371,10 +7425,8 @@ def delete_user(user_id: str):
     try:
         del users[target_user.id]
         config_manager.save_identity_state()
-        context = get_users_management_context()
-        context["success"] = True
-        context["success_details"] = "User deleted successfully."
-        return ViewController("web/users.html", **context).load()
+        session["users_notice"] = "User deleted successfully."
+        return redirect(url_for("router.manage_users"))
     except Exception as e:
         log_exception(e)
         context = get_users_management_context()

@@ -28,7 +28,7 @@
                 {% endif %}
             </div>
 
-            <form action="/users" method="post" novalidate>
+            <form action="/users" method="post" novalidate data-submit-feedback data-submitting-text="Creating user…">
                 {{ create_form.hidden_tag() }}
                 <div class="card mb-4">
                     <div class="card-header">
@@ -358,7 +358,7 @@
                                         {% endif %}
                                         {% if user_actions[user_item.id].can_delete %}
                                             <form action="/users/{{ user_item.id }}/delete" method="post" class="d-inline"
-                                                  onsubmit="return confirm('Delete user {{ user_item.name }}?');">
+                                                  data-submit-feedback data-confirm="Delete this user?" data-submitting-text="Deleting…">
                                                 {{ delete_form.hidden_tag() }}
                                                 {{ delete_form.submit(class="btn btn-sm btn-outline-danger") }}
                                             </form>
@@ -376,4 +376,8 @@
             </div>
         </div>
     </main>
+{% endblock %}
+
+{% block additional_scripts %}
+    <script type="module" src="../../static/js/modules/users.mjs"></script>
 {% endblock %}

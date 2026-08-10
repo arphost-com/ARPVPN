@@ -118,6 +118,25 @@ class ConfigManager:
             wireguard_config=wireguard_config,
         )
 
+    def save_wireguard_interfaces(self, changed_interfaces):
+        """Persist WireGuard changes and reapply only the affected interfaces."""
+        unique_interfaces = []
+        seen_uuids = set()
+        for iface in changed_interfaces:
+            if iface is None or iface.uuid in seen_uuids:
+                continue
+            seen_uuids.add(iface.uuid)
+            unique_interfaces.append(iface)
+
+        self.save(apply=False)
+        for iface in unique_interfaces:
+            was_up = iface.is_up
+            if was_up:
+                iface.down()
+            iface.save()
+            if was_up:
+                iface.up()
+
     @staticmethod
     def save_credentials():
         users.save(web_config.credentials_file, web_config.secret_key)

@@ -6,7 +6,7 @@
             <div class="my-4">
                 <h1 class="mb-1">{{ title }}</h1>
                 <p class="text-muted mb-0">
-                    RRD traffic history for {{ connection_type }} <strong>{{ connection_name }}</strong> across all standard time windows.
+                    RRD traffic history for {{ connection_type }} <strong>{{ connection_name }}</strong>.
                 </p>
             </div>
 
@@ -15,28 +15,25 @@
                     <span><i class="fas fa-chart-line mr-1"></i>Traffic graphs</span>
                 </div>
                 <div class="card-body">
-                    {% for graph in rrd_windows %}
-                        <div class="{% if not loop.last %}mb-4{% endif %}">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <strong>{{ graph.label }}</strong>
-                                {% if graph.name == window %}
-                                    <span class="badge badge-primary">Requested</span>
-                                {% endif %}
-                            </div>
-                            <img
-                              class="img-fluid w-100 border rounded"
-                              loading="lazy"
-                              decoding="async"
-                              src="{{ graph.image_url }}"
-                              alt="RRD graph ({{ graph.label }}) for {{ connection_name }}"
-                              onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"
-                            />
-                            <span class="text-muted small" style="display:none;">No RRD history available for {{ graph.label }} yet.</span>
-                        </div>
-                    {% endfor %}
+                    <div class="btn-group mb-3" role="group" aria-label="Graph time window">
+                        {% for option in window_options %}
+                            <a
+                              class="btn btn-sm {% if option == window %}btn-primary{% else %}btn-outline-primary{% endif %}"
+                              href="{{ url_for('router.connection_rrd_graph', uuid=connection_uuid, window=option) }}"
+                            >{{ option.upper() }}</a>
+                        {% endfor %}
+                    </div>
+                    <img
+                      class="img-fluid w-100 border rounded"
+                      decoding="async"
+                      src="{{ rrd_image_url }}"
+                      alt="RRD graph ({{ window.upper() }}) for {{ connection_name }}"
+                      onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';"
+                    />
+                    <span class="text-muted small" style="display:none;">No RRD history available for {{ window.upper() }} yet.</span>
                 </div>
                 <div class="card-footer">
-                    <small class="text-muted">Powered by <code>rrdtool</code>. Showing all windows helps warm graph cache in one visit.</small>
+                    <small class="text-muted">Powered by <code>rrdtool</code>. Select a window to load only the graph you need.</small>
                 </div>
             </div>
         </div>

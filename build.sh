@@ -58,7 +58,7 @@ cp docker/Dockerfile "$DOCKER_DIR"
 cp docker/entrypoint.sh "$DOCKER_DIR"
 CONFIG_DIR="$DIST_DIR/config"
 mkdir "$CONFIG_DIR"
-find config -type f | grep -E "[^.]+\.sample\.yaml" | xargs -i cp {} "$CONFIG_DIR"
+find config -type f -name '*.sample.yaml' -exec cp {} "$CONFIG_DIR" \;
 
 if [[ ! -f requirements.txt ]]; then
   fatal "Missing root requirements.txt."

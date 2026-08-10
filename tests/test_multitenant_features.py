@@ -3,6 +3,7 @@ import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from flask import Flask
@@ -21,6 +22,8 @@ from arpvpn.common.models.tenant import Invitation, Tenant, invitations, tenants
 from arpvpn.common.models.user import User, users  # noqa: E402
 from arpvpn.common.utils.mfa import generate_mfa_code, hash_recovery_code  # noqa: E402
 from arpvpn.core.models import Interface, Peer, interfaces  # noqa: E402
+from arpvpn.core.drivers.traffic_storage_driver import TrafficData  # noqa: E402
+from arpvpn.core.drivers.traffic_storage_driver_json import TrafficStorageDriverJson  # noqa: E402
 from arpvpn.web import router as router_module  # noqa: E402
 from arpvpn.web.security_api import ApiTokenStore, AuthLockoutManager, SlidingWindowRateLimiter  # noqa: E402
 
@@ -58,12 +61,16 @@ def reset_state():
     invitations.clear()
     interfaces.clear()
     router_module.api_token_store.reset_for_tests()
+    router_module.TRAFFIC_SESSION_CACHE["loaded_at"] = 0.0
+    router_module.TRAFFIC_SESSION_CACHE["data"] = {}
     yield
     users.clear()
     tenants.clear()
     invitations.clear()
     interfaces.clear()
     router_module.api_token_store.reset_for_tests()
+    router_module.TRAFFIC_SESSION_CACHE["loaded_at"] = 0.0
+    router_module.TRAFFIC_SESSION_CACHE["data"] = {}
 
 
 @pytest.fixture()
@@ -548,3 +555,139 @@ def test_totp_and_recovery_code_consumption():
     assert user.verify_mfa(generate_mfa_code(secret), allow_recovery_codes=False) == (True, False)
     assert user.verify_mfa(recovery_code) == (True, True)
     assert user.verify_mfa(recovery_code) == (False, False)
+
+
+def test_traffic_json_driver_reuses_unchanged_file_parse(monkeypatch):
+    traffic_path = Path(global_properties.workdir) / TrafficStorageDriverJson.FILENAME
+    traffic_path.write_text('{"01/01/2026 00:00:00": {}}', encoding="utf-8")
+    driver = TrafficStorageDriverJson()
+    real_json_load = router_module.json.load
+    load_calls = []
+
+    def tracked_json_load(handle):
+        load_calls.append(handle.name)
+        return real_json_load(handle)
+
+    monkeypatch.setattr("arpvpn.core.drivers.traffic_storage_driver_json.json.load", tracked_json_load)
+
+    first = driver.load_data()
+    second = driver.load_data()
+    assert len(first) == 1
+    assert second == first
+    assert len(load_calls) == 1
+
+
+def test_request_traffic_helpers_share_live_and_history_reads(app, monkeypatch):
+    session_calls = []
+    history_calls = []
+
+    def load_session():
+        session_calls.append(True)
+        return {"peer-1": TrafficData(10, 20)}
+
+    def load_history(session_traffic=None):
+        history_calls.append(True)
+        return {datetime(2026, 1, 1): session_traffic or {}}
+
+    monkeypatch.setattr(router_module.traffic_config.driver, "get_session_data", load_session)
+    monkeypatch.setattr(router_module.traffic_config.driver, "get_session_and_stored_data", load_history)
+
+    with app.test_request_context("/dashboard"):
+        first = router_module.load_traffic_history_data(include_session=True)
+        second = router_module.load_traffic_history_data(include_session=True)
+        live = router_module.get_session_traffic_data()
+
+    assert first is second
+    assert live["peer-1"].rx == 10
+    assert len(session_calls) == 1
+    assert len(history_calls) == 1
+
+
+def test_rrd_render_batches_all_updates_into_one_process(monkeypatch):
+    points = [
+        (1_700_000_000, 100, 200),
+        (1_700_000_060, 150, 260),
+        (1_700_000_120, 220, 340),
+    ]
+    commands = []
+
+    def fake_run(command, **_kwargs):
+        commands.append(command)
+        if command[1] == "graph":
+            Path(command[2]).write_bytes(b"png")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(router_module, "get_connection_traffic_points", lambda _uuid: points)
+    monkeypatch.setattr(router_module.subprocess, "run", fake_run)
+
+    assert router_module._render_rrd_graph_png("a" * 32, 86_400) == b"png"
+    update_commands = [command for command in commands if command[1] == "update"]
+    assert len(update_commands) == 1
+    assert update_commands[0][3:] == [
+        "1700000000:100:200",
+        "1700000060:150:260",
+        "1700000120:220:340",
+    ]
+
+
+def test_connection_graph_page_loads_only_selected_window(app):
+    admin = make_user("admin", User.ROLE_ADMIN)
+    iface = make_interface("wgmain")
+    client = app.test_client()
+    assert client.get(f"/test-login/{admin.id}").status_code == 200
+
+    response = client.get(f"/traffic/rrd/{iface.uuid}?window=24h")
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert body.count(f"/traffic/rrd/{iface.uuid}.png?window=24h") == 1
+    assert f"/traffic/rrd/{iface.uuid}.png?window=6h" not in body
+    assert f"/traffic/rrd/{iface.uuid}.png?window=7d" not in body
+    assert f"/traffic/rrd/{iface.uuid}.png?window=30d" not in body
+
+
+def test_user_management_does_not_enable_optional_peer_by_default(app):
+    admin = make_user("admin", User.ROLE_ADMIN)
+    make_interface("wgmain")
+    client = app.test_client()
+    assert client.get(f"/test-login/{admin.id}").status_code == 200
+
+    response = client.get("/users")
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    checkbox = body.split('id="create_peer"', 1)[1].split(">", 1)[0]
+    assert "checked" not in checkbox
+    assert "users.mjs" in body
+
+
+def test_create_and_delete_user_redirect_with_completion_notice(app, monkeypatch):
+    admin = make_user("admin", User.ROLE_ADMIN)
+    target = make_user("delete-me", User.ROLE_CLIENT)
+    monkeypatch.setattr(router_module.config_manager, "save_identity_state", lambda: None)
+    monkeypatch.setattr(
+        router_module.RestController,
+        "add_peer",
+        lambda _form: pytest.fail("Optional peer provisioning should remain disabled"),
+    )
+    client = app.test_client()
+    assert client.get(f"/test-login/{admin.id}").status_code == 200
+
+    create_response = client.post("/users", data={
+        "username": "new-support",
+        "password": "correct horse battery staple",
+        "confirm": "correct horse battery staple",
+        "role": User.ROLE_SUPPORT,
+        "tenant_id": "",
+    })
+    assert create_response.status_code == 302
+    assert create_response.headers["Location"].endswith("/users")
+    assert users.get_value_by_attr("name", "new-support") is not None
+
+    delete_response = client.post(f"/users/{target.id}/delete", data={})
+    assert delete_response.status_code == 302
+    assert delete_response.headers["Location"].endswith("/users")
+    assert target.id not in users
+
+    notice_response = client.get("/users")
+    assert "User deleted successfully." in notice_response.get_data(as_text=True)

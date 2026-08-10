@@ -19,6 +19,8 @@ class TrafficStorageDriverJson(TrafficStorageDriver):
 
     def __init__(self, timestamp_format: str = TrafficStorageDriver.DEFAULT_TIMESTAMP_FORMAT):
         super().__init__(timestamp_format)
+        self._load_cache_signature = None
+        self._load_cache_data = None
 
     @property
     def filepath(self):
@@ -42,12 +44,20 @@ class TrafficStorageDriverJson(TrafficStorageDriver):
                     device_data[device] = {"rx": traffic_data.rx, "tx": traffic_data.tx}
                 json_data[timestamp.strftime(self.timestamp_format)] = device_data
             json.dump(json_data, f)
+        self._load_cache_signature = None
+        self._load_cache_data = None
         info("Traffic data updated.")
 
     def load_data(self) -> Dict[datetime, Dict[str, TrafficData]]:
         data = {}
         if not os.path.exists(self.filepath):
+            self._load_cache_signature = None
+            self._load_cache_data = None
             return data
+        stat_result = os.stat(self.filepath)
+        signature = (stat_result.st_mtime_ns, stat_result.st_size)
+        if signature == self._load_cache_signature and self._load_cache_data is not None:
+            return copy.deepcopy(self._load_cache_data)
         with open(self.filepath, "r") as f:
             json_data = json.load(f)
         for k, v in json_data.items():
@@ -70,7 +80,9 @@ class TrafficStorageDriverJson(TrafficStorageDriver):
                     continue
                 data_with_interfaces[timestamp][iface.uuid].tx += peer_data.rx
                 data_with_interfaces[timestamp][iface.uuid].rx += peer_data.tx
-        return data_with_interfaces
+        self._load_cache_signature = signature
+        self._load_cache_data = data_with_interfaces
+        return copy.deepcopy(data_with_interfaces)
 
     def __to_yaml_dict__(self):  # type: (...) -> Dict[str, Any]
         dct = super(TrafficStorageDriverJson, self).__to_yaml_dict__()

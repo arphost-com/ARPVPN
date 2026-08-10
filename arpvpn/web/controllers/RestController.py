@@ -80,14 +80,15 @@ class RestController:
                     owner_user_id=(owner.id if owner else ""),
                     enabled=form.enabled.data)
         iface.add_peer(peer)
-        config_manager.save()
+        config_manager.save_wireguard_interfaces([iface])
         return peer
 
     @staticmethod
     def remove_peer(peer: Peer) -> Response:
         try:
+            iface = peer.interface
             peer.remove()
-            config_manager.save()
+            config_manager.save_wireguard_interfaces([iface])
             return Response(status=NO_CONTENT)
         except Exception as e:
             log_exception(e)
@@ -95,6 +96,7 @@ class RestController:
 
     @staticmethod
     def save_peer(peer: Peer, form):
+        previous_iface = peer.interface
         iface = interfaces.get_value_by_attr("name", form.interface.data)
         mode = form.mode.data or Peer.MODE_CLIENT
         full_tunnel = bool(form.full_tunnel.data) if mode == Peer.MODE_SITE_TO_SITE else False
@@ -106,7 +108,7 @@ class RestController:
                   tenant_id=(owner.tenant_id if owner else getattr(iface, "tenant_id", "")) or "",
                   owner_user_id=(owner.id if owner else ""),
                   enabled=form.enabled.data)
-        config_manager.save()
+        config_manager.save_wireguard_interfaces([previous_iface, iface])
 
     def download_peer(self, peer: Peer) -> Response:
         try:

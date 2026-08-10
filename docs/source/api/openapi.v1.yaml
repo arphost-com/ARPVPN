@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: ARPVPN API
-  version: 3.0.0
+  version: 3.0.1
   description: Generated OpenAPI document for the live ARPVPN API surface.
 servers:
 - url: /
