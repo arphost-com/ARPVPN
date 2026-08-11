@@ -1,0 +1,390 @@
+default:
+  tags:
+    - docker02-shell
+  interruptible: true
+
+stages:
+  - validate
+  - test
+  - security
+  - build
+  - image_security
+  - deploy_development
+  - smoke_development
+  - promote
+  - production
+  - publication
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  ARPVPN_COMMIT_IMAGE: "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA"
+
+workflow:
+  rules:
+    - if: '$CI_PROJECT_VISIBILITY == "private" && $CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PROJECT_VISIBILITY == "private" && $CI_COMMIT_BRANCH'
+    - if: '$CI_PROJECT_VISIBILITY == "private" && $CI_COMMIT_TAG'
+    - if: '$CI_PROJECT_VISIBILITY == "private" && $CI_PIPELINE_SOURCE == "schedule"'
+    - when: never
+
+.branch_job:
+  rules:
+    - if: '$CI_PROJECT_VISIBILITY == "private" && $CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PROJECT_VISIBILITY == "private" && $CI_COMMIT_BRANCH'
+    - if: '$CI_PROJECT_VISIBILITY == "private" && $CI_COMMIT_TAG'
+    - when: never
+
+.protected_main_job:
+  rules:
+    - if: '$CI_PROJECT_VISIBILITY == "private" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"'
+    - when: never
+
+.manual_protected_main_job:
+  rules:
+    - if: '$CI_PROJECT_VISIBILITY == "private" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"'
+      when: manual
+      allow_failure: false
+    - when: never
+
+validate:repository:
+  extends: .branch_job
+  stage: validate
+  script:
+    - git diff --check
+    - python3 scripts/ci/validate_release_metadata.py
+    - python3 -c 'import pathlib, yaml; yaml.safe_load(pathlib.Path(".gitlab-ci.yml").read_text(encoding="utf-8"))'
+    - >-
+      ARPVPN_IMAGE="$CI_REGISTRY_IMAGE:compose-validation"
+      DATA_FOLDER="$CI_PROJECT_DIR/.ci-compose-data"
+      ARPVPN_CONTAINER_NAME="arpvpn-ci-$CI_JOB_ID"
+      ARPVPN_HTTP_PORT=19085
+      ARPVPN_HTTPS_PORT=19086
+      docker compose -f docker/docker-compose.yaml config >/dev/null
+
+test:python:
+  extends: .branch_job
+  stage: test
+  needs:
+    - validate:repository
+  cache:
+    key: "$CI_PROJECT_ID-python"
+    paths:
+      - .cache/pip/
+  script:
+    - |
+      set -euo pipefail
+      venv="$CI_PROJECT_DIR/.ci-venv-$CI_JOB_ID"
+      trap 'rm -rf -- "$venv"' EXIT
+      python3 -m venv "$venv"
+      "$venv/bin/python" -m pip install --disable-pip-version-check -r requirements.txt pytest
+      "$venv/bin/python" -m compileall -q arpvpn tests scripts
+      "$venv/bin/python" -m pytest -q
+      "$venv/bin/python" scripts/validate_openapi.py
+      PYTHON_BIN="$venv/bin/python" ./scripts/check_api_artifacts.sh
+
+security:semgrep:
+  extends: .branch_job
+  stage: security
+  needs:
+    - validate:repository
+  script:
+    - semgrep scan --config p/default --severity ERROR --error --gitlab-sast --output gl-sast-report.json .
+  artifacts:
+    when: always
+    expire_in: 1 week
+    reports:
+      sast: gl-sast-report.json
+    paths:
+      - gl-sast-report.json
+
+security:trivy-repository:
+  extends: .branch_job
+  stage: security
+  needs:
+    - validate:repository
+  script:
+    - trivy fs --scanners vuln,secret,misconfig --severity HIGH,CRITICAL --format json --output trivy-repo-report.json --exit-code 1 .
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - trivy-repo-report.json
+
+security:gitleaks:
+  extends: .branch_job
+  stage: security
+  needs:
+    - validate:repository
+  script:
+    - gitleaks detect --source . --no-git --redact --report-format json --report-path gitleaks-report.json
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - gitleaks-report.json
+
+security:trufflehog:
+  extends: .branch_job
+  stage: security
+  needs:
+    - validate:repository
+  script:
+    - trufflehog filesystem --no-update --json --fail . > trufflehog-report.json
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - trufflehog-report.json
+
+security:dependency-check:
+  extends: .branch_job
+  stage: security
+  needs:
+    - validate:repository
+  script:
+    - >-
+      dependency-check
+      --data "/home/gitlab-runner/.cache/dependency-check-data"
+      --project "ARPVPN"
+      --scan .
+      --format GITLAB
+      --out gl-dependency-scanning-report.json
+      --failOnCVSS 7
+      --noupdate
+  artifacts:
+    when: always
+    expire_in: 1 week
+    reports:
+      dependency_scanning: gl-dependency-scanning-report.json
+    paths:
+      - gl-dependency-scanning-report.json
+
+security:bandit:
+  extends: .branch_job
+  stage: security
+  needs:
+    - validate:repository
+  script:
+    - bandit -r arpvpn scripts -x tests,docs/source/_build -f json -o bandit-report.json
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - bandit-report.json
+
+build:image:
+  extends: .branch_job
+  stage: build
+  needs:
+    - validate:repository
+    - test:python
+    - security:semgrep
+    - security:trivy-repository
+    - security:gitleaks
+    - security:trufflehog
+    - security:dependency-check
+    - security:bandit
+  script:
+    - |
+      set -euo pipefail
+      auth_dir="$(mktemp -d "$CI_PROJECT_DIR/.docker-auth-build.XXXXXX")"
+      trap 'rm -rf -- "$auth_dir"' EXIT
+      export DOCKER_CONFIG="$auth_dir"
+      printf '%s' "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin >/dev/null
+
+      rm -rf dist
+      ./build.sh
+      docker build --pull -f docker/Dockerfile -t "$ARPVPN_COMMIT_IMAGE" .
+      docker push "$ARPVPN_COMMIT_IMAGE"
+      docker pull "$ARPVPN_COMMIT_IMAGE"
+
+      deploy_image="$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$ARPVPN_COMMIT_IMAGE" | awk -v prefix="$CI_REGISTRY_IMAGE@sha256:" 'index($0, prefix) == 1 { print; exit }')"
+      test -n "$deploy_image"
+      release_version="$(python3 -c 'from arpvpn.__version__ import release; print(release)')"
+      {
+        printf 'ARPVPN_COMMIT_IMAGE=%s\n' "$ARPVPN_COMMIT_IMAGE"
+        printf 'ARPVPN_DEPLOY_IMAGE=%s\n' "$deploy_image"
+        printf 'ARPVPN_RELEASE_VERSION=%s\n' "$release_version"
+      } > build.env
+  artifacts:
+    expire_in: 1 week
+    reports:
+      dotenv: build.env
+    paths:
+      - build.env
+      - dist/arpvpn-*.tar.gz
+
+security:image:
+  extends: .branch_job
+  stage: image_security
+  needs:
+    - job: build:image
+      artifacts: true
+  script:
+    - |
+      set -euo pipefail
+      docker pull "$ARPVPN_DEPLOY_IMAGE"
+      image_user="$(docker image inspect --format '{{.Config.User}}' "$ARPVPN_DEPLOY_IMAGE")"
+      case "$image_user" in
+        "" | root | 0 | 0:0)
+          echo "Container image must use a non-root runtime user." >&2
+          exit 1
+          ;;
+      esac
+      healthcheck="$(docker image inspect --format '{{json .Config.Healthcheck}}' "$ARPVPN_DEPLOY_IMAGE")"
+      test -n "$healthcheck"
+      test "$healthcheck" != "null"
+      observed_version="$(docker run --rm --entrypoint /bin/bash "$ARPVPN_DEPLOY_IMAGE" -lc 'cd /var/www/arpvpn && PYTHONPATH=/var/www/arpvpn /var/www/arpvpn/venv/bin/python -c "from arpvpn.__version__ import release; print(release)"' | tail -n1)"
+      test "$observed_version" = "$ARPVPN_RELEASE_VERSION"
+      trivy image --scanners vuln,secret,misconfig --ignore-unfixed --severity HIGH,CRITICAL --format json --output trivy-image-report.json --exit-code 1 "$ARPVPN_DEPLOY_IMAGE"
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - trivy-image-report.json
+
+deploy:docker02:
+  extends: .protected_main_job
+  stage: deploy_development
+  interruptible: false
+  resource_group: arpvpn-docker02
+  needs:
+    - job: build:image
+      artifacts: true
+    - security:image
+  variables:
+    ARPVPN_DEPLOY_PATH: "$STAGING_DEPLOY_PATH"
+    ARPVPN_DATA_FOLDER: "$STAGING_DATA_FOLDER"
+    ARPVPN_ENV_FILE: "$STAGING_ENV_FILE"
+    ARPVPN_CONTAINER_NAME: "$STAGING_CONTAINER_NAME"
+    ARPVPN_COMPOSE_PROJECT: "$STAGING_COMPOSE_PROJECT"
+    ARPVPN_HTTP_PORT: "$STAGING_HTTP_PORT"
+    ARPVPN_HTTPS_PORT: "$STAGING_HTTPS_PORT"
+    ARPVPN_COOKIE_SUFFIX: "staging"
+    ARPVPN_DEPLOY_RESULT_FILE: "$CI_PROJECT_DIR/staging-deploy.env"
+  environment:
+    name: docker02
+    url: "$STAGING_URL"
+  script:
+    - ./scripts/ci/deploy_local.sh
+  artifacts:
+    expire_in: 1 week
+    reports:
+      dotenv: staging-deploy.env
+    paths:
+      - staging-deploy.env
+
+smoke:docker02:
+  extends: .protected_main_job
+  stage: smoke_development
+  interruptible: false
+  resource_group: arpvpn-docker02
+  needs:
+    - job: build:image
+      artifacts: true
+    - job: deploy:docker02
+      artifacts: true
+  variables:
+    ARPVPN_DEPLOY_PATH: "$STAGING_DEPLOY_PATH"
+    ARPVPN_DATA_FOLDER: "$STAGING_DATA_FOLDER"
+    ARPVPN_ENV_FILE: "$STAGING_ENV_FILE"
+    ARPVPN_CONTAINER_NAME: "$STAGING_CONTAINER_NAME"
+    ARPVPN_COMPOSE_PROJECT: "$STAGING_COMPOSE_PROJECT"
+    ARPVPN_HEALTH_URL: "$STAGING_HEALTH_URL"
+  environment:
+    name: docker02
+    url: "$STAGING_URL"
+  script:
+    - ./scripts/ci/smoke_local.sh
+
+publish:validated-image:
+  extends: .protected_main_job
+  stage: promote
+  interruptible: false
+  needs:
+    - job: build:image
+      artifacts: true
+    - smoke:docker02
+  script:
+    - ./scripts/ci/promote_image.sh
+
+deploy:production:
+  extends: .manual_protected_main_job
+  stage: production
+  tags:
+    - docker03
+  interruptible: false
+  resource_group: arpvpn-docker03
+  needs:
+    - job: build:image
+      artifacts: true
+    - smoke:docker02
+    - publish:validated-image
+  variables:
+    ARPVPN_DEPLOY_PATH: "$PROD_DEPLOY_PATH"
+    ARPVPN_DATA_FOLDER: "$PROD_DATA_FOLDER"
+    ARPVPN_ENV_FILE: "$PROD_ENV_FILE"
+    ARPVPN_CONTAINER_NAME: "$PROD_CONTAINER_NAME"
+    ARPVPN_COMPOSE_PROJECT: "$PROD_COMPOSE_PROJECT"
+    ARPVPN_HTTP_PORT: "$PROD_HTTP_PORT"
+    ARPVPN_HTTPS_PORT: "$PROD_HTTPS_PORT"
+    ARPVPN_COOKIE_SUFFIX: "production"
+    ARPVPN_HEALTH_URL: "$PROD_HEALTH_URL"
+  environment:
+    name: production
+    url: "$PROD_URL"
+  script:
+    - |
+      set -euo pipefail
+      previous_image="$(docker inspect --format '{{.Config.Image}}' "$ARPVPN_CONTAINER_NAME" 2>/dev/null || true)"
+      ./scripts/ci/deploy_local.sh
+      if ! ./scripts/ci/smoke_local.sh; then
+        echo "Production smoke failed; attempting restoration of the previous registry image." >&2
+        if [[ -z "$previous_image" || "$previous_image" != "$CI_REGISTRY/"* ]]; then
+          echo "No trusted previous registry image is available for automatic restoration." >&2
+          exit 1
+        fi
+        ARPVPN_DEPLOY_IMAGE="$previous_image" \
+          ARPVPN_ALLOW_REGISTRY_ROLLBACK_IMAGE=1 \
+          ./scripts/ci/deploy_local.sh
+        ARPVPN_DEPLOY_IMAGE="$previous_image" \
+          ARPVPN_RELEASE_VERSION="" \
+          ./scripts/ci/smoke_local.sh || true
+        exit 1
+      fi
+
+rollback:production:
+  extends: .manual_protected_main_job
+  stage: production
+  tags:
+    - docker03
+  interruptible: false
+  resource_group: arpvpn-docker03
+  needs:
+    - smoke:docker02
+  variables:
+    ARPVPN_DEPLOY_PATH: "$PROD_DEPLOY_PATH"
+    ARPVPN_DATA_FOLDER: "$PROD_DATA_FOLDER"
+    ARPVPN_ENV_FILE: "$PROD_ENV_FILE"
+    ARPVPN_CONTAINER_NAME: "$PROD_CONTAINER_NAME"
+    ARPVPN_COMPOSE_PROJECT: "$PROD_COMPOSE_PROJECT"
+    ARPVPN_HTTP_PORT: "$PROD_HTTP_PORT"
+    ARPVPN_HTTPS_PORT: "$PROD_HTTPS_PORT"
+    ARPVPN_COOKIE_SUFFIX: "production"
+    ARPVPN_HEALTH_URL: "$PROD_HEALTH_URL"
+  environment:
+    name: production
+    url: "$PROD_URL"
+  script:
+    - test -n "$PROD_ROLLBACK_IMAGE"
+    - ARPVPN_DEPLOY_IMAGE="$PROD_ROLLBACK_IMAGE" ARPVPN_ALLOW_REGISTRY_ROLLBACK_IMAGE=1 ./scripts/ci/deploy_local.sh
+    - ARPVPN_DEPLOY_IMAGE="$PROD_ROLLBACK_IMAGE" ARPVPN_RELEASE_VERSION="" ./scripts/ci/smoke_local.sh
+
+publish:github:
+  extends: .manual_protected_main_job
+  stage: publication
+  interruptible: false
+  needs:
+    - deploy:production
+  script:
+    - ./scripts/ci/publish_github.sh

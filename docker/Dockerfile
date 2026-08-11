@@ -62,6 +62,12 @@ RUN set -eu; \
     fi; \
     chmod +x "$install_script"; \
     "$install_script"; \
+    rm -rf \
+      /usr/local/lib/python*/site-packages/pip \
+      /usr/local/lib/python*/site-packages/pip-*.dist-info \
+      /usr/local/lib/python*/ensurepip/_bundled/pip-*.whl \
+      "$INSTALL_PATH"/venv/lib/python*/site-packages/pip \
+      "$INSTALL_PATH"/venv/lib/python*/site-packages/pip-*.dist-info; \
     apt-get purge -y --auto-remove curl gcc libc6-dev make pkg-config xz-utils; \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 

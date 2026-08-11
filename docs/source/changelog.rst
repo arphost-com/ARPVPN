@@ -6,6 +6,26 @@ All notable changes to this project will be documented here.
 .. note::
     ARPVPN is adhered to `Semantic Versioning <https://semver.org/>`__.
 
+3.0.2
+-----
+
+* Updated ``cryptography`` and Pillow to patched releases required by the
+  blocking repository and image vulnerability gates.
+* Removed build-only pip and its vendored package inventory from the final
+  runtime image, reducing its attack surface and eliminating vulnerable tooling
+  that the application never executes.
+* Replaced key-shaped sample configuration values with explicit non-secret
+  placeholders so examples cannot be mistaken for deployable credentials.
+
+Pipeline restoration and deployment safety
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Restored private GitLab CI/CD as the authoritative test, security, image, and deployment workflow.
+* Added blocking repository and container-image security scans on the docker02 runner.
+* Added immutable image-digest deployment, strict docker02 health and ownership smoke checks, and post-staging image promotion.
+* Added final manual docker03 production deployment with failed-smoke restoration plus an explicit manual rollback job.
+* Added a separate final manual, non-force GitHub synchronization job after successful production deployment.
+
 3.0.1
 -----
 

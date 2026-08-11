@@ -232,13 +232,18 @@ values. The GitLab workflow only runs in a private GitLab project, and deploymen
 only runs on a protected default branch with masked/protected CI variables.
 
 Pipeline order:
-- Local/API tests and generated artifact checks run first.
-- The Docker image is published to the private GitLab registry.
-- docker02 staging deploy and smoke validation run automatically.
-- Production deploy is a manual GitLab job and uses the same tested image.
+- Repository/Compose validation, Python tests, OpenAPI checks, and generated artifact checks run on docker02.
+- Semgrep, Trivy, Gitleaks, TruffleHog, Dependency-Check, and Bandit block unsafe builds.
+- An immutable commit image is published and scanned before docker02 deployment.
+- docker02 deploy and smoke jobs require a healthy container, the expected image digest, and safe service-user ownership.
+- The tested digest is promoted to the release and ``stable`` tags only after docker02 passes.
+- Docker03 production deployment and rollback are manual and use the same validated registry image.
+- GitHub synchronization is a separate final manual job after successful production deployment; GitLab remains authoritative.
 
-Keep SSH keys, registry tokens, hostnames, deploy paths, and health-check URLs in
-private CI/CD variables only. See `docs/source/gitlab-deployment.rst`.
+Keep the GitHub publication token, deploy paths, host-specific ports, and
+health-check URLs in protected private CI/CD variables only. The host-local
+docker02 and docker03 runners do not require deployment SSH keys. See
+`docs/source/gitlab-deployment.rst`.
 
 ## Security Notes
 

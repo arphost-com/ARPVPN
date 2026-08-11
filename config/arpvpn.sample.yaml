@@ -28,11 +28,11 @@ wireguard: !yamlable/wireguard
           ipv4_address: 10.0.0.3/24
           name: jim halpert
           nat: true
-          private_key: KMLxYphCvI4joTyrf3Dp9Yg1vLUj+b8SjLFrUeYnCk0=
-          public_key: mvtz+LwXkJur9BkjFmBDOzdE5tacePRfBTFSX4OwmgU=
+          private_key: REPLACE_WITH_GENERATED_PEER_PRIVATE_KEY
+          public_key: REPLACE_WITH_DERIVED_PEER_PUBLIC_KEY
           uuid: 9ea085f97fdd4022a16df6f0a70b24db
-      private_key: 4Ob32NhyhwIXbj7od6L5ASWle3vbOjn9g80at/dxPm0=
-      public_key: 7NTAVIucHQJsS9Z8eT3lUV8VUoTSFrB6J272F9ox5RQ=
+      private_key: REPLACE_WITH_GENERATED_INTERFACE_PRIVATE_KEY
+      public_key: REPLACE_WITH_DERIVED_INTERFACE_PUBLIC_KEY
       uuid: 39a855187c4c4ca694d8c3f215e76cdc
   iptables_bin: /usr/sbin/iptables
   wg_bin: /usr/bin/wg
@@ -47,7 +47,7 @@ traffic: !yamlable/traffic
 web: !yamlable/web
   login_attempts: 0
   login_ban_time: 120
-  secret_key: G,XhSEIu{>TFu$y?4-kMy+<MN%T*J@[/
+  secret_key: REPLACE_WITH_RANDOM_WEB_SECRET_KEY
   tls_mode: http
   tls_server_name: vpn.example.com
   tls_letsencrypt_email: admin@example.com
