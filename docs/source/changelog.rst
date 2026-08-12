@@ -6,13 +6,15 @@ All notable changes to this project will be documented here.
 .. note::
     ARPVPN is adhered to `Semantic Versioning <https://semver.org/>`__.
 
-3.0.4
+3.0.5
 -----
 
 * Load and apply persisted configuration exactly once during application
   startup, before importing request routes, avoiding duplicate configuration
   writes and redundant WireGuard interface apply work.
 * Add regression coverage for the single-owner startup initialization order.
+* Harden GitHub publication authentication by forcing the allowlisted remote to
+  use the non-secret token username and a prompt-insensitive askpass response.
 
 3.0.3
 -----

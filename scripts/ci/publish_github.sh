@@ -12,8 +12,9 @@ if [[ "$CI_COMMIT_BRANCH" != "$CI_DEFAULT_BRANCH" ]]; then
   exit 1
 fi
 
-github_url="https://github.com/arphost-com/ARPVPN.git"
+github_url="https://x-access-token@github.com/arphost-com/ARPVPN.git"
 export GIT_ASKPASS="$CI_PROJECT_DIR/scripts/ci/github_askpass.sh"
+export GIT_ASKPASS_REQUIRE=force
 export GIT_TERMINAL_PROMPT=0
 
 git -c credential.helper= fetch --no-tags "$github_url" \

@@ -59,7 +59,7 @@ def test_release_metadata_validator_passes_for_repository_state():
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert "3.0.4" in completed.stdout
+    assert "3.0.5" in completed.stdout
 
 
 def _config_load_calls(path: Path):
@@ -133,3 +133,18 @@ def test_production_restoration_verifies_cached_image_identity():
     assert "ARPVPN_USE_LOCAL_ROLLBACK_IMAGE=1" in pipeline_source
     assert 'ARPVPN_EXPECTED_LOCAL_IMAGE_ID="$previous_image_id"' in pipeline_source
     assert 'observed_image_id" != "$expected_image_id' in deploy_source
+
+
+def test_github_publication_uses_forced_askpass_without_embedding_a_secret():
+    publish_source = (ROOT / "scripts" / "ci" / "publish_github.sh").read_text(
+        encoding="utf-8"
+    )
+    askpass_source = (ROOT / "scripts" / "ci" / "github_askpass.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "https://x-access-token@github.com/arphost-com/ARPVPN.git" in publish_source
+    assert "GIT_ASKPASS_REQUIRE=force" in publish_source
+    assert "GITHUB_PUSH_TOKEN" not in publish_source.split("github_url=", 1)[1].splitlines()[0]
+    assert "${GITHUB_PUSH_TOKEN:?}" in askpass_source
+    assert "tr '[:upper:]' '[:lower:]'" in askpass_source
