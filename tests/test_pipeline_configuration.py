@@ -1,4 +1,5 @@
 from pathlib import Path
+import ast
 import subprocess
 import sys
 
@@ -58,7 +59,39 @@ def test_release_metadata_validator_passes_for_repository_state():
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert "3.0.3" in completed.stdout
+    assert "3.0.4" in completed.stdout
+
+
+def _config_load_calls(path: Path):
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    return [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "load"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "config_manager"
+    ]
+
+
+def test_startup_loads_configuration_once_before_router_import():
+    main_path = ROOT / "arpvpn" / "__main__.py"
+    router_path = ROOT / "arpvpn" / "web" / "router.py"
+
+    main_tree = ast.parse(main_path.read_text(encoding="utf-8"))
+    startup_loads = _config_load_calls(main_path)
+    router_loads = _config_load_calls(router_path)
+    router_import = next(
+        node
+        for node in main_tree.body
+        if isinstance(node, ast.ImportFrom)
+        and node.module == "arpvpn.web.router"
+    )
+
+    assert len(startup_loads) == 1
+    assert router_loads == []
+    assert startup_loads[0].lineno < router_import.lineno
 
 
 def test_runtime_image_removes_build_only_pip_tooling():

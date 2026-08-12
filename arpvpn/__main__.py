@@ -98,11 +98,16 @@ global_properties.workdir = workdir
 from arpvpn.core.config.web import config as web_config
 from arpvpn.core.config.logger import config as log_config
 from arpvpn.core.managers.config import config_manager
+
+# Load persisted state before importing the request router. The router consumes
+# the configured models but must not initialize or rewrite application state as
+# an import side effect.
+config_manager.load()
+
 from arpvpn.web.router import router
 
 app = Flask(__name__, template_folder="web/templates", static_folder="web/static")
 info(f"Logging to '{log_config.logfile}'...")
-config_manager.load()
 if log_config.overwrite:
     log_config.reset_logfile()
 

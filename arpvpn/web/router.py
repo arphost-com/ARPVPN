@@ -320,8 +320,6 @@ class Router(Blueprint):
 
 router = Router("router", __name__)
 
-config_manager.load()
-
 
 def is_api_request() -> bool:
     return request.path.startswith("/api/")
