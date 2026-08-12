@@ -6,7 +6,7 @@ All notable changes to this project will be documented here.
 .. note::
     ARPVPN is adhered to `Semantic Versioning <https://semver.org/>`__.
 
-3.0.5
+3.0.6
 -----
 
 * Load and apply persisted configuration exactly once during application
@@ -14,7 +14,9 @@ All notable changes to this project will be documented here.
   writes and redundant WireGuard interface apply work.
 * Add regression coverage for the single-owner startup initialization order.
 * Harden GitHub publication authentication by forcing the allowlisted remote to
-  use the non-secret token username and a prompt-insensitive askpass response.
+  use the non-secret token username, a prompt-insensitive askpass response, and
+  an explicit interactive-credential override for GitLab Runner checkouts that
+  otherwise suppress askpass execution.
 
 3.0.3
 -----
