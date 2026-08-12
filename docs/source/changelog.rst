@@ -6,6 +6,15 @@ All notable changes to this project will be documented here.
 .. note::
     ARPVPN is adhered to `Semantic Versioning <https://semver.org/>`__.
 
+3.0.3
+-----
+
+* Preserved legacy ARPVPN Pro mesh route, topology, and VPN-link objects while
+  loading and saving existing production configuration.
+* Hardened failed-smoke restoration by verifying and reusing the exact locally
+  cached previous image when current project credentials cannot pull its older
+  registry repository.
+
 3.0.2
 -----
 
