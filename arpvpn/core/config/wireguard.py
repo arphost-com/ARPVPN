@@ -73,13 +73,28 @@ class MeshRouteAdvertisements(_LegacyMeshDict):
     pass
 
 
+@yaml_info(yaml_tag="mesh_route_advertisement")
+class LegacyMeshRouteAdvertisement(_LegacyMeshDict):
+    pass
+
+
 @yaml_info(yaml_tag="mesh_topologies")
 class MeshTopologies(_LegacyMeshDict):
     pass
 
 
+@yaml_info(yaml_tag="mesh_topology")
+class LegacyMeshTopology(_LegacyMeshDict):
+    pass
+
+
 @yaml_info(yaml_tag="mesh_vpn_links")
 class MeshVpnLinks(_LegacyMeshDict):
+    pass
+
+
+@yaml_info(yaml_tag="mesh_vpn_link")
+class LegacyMeshVpnLink(_LegacyMeshDict):
     pass
 
 
@@ -136,6 +151,7 @@ class WireguardConfig(BaseConfig):
         self.iptables_bin = detect_wireguard_binary("iptables")
         from arpvpn.core.models import interfaces
         self.interfaces = interfaces
+        self.mesh = MeshControlPlane()
 
     def load(self, config: "WireguardConfig"):
         self.endpoint = config.endpoint or self.endpoint
@@ -147,6 +163,8 @@ class WireguardConfig(BaseConfig):
         self.iptables_bin = config.iptables_bin or self.iptables_bin
         if config.interfaces:
             self.interfaces.set_contents(config.interfaces)
+        if config.mesh:
+            self.mesh = config.mesh
         for iface in self.interfaces.values():
             iface.conf_file = os.path.join(self.interfaces_folder, iface.name) + ".conf"
             iface.save()
@@ -179,6 +197,7 @@ class WireguardConfig(BaseConfig):
         config.wg_quick_bin = dct.get("wg_quick_bin", None) or config.wg_quick_bin
         config.iptables_bin = dct.get("iptables_bin", None) or config.iptables_bin
         config.interfaces = dct.get("interfaces", None) or config.interfaces
+        config.mesh = dct.get("mesh", None) or config.mesh
         for iface in config.interfaces.values():
             iface.conf_file = os.path.join(config.interfaces_folder, iface.name) + ".conf"
             iface.save()
@@ -191,6 +210,7 @@ class WireguardConfig(BaseConfig):
             "wg_quick_bin": self.wg_quick_bin,
             "iptables_bin": self.iptables_bin,
             "interfaces": self.interfaces,
+            "mesh": self.mesh,
         }
 
     def apply(self):

@@ -129,9 +129,24 @@ cleanup() {
 }
 trap cleanup EXIT
 sudo -n chown "$deploy_uid:$deploy_gid" "$auth_dir"
-printf '%s' "$CI_REGISTRY_PASSWORD" | sudo -n -u "$deploy_user" env DOCKER_CONFIG="$auth_dir" \
-  docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin >/dev/null
-sudo -n -u "$deploy_user" env DOCKER_CONFIG="$auth_dir" docker pull "$ARPVPN_DEPLOY_IMAGE"
+use_local_image="${ARPVPN_USE_LOCAL_ROLLBACK_IMAGE:-0}"
+if [[ "$use_local_image" == "1" ]]; then
+  expected_image_id="${ARPVPN_EXPECTED_LOCAL_IMAGE_ID:-}"
+  if [[ ! "$expected_image_id" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    echo "A trusted local rollback requires an immutable expected image ID." >&2
+    exit 1
+  fi
+  observed_image_id="$(sudo -n -u "$deploy_user" docker image inspect --format '{{.Id}}' "$ARPVPN_DEPLOY_IMAGE" 2>/dev/null || true)"
+  if [[ "$observed_image_id" != "$expected_image_id" ]]; then
+    echo "The trusted previous image is not available locally with the expected image ID." >&2
+    exit 1
+  fi
+  echo "Using the verified locally cached previous image for restoration."
+else
+  printf '%s' "$CI_REGISTRY_PASSWORD" | sudo -n -u "$deploy_user" env DOCKER_CONFIG="$auth_dir" \
+    docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin >/dev/null
+  sudo -n -u "$deploy_user" env DOCKER_CONFIG="$auth_dir" docker pull "$ARPVPN_DEPLOY_IMAGE"
+fi
 sudo -n -u "$deploy_user" env DOCKER_CONFIG="$auth_dir" \
   docker compose -p "$ARPVPN_COMPOSE_PROJECT" -f "$deploy_path/docker-compose.yaml" \
   --env-file "$env_path" up -d --no-build --force-recreate "$service_name"

@@ -58,7 +58,7 @@ def test_release_metadata_validator_passes_for_repository_state():
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert "3.0.2" in completed.stdout
+    assert "3.0.3" in completed.stdout
 
 
 def test_runtime_image_removes_build_only_pip_tooling():
@@ -90,3 +90,13 @@ def test_update_env_preserves_comments_and_replaces_duplicate_keys(tmp_path):
         "OTHER=kept\n"
         "DATA_FOLDER=/srv/arpvpn/data\n"
     )
+
+
+def test_production_restoration_verifies_cached_image_identity():
+    pipeline_source = (ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8")
+    deploy_source = (ROOT / "scripts" / "ci" / "deploy_local.sh").read_text(encoding="utf-8")
+
+    assert "previous_image_id=" in pipeline_source
+    assert "ARPVPN_USE_LOCAL_ROLLBACK_IMAGE=1" in pipeline_source
+    assert 'ARPVPN_EXPECTED_LOCAL_IMAGE_ID="$previous_image_id"' in pipeline_source
+    assert 'observed_image_id" != "$expected_image_id' in deploy_source

@@ -337,6 +337,7 @@ deploy:production:
     - |
       set -euo pipefail
       previous_image="$(docker inspect --format '{{.Config.Image}}' "$ARPVPN_CONTAINER_NAME" 2>/dev/null || true)"
+      previous_image_id="$(docker inspect --format '{{.Image}}' "$ARPVPN_CONTAINER_NAME" 2>/dev/null || true)"
       ./scripts/ci/deploy_local.sh
       if ! ./scripts/ci/smoke_local.sh; then
         echo "Production smoke failed; attempting restoration of the previous registry image." >&2
@@ -346,6 +347,8 @@ deploy:production:
         fi
         ARPVPN_DEPLOY_IMAGE="$previous_image" \
           ARPVPN_ALLOW_REGISTRY_ROLLBACK_IMAGE=1 \
+          ARPVPN_USE_LOCAL_ROLLBACK_IMAGE=1 \
+          ARPVPN_EXPECTED_LOCAL_IMAGE_ID="$previous_image_id" \
           ./scripts/ci/deploy_local.sh
         ARPVPN_DEPLOY_IMAGE="$previous_image" \
           ARPVPN_RELEASE_VERSION="" \
