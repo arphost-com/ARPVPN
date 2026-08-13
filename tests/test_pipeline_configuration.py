@@ -49,6 +49,23 @@ def test_pipeline_does_not_embed_private_deploy_paths_or_ssh_workflow():
     assert "git push --force" not in source
 
 
+def test_dashboard_contains_only_operational_peer_and_interface_views():
+    source = (ROOT / "arpvpn" / "web" / "templates" / "web" / "index.html").read_text(encoding="utf-8")
+
+    assert "Peer health and session traffic" in source
+    assert "Interface throughput" in source
+    assert 'href="/wireguard/' not in source
+    assert "removeIfaceBtn" not in source
+    assert "removePeerBtn" not in source
+
+
+def test_wireguard_collector_propagates_command_failures():
+    source = (ROOT / "arpvpn" / "core" / "tools" / "wg-json").read_text(encoding="utf-8")
+
+    assert "sudo -n wg show all dump" in source
+    assert "exec < <(" not in source
+
+
 def test_release_metadata_validator_passes_for_repository_state():
     completed = subprocess.run(
         [sys.executable, str(ROOT / "scripts/ci/validate_release_metadata.py")],
@@ -59,7 +76,7 @@ def test_release_metadata_validator_passes_for_repository_state():
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert "3.0.6" in completed.stdout
+    assert "3.0.7" in completed.stdout
 
 
 def _config_load_calls(path: Path):

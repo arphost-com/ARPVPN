@@ -22,7 +22,11 @@ from arpvpn.common.models.tenant import Invitation, Tenant, invitations, tenants
 from arpvpn.common.models.user import User, users  # noqa: E402
 from arpvpn.common.utils.mfa import generate_mfa_code, hash_recovery_code  # noqa: E402
 from arpvpn.core.models import Interface, Peer, interfaces  # noqa: E402
-from arpvpn.core.drivers.traffic_storage_driver import TrafficData  # noqa: E402
+from arpvpn.core.drivers.traffic_storage_driver import (  # noqa: E402
+    TrafficCollectionError,
+    TrafficData,
+    TrafficStorageDriver,
+)
 from arpvpn.core.drivers.traffic_storage_driver_json import TrafficStorageDriverJson  # noqa: E402
 from arpvpn.web import router as router_module  # noqa: E402
 from arpvpn.web.security_api import ApiTokenStore, AuthLockoutManager, SlidingWindowRateLimiter  # noqa: E402
@@ -601,6 +605,86 @@ def test_request_traffic_helpers_share_live_and_history_reads(app, monkeypatch):
     assert live["peer-1"].rx == 10
     assert len(session_calls) == 1
     assert len(history_calls) == 1
+
+
+def test_live_traffic_driver_rejects_failed_or_invalid_collection(monkeypatch):
+    monkeypatch.setattr(
+        "arpvpn.core.drivers.traffic_storage_driver.run_tool",
+        lambda _name: SimpleNamespace(successful=False, output="", err="denied"),
+    )
+    with pytest.raises(TrafficCollectionError, match="collection failed"):
+        TrafficStorageDriver.get_session_data()
+
+    monkeypatch.setattr(
+        "arpvpn.core.drivers.traffic_storage_driver.run_tool",
+        lambda _name: SimpleNamespace(successful=True, output="not-json", err=""),
+    )
+    with pytest.raises(TrafficCollectionError, match="invalid JSON"):
+        TrafficStorageDriver.get_session_data()
+
+
+def test_live_traffic_driver_maps_valid_wireguard_session(monkeypatch):
+    iface = make_interface("wgmain")
+    peer = Peer(
+        name="runtime-peer",
+        description="",
+        ipv4_address="10.80.0.2/24",
+        nat=False,
+        interface=iface,
+        dns1="8.8.8.8",
+        private_key="runtime-private",
+        public_key="runtime-public",
+    )
+    iface.add_peer(peer)
+    payload = {
+        iface.name: {
+            "peers": {
+                peer.public_key: {
+                    "transferRx": 11,
+                    "transferTx": 22,
+                    "latestHandshake": 1_700_000_000,
+                }
+            }
+        }
+    }
+    monkeypatch.setattr(
+        "arpvpn.core.drivers.traffic_storage_driver.run_tool",
+        lambda _name: SimpleNamespace(successful=True, output=json.dumps(payload), err=""),
+    )
+
+    session = TrafficStorageDriver.get_session_data()
+
+    assert session[peer.uuid].rx == 22
+    assert session[peer.uuid].tx == 11
+    assert session[peer.uuid].last_handshake == datetime.fromtimestamp(1_700_000_000)
+
+
+def test_peer_runtime_marks_failed_collection_unknown(monkeypatch):
+    iface = make_interface("wgmain")
+    peer = Peer(
+        name="runtime-peer",
+        description="",
+        ipv4_address="10.80.0.2/24",
+        nat=False,
+        interface=iface,
+        dns1="8.8.8.8",
+        private_key="runtime-private",
+        public_key="runtime-public",
+    )
+    iface.add_peer(peer)
+    monkeypatch.setattr(
+        router_module,
+        "get_session_traffic_data",
+        lambda: (_ for _ in ()).throw(TrafficCollectionError("collector unavailable")),
+    )
+
+    runtime = router_module.get_peer_runtime_summary()
+
+    assert runtime["totals"]["telemetry_available"] is False
+    assert runtime["totals"]["unknown_peers"] == 1
+    assert runtime["rows"][0]["handshake_state"] == "unknown"
+    assert runtime["rows"][0]["session_total_human"] == "—"
+    assert runtime["alerts"][0]["title"] == "Live peer telemetry unavailable"
 
 
 def test_rrd_render_batches_all_updates_into_one_process(monkeypatch):

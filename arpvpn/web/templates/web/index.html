@@ -1,9 +1,5 @@
 {% extends 'web/web-main.html' %}
 
-{% block additional_styles %}
-    <link href="https://cdn.datatables.net/1.10.20/css/dataTables.bootstrap4.min.css" rel="stylesheet" crossorigin="anonymous" />
-{% endblock %}
-
 {% block content %}
     <main>
         <div class="container-fluid">
@@ -35,7 +31,7 @@
                             <div class="alert alert-{{ alert['level'] }} py-2 mb-2">
                                 <strong>{{ alert["title"] }}:</strong> {{ alert["message"] }}
                                 {% if alert["peer_uuid"] %}
-                                    <a class="ml-2" href="/wireguard/peers/{{ alert['peer_uuid'] }}">Open peer</a>
+                                    <a class="ml-2" href="/traffic/rrd/{{ alert['peer_uuid'] }}">View traffic</a>
                                 {% endif %}
                             </div>
                         {% endfor %}
@@ -67,15 +63,25 @@
                 <div class="col-sm-6 col-xl-2 mb-3">
                     <div class="stat-tile">
                         <div class="stat-label">Active peers</div>
-                        <div class="stat-value text-success">{{ peer_runtime["totals"]["active_peers"] }}</div>
-                        <div class="stat-subtle">&lt;= 3 minutes</div>
+                        {% if peer_runtime["totals"]["telemetry_available"] %}
+                            <div class="stat-value text-success">{{ peer_runtime["totals"]["active_peers"] }}</div>
+                            <div class="stat-subtle">&lt;= 3 minutes</div>
+                        {% else %}
+                            <div class="stat-value text-warning">—</div>
+                            <div class="stat-subtle">telemetry unavailable</div>
+                        {% endif %}
                     </div>
                 </div>
                 <div class="col-sm-6 col-xl-2 mb-3">
                     <div class="stat-tile">
                         <div class="stat-label">Stale peers</div>
-                        <div class="stat-value text-warning">{{ peer_runtime["totals"]["stale_peers"] }}</div>
-                        <div class="stat-subtle">3-30 minutes</div>
+                        {% if peer_runtime["totals"]["telemetry_available"] %}
+                            <div class="stat-value text-warning">{{ peer_runtime["totals"]["stale_peers"] }}</div>
+                            <div class="stat-subtle">3-30 minutes</div>
+                        {% else %}
+                            <div class="stat-value text-warning">—</div>
+                            <div class="stat-subtle">telemetry unavailable</div>
+                        {% endif %}
                     </div>
                 </div>
                 <div class="col-sm-6 col-xl-2 mb-3">
@@ -143,7 +149,11 @@
                             {% set stale_peers = peer_runtime["totals"]["stale_peers"] %}
                             {% set offline_peers = peer_runtime["totals"]["offline_peers"] %}
                             {% set never_seen_peers = peer_runtime["totals"]["never_seen_peers"] %}
-                            {% if total_peers %}
+                            {% if not peer_runtime["totals"]["telemetry_available"] %}
+                                <div class="alert alert-warning mb-0" role="status">
+                                    Live peer states and session traffic are temporarily unavailable.
+                                </div>
+                            {% elif total_peers %}
                                 <div class="mb-3">
                                     <div class="d-flex justify-content-between align-items-end mb-2">
                                         <div>
@@ -254,8 +264,12 @@
                                             <td><span class="badge badge-{{ item.handshake_badge }}">{{ item.handshake_state }}</span></td>
                                             {% if item.handshake_ago %}
                                                 <td>{{ item.handshake_ago }}</td>
+                                            {% elif item.handshake_state == "never" %}
+                                                <td>Never</td>
+                                            {% elif item.handshake_state == "unknown" %}
+                                                <td>Unavailable</td>
                                             {% else %}
-                                                <td>{{ EMPTY_FIELD  }}</td>
+                                                <td>—</td>
                                             {% endif %}
                                             <td>{{ item.session_rx_human }}</td>
                                             <td>{{ item.session_tx_human }}</td>
@@ -273,226 +287,6 @@
                   <small class="text-muted">Active = handshake within 3 minutes. Stale = 3 to 30 minutes.</small>
                 </div>
             </div>
-            <!-- wg ifaces -->
-            <div class="card mb-4 panel-glass">
-                <div class="card-header">
-                    <i class="fas fa-ethernet mr-1"></i>
-                    Interfaces
-                    {% if current_user.has_role('admin') %}
-                        <a href="/wireguard/interfaces/add" class="float-right" title="Add"><i class="fas fa-plus mr-1"></i></a>
-                    {% endif %}
-                </div>
-                <div class="card-body">
-                    <div id="wgIfaces">
-                        <div class="table-responsive">
-                            <table class="table table-bordered dataTable">
-                                <thead>
-                                    <tr>
-                                        <th>Name</th>
-                                        <th>Description</th>
-                                        <th>IPv4</th>
-                                        <th>Listen port</th>
-                                        <th>Peers</th>
-                                        <th>Status</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for iface in interfaces.values() %}
-                                        <tr>
-                                            <td><a href="/traffic/rrd/{{ iface.uuid }}">{{ iface.name }}</a></td>
-                                            {% if iface.description %}
-                                                <td>{{ iface.description }}</td>
-                                            {% else %}
-                                                <td>{{ EMPTY_FIELD  }}</td>
-                                            {% endif %}
-                                            <td>{{ iface.ipv4_address }}</td>
-                                            <td>{{ iface.listen_port}}</td>
-                                            <td>{{ iface.peers | length}}</td>
-                                            <td>{{ iface.status}}</td>
-                                            <td>
-                                                <a href="/traffic/rrd/{{ iface.uuid }}" title="RRD graph"
-                                                   class="mr-2"><i class="fas fa-chart-line"></i>
-                                                </a>
-                                                {% if not current_user.has_role('client') %}
-                                                    <a href="/wireguard/interfaces/{{ iface.uuid }}/download" title="Download"
-                                                       class="mr-2"><i class="fa fa-download"></i>
-                                                    </a>
-                                                    <a href="/wireguard/interfaces/{{ iface.uuid }}" title="Edit" class="mr-2">
-                                                        <i class="fas fa-pen"></i>
-                                                    </a>
-                                                    <span data-toggle="modal" data-target="#removeModal-{{ iface.uuid }}"
-                                                          type="button" class="btn-link removal-link">
-                                                        <i title="Remove" class="fas fa-trash"></i>
-                                                    </span>
-                                                    <div class="modal fade" id="removeModal-{{ iface.uuid }}" tabindex="-1" role="dialog"
-                                                         aria-labelledby="removeIfaceTitle" aria-hidden="true">
-                                                      <div class="modal-dialog" role="document">
-                                                        <div class="modal-content">
-                                                          <div class="modal-header">
-                                                            <h5 class="modal-title" id="removeModalTitle">Delete interface</h5>
-                                                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                                              <span aria-hidden="true">&times;</span>
-                                                            </button>
-                                                          </div>
-                                                          <div class="modal-body">
-                                                              Do you really want to remove <strong>{{ iface.name }}</strong>?
-                                                              This cannot be undone.
-                                                          </div>
-                                                          <div class="modal-footer">
-                                                              <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                                                              <button type="button" id="removeIfaceBtn-{{ iface.uuid }}"
-                                                                    class="btn btn-danger removeIfaceBtn">Remove</button>
-                                                          </div>
-                                                        </div>
-                                                      </div>
-                                                    </div>
-                                                {% endif %}
-                                            </td>
-                                        </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-                <div class="card-footer">
-                  <small class="text-muted">Information provided at {{ last_update }}.</small>
-                </div>
-            </div>
-            <!-- Peers -->
-            <div class="card mb-4 panel-glass">
-                <div class="card-header">
-                    <i class="fas fa-user-friends mr-1"></i>
-                    Peers
-                    {% if not current_user.has_role('client') %}
-                        <a href="/wireguard/peers/add" class="float-right" title="Add"><i class="fas fa-plus mr-1"></i></a>
-                    {% endif %}
-                </div>
-                <div class="card-body">
-                    <div id="wgIfacePeers">
-                        <div class="table-responsive">
-                            <table class="table table-bordered dataTable">
-                                <thead>
-                                    <tr>
-                                        <th>Name</th>
-                                        <th>Interface</th>
-                                        <th>Description</th>
-                                        <th>IPv4</th>
-                                        <th>Mode</th>
-                                        <th>Status</th>
-                                        <th>Remote subnets</th>
-                                        <th>Primary DNS</th>
-                                        <th>Secondary DNS</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for iface in interfaces.values() %}
-                                    {% for peer in iface.peers.values() %}
-                                        <tr>
-                                            <td><a href="/traffic/rrd/{{ peer.uuid }}">{{ peer.name }}</a></td>
-                                            {% if current_user.has_role('client') %}
-                                                <td>{{ iface.name }}</td>
-                                            {% else %}
-                                                <td><a href="/wireguard/interfaces/{{ iface.uuid }}">{{ iface.name }}</a></td>
-                                            {% endif %}
-                                            {% if peer.description %}
-                                                <td>{{ peer.description }}</td>
-                                            {% else %}
-                                                <td>{{ EMPTY_FIELD  }}</td>
-                                            {% endif %}
-                                            {% if peer.ipv4_address %}
-                                                <td>{{ peer.ipv4_address }}</td>
-                                            {% else %}
-                                                <td>{{ EMPTY_FIELD  }}</td>
-                                            {% endif %}
-                                            {% if peer.mode == "site_to_site" %}
-                                                <td>Site-to-site</td>
-                                            {% else %}
-                                                <td>Client</td>
-                                            {% endif %}
-                                            <td>
-                                                {% if peer.enabled %}
-                                                    <span class="badge badge-success">enabled</span>
-                                                {% else %}
-                                                    <span class="badge badge-secondary">disabled</span>
-                                                {% endif %}
-                                            </td>
-                                            {% if peer.site_to_site_subnets %}
-                                                <td>{{ peer.site_to_site_subnets | join(", ") }}</td>
-                                            {% else %}
-                                                <td>{{ EMPTY_FIELD  }}</td>
-                                            {% endif %}
-                                            {% if peer.dns1 %}
-                                                <td>{{ peer.dns1 }}</td>
-                                            {% else %}
-                                                <td>{{ EMPTY_FIELD  }}</td>
-                                            {% endif %}
-                                            {% if peer.dns2 %}
-                                                <td>{{ peer.dns2 }}</td>
-                                            {% else %}
-                                                <td>{{ EMPTY_FIELD  }}</td>
-                                            {% endif %}
-                                            <td>
-                                                <a href="/traffic/rrd/{{ peer.uuid }}" title="RRD graph"
-                                                   class="mr-2"><i class="fas fa-chart-line"></i>
-                                                </a>
-                                                <a href="/wireguard/peers/{{ peer.uuid }}/download" title="Download"
-                                                   class="mr-2"><i class="fa fa-download"></i>
-                                                </a>
-                                                <a href="/wireguard/peers/{{ peer.uuid }}" title="{% if current_user.has_role('client') %}Open{% else %}Edit{% endif %}" class="mr-2">
-                                                    <i class="fas {% if current_user.has_role('client') %}fa-eye{% else %}fa-pen{% endif %}"></i>
-                                                </a>
-                                                {% if not current_user.has_role('client') %}
-                                                    <span data-toggle="modal" data-target="#removeModal-{{ peer.uuid }}"
-                                                          type="button" class="btn-link removal-link">
-                                                        <i title="Remove" class="fas fa-trash"></i>
-                                                    </span>
-                                                    <div class="modal fade" id="removeModal-{{ peer.uuid }}" tabindex="-1" role="dialog"
-                                                         aria-labelledby="removePeerTitle" aria-hidden="true">
-                                                      <div class="modal-dialog" role="document">
-                                                        <div class="modal-content">
-                                                          <div class="modal-header">
-                                                            <h5 class="modal-title" id="removeModalTitle">Delete peer</h5>
-                                                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                                              <span aria-hidden="true">&times;</span>
-                                                            </button>
-                                                          </div>
-                                                          <div class="modal-body">
-                                                              Do you really want to remove <strong>{{ peer.name }}</strong>?
-                                                              This cannot be undone.
-                                                          </div>
-                                                          <div class="modal-footer">
-                                                              <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                                                              <button type="button" id="removePeerBtn-{{ peer.uuid }}"
-                                                                    class="btn btn-danger removePeerBtn">Remove</button>
-                                                          </div>
-                                                        </div>
-                                                      </div>
-                                                    </div>
-                                                {% endif %}
-                                            </td>
-                                        </tr>
-                                    {% endfor %}
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-                <div class="card-footer">
-                  <small class="text-muted">Information provided at {{ last_update }}.</small>
-                </div>
-            </div>
         </div>
     </main>
-{% endblock %}
-
-{% block additional_scripts %}
-    <script src="https://cdn.datatables.net/1.10.20/js/jquery.dataTables.min.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.datatables.net/1.10.20/js/dataTables.bootstrap4.min.js" crossorigin="anonymous"></script>
-    <script src="../../static/js/libs/chartUtils.js"></script>
-    <script src="../../static/js/libs/datatablesUtils.js"></script>
-    <script type="module" src="../../static/js/modules/dashboard.mjs"></script>
 {% endblock %}

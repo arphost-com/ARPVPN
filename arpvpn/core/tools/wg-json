@@ -4,7 +4,11 @@
 # Copyright (C) 2015-2020 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
 # https://git.zx2c4.com/wireguard-tools/tree/contrib/json
 
-exec < <(exec sudo wg show all dump)
+if ! wg_dump="$(sudo -n wg show all dump)"; then
+	printf 'Unable to collect WireGuard runtime data.\n' >&2
+	exit 1
+fi
+exec <<< "$wg_dump"
 printf '{'
 while read -r -d $'\t' device; do
 	if [[ $device != "$last_device" ]]; then

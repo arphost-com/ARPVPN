@@ -45,7 +45,7 @@ Pipeline flow
    running digest and release version, checks a loopback HTTP/HTTPS endpoint, and
    rejects app-critical files owned by ``gitlab-runner``.
 8. ``publish:validated-image`` runs only after development smoke succeeds. It
-   publishes the immutable digest as ``3.0.6`` and ``stable`` and refuses to
+   publishes the immutable digest as ``3.0.7`` and ``stable`` and refuses to
    overwrite an existing version tag with another digest.
 9. ``deploy:production`` is a final manual job on docker03. It consumes the same
    immutable digest and restores the previously running registry image if the

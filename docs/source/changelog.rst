@@ -6,6 +6,17 @@ All notable changes to this project will be documented here.
 .. note::
     ARPVPN is adhered to `Semantic Versioning <https://semver.org/>`__.
 
+3.0.7
+-----
+
+* Keep the dashboard focused on operational health by moving all interface and
+  peer configuration actions to the dedicated WireGuard management page.
+* Propagate WireGuard collector failures and render affected handshake and
+  session-traffic values as unavailable instead of false ``never`` and ``0 B``
+  readings.
+* Render genuine peers without a recorded handshake as ``Never`` rather than
+  the ambiguous ``None`` value.
+
 3.0.6
 -----
 

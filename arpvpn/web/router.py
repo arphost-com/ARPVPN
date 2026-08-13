@@ -42,7 +42,7 @@ from arpvpn.core.config.logger import config as logger_config
 from arpvpn.core.config.traffic import config as traffic_config
 from arpvpn.core.config.web import config as web_config
 from arpvpn.core.config.wireguard import config as wireguard_config
-from arpvpn.core.drivers.traffic_storage_driver import TrafficData
+from arpvpn.core.drivers.traffic_storage_driver import TrafficCollectionError, TrafficData
 from arpvpn.core.exceptions import WireguardError
 from arpvpn.core.managers.config import config_manager
 from arpvpn.core.managers.tls import tls_manager
@@ -927,6 +927,10 @@ def clone_traffic_data(data: Dict[str, TrafficData]) -> Dict[str, TrafficData]:
 
 def get_session_traffic_data() -> Dict[str, TrafficData]:
     request_cache_key = "arpvpn_session_traffic_data"
+    request_error_key = "arpvpn_session_traffic_error"
+    cached_error = getattr(g, request_error_key, None) if has_request_context() else None
+    if cached_error is not None:
+        raise cached_error
     cached_for_request = getattr(g, request_cache_key, None) if has_request_context() else None
     if cached_for_request is not None:
         return clone_traffic_data(cached_for_request)
@@ -938,7 +942,12 @@ def get_session_traffic_data() -> Dict[str, TrafficData]:
         if cached_at > 0 and now - cached_at <= TRAFFIC_SESSION_CACHE_TTL_SECONDS:
             session_data = clone_traffic_data(cached_data)
         else:
-            session_data = traffic_config.driver.get_session_data()
+            try:
+                session_data = traffic_config.driver.get_session_data()
+            except TrafficCollectionError as exc:
+                if has_request_context():
+                    setattr(g, request_error_key, exc)
+                raise
             TRAFFIC_SESSION_CACHE["loaded_at"] = now
             TRAFFIC_SESSION_CACHE["data"] = clone_traffic_data(session_data)
 
@@ -1497,7 +1506,13 @@ def to_human_filesize(size_bytes: int) -> str:
 
 def get_peer_runtime_summary() -> Dict[str, Any]:
     now = datetime.now()
-    session_data = get_session_traffic_data()
+    telemetry_available = True
+    try:
+        session_data = get_session_traffic_data()
+    except TrafficCollectionError as exc:
+        warning(f"Live WireGuard telemetry is unavailable: {exc}")
+        telemetry_available = False
+        session_data = {}
     peer_rows = []
     alerts = []
     totals = {
@@ -1509,6 +1524,7 @@ def get_peer_runtime_summary() -> Dict[str, Any]:
         "stale_peers": 0,
         "offline_peers": 0,
         "never_seen_peers": 0,
+        "unknown_peers": 0,
         "high_traffic_peers": 0,
         "session_rx": 0,
         "session_tx": 0,
@@ -1529,6 +1545,10 @@ def get_peer_runtime_summary() -> Dict[str, Any]:
             handshake_state = "disabled"
             handshake_badge = "secondary"
             totals["disabled_peers"] += 1
+        elif not telemetry_available:
+            handshake_state = "unknown"
+            handshake_badge = "warning"
+            totals["unknown_peers"] += 1
         elif traffic.last_handshake:
             handshake_state = "never"
             handshake_badge = "secondary"
@@ -1575,9 +1595,9 @@ def get_peer_runtime_summary() -> Dict[str, Any]:
             "session_rx": traffic.rx,
             "session_tx": traffic.tx,
             "session_total": total_traffic,
-            "session_rx_human": to_human_filesize(traffic.rx),
-            "session_tx_human": to_human_filesize(traffic.tx),
-            "session_total_human": to_human_filesize(total_traffic)
+            "session_rx_human": to_human_filesize(traffic.rx) if telemetry_available else "—",
+            "session_tx_human": to_human_filesize(traffic.tx) if telemetry_available else "—",
+            "session_total_human": to_human_filesize(total_traffic) if telemetry_available else "—"
         })
 
         if peer.enabled and peer.mode == Peer.MODE_SITE_TO_SITE and handshake_state in ("never", "offline", "stale"):
@@ -1612,13 +1632,23 @@ def get_peer_runtime_summary() -> Dict[str, Any]:
                 "message": f"{peer.name} transferred {to_human_filesize(total_traffic)} in this session."
             })
 
+    if not telemetry_available:
+        alerts.append({
+            "level": "warning",
+            "title": "Live peer telemetry unavailable",
+            "peer_uuid": None,
+            "peer_name": "",
+            "message": "Handshake and session traffic values cannot be determined right now."
+        })
+
     peer_rows.sort(key=lambda row: row["session_total"], reverse=True)
     alert_priority = {"danger": 0, "warning": 1, "info": 2}
     alerts.sort(key=lambda item: (alert_priority.get(item["level"], 3), item["peer_name"]))
     totals["session_total"] = totals["session_rx"] + totals["session_tx"]
-    totals["session_rx_human"] = to_human_filesize(totals["session_rx"])
-    totals["session_tx_human"] = to_human_filesize(totals["session_tx"])
-    totals["session_total_human"] = to_human_filesize(totals["session_total"])
+    totals["telemetry_available"] = telemetry_available
+    totals["session_rx_human"] = to_human_filesize(totals["session_rx"]) if telemetry_available else "—"
+    totals["session_tx_human"] = to_human_filesize(totals["session_tx"]) if telemetry_available else "—"
+    totals["session_total_human"] = to_human_filesize(totals["session_total"]) if telemetry_available else "—"
     totals["alerts"] = len(alerts)
     return {
         "totals": totals,
@@ -1633,7 +1663,11 @@ def get_peer_runtime_summary() -> Dict[str, Any]:
     }
 
 
-def calculate_peer_runtime_totals(rows: List[Dict[str, Any]], alerts: List[Dict[str, Any]]) -> Dict[str, Any]:
+def calculate_peer_runtime_totals(
+    rows: List[Dict[str, Any]],
+    alerts: List[Dict[str, Any]],
+    telemetry_available: bool = True,
+) -> Dict[str, Any]:
     totals = {
         "peers": len(rows),
         "site_to_site_peers": 0,
@@ -1643,6 +1677,7 @@ def calculate_peer_runtime_totals(rows: List[Dict[str, Any]], alerts: List[Dict[
         "stale_peers": 0,
         "offline_peers": 0,
         "never_seen_peers": 0,
+        "unknown_peers": 0,
         "high_traffic_peers": 0,
         "session_rx": 0,
         "session_tx": 0,
@@ -1660,6 +1695,8 @@ def calculate_peer_runtime_totals(rows: List[Dict[str, Any]], alerts: List[Dict[
             totals["stale_peers"] += 1
         elif row["handshake_state"] == "offline":
             totals["offline_peers"] += 1
+        elif row["handshake_state"] == "unknown":
+            totals["unknown_peers"] += 1
         else:
             totals["never_seen_peers"] += 1
         if row["high_traffic"]:
@@ -1667,9 +1704,10 @@ def calculate_peer_runtime_totals(rows: List[Dict[str, Any]], alerts: List[Dict[
         totals["session_rx"] += row["session_rx"]
         totals["session_tx"] += row["session_tx"]
     totals["session_total"] = totals["session_rx"] + totals["session_tx"]
-    totals["session_rx_human"] = to_human_filesize(totals["session_rx"])
-    totals["session_tx_human"] = to_human_filesize(totals["session_tx"])
-    totals["session_total_human"] = to_human_filesize(totals["session_total"])
+    totals["telemetry_available"] = telemetry_available
+    totals["session_rx_human"] = to_human_filesize(totals["session_rx"]) if telemetry_available else "—"
+    totals["session_tx_human"] = to_human_filesize(totals["session_tx"]) if telemetry_available else "—"
+    totals["session_total_human"] = to_human_filesize(totals["session_total"]) if telemetry_available else "—"
     totals["alerts"] = len(alerts)
     return totals
 
@@ -1688,10 +1726,12 @@ def filter_peer_runtime_for_current_user(runtime: Dict[str, Any]) -> Dict[str, A
         allowed_peer_ids = {row["peer_uuid"] for row in rows}
         for alert in runtime["alerts"]:
             peer_uuid = str(alert.get("peer_uuid", "") or "").strip()
-            if peer_uuid and peer_uuid in allowed_peer_ids:
+            if not peer_uuid or peer_uuid in allowed_peer_ids:
                 alerts.append(alert)
         return {
-            "totals": calculate_peer_runtime_totals(rows, alerts),
+            "totals": calculate_peer_runtime_totals(
+                rows, alerts, runtime["totals"].get("telemetry_available", True)
+            ),
             "rows": rows,
             "alerts": alerts,
             "thresholds": runtime["thresholds"]
@@ -1700,9 +1740,14 @@ def filter_peer_runtime_for_current_user(runtime: Dict[str, Any]) -> Dict[str, A
         return runtime
     client_name = current_user.name.lower()
     rows = [row for row in runtime["rows"] if row["peer_name"].lower() == client_name]
-    alerts = [alert for alert in runtime["alerts"] if alert["peer_name"].lower() == client_name]
+    alerts = [
+        alert for alert in runtime["alerts"]
+        if not alert.get("peer_uuid") or alert["peer_name"].lower() == client_name
+    ]
     return {
-        "totals": calculate_peer_runtime_totals(rows, alerts),
+        "totals": calculate_peer_runtime_totals(
+            rows, alerts, runtime["totals"].get("telemetry_available", True)
+        ),
         "rows": rows,
         "alerts": alerts,
         "thresholds": runtime["thresholds"]

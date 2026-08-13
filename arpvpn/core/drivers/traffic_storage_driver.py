@@ -25,6 +25,10 @@ class TrafficData:
         self.last_handshake = last_handshake
 
 
+class TrafficCollectionError(RuntimeError):
+    """Raised when live WireGuard telemetry cannot be collected safely."""
+
+
 class TrafficStorageDriver(YamlAble):
 
     DEFAULT_TIMESTAMP_FORMAT = "%d/%m/%Y %H:%M:%S"
@@ -45,26 +49,42 @@ class TrafficStorageDriver(YamlAble):
         :return: A dictionary containing traffic data of peers and interfaces, indexed by their names.
         """
         dct = {}
-        json_data = run_tool("wg-json").output
-        data = json.loads(json_data)
+        result = run_tool("wg-json")
+        if not result.successful:
+            raise TrafficCollectionError("Live WireGuard telemetry collection failed.")
+        try:
+            data = json.loads(result.output)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise TrafficCollectionError("Live WireGuard telemetry returned invalid JSON.") from exc
+        if not isinstance(data, dict):
+            raise TrafficCollectionError("Live WireGuard telemetry returned an invalid payload.")
         for iface in interfaces.values():
             if iface.name not in data:
                 continue
+            if not isinstance(data[iface.name], dict) or not isinstance(data[iface.name].get("peers"), dict):
+                raise TrafficCollectionError("Live WireGuard telemetry returned an invalid interface payload.")
             iface_rx = 0
             iface_tx = 0
             for peer in iface.peers.values():
                 if peer.public_key not in data[iface.name]["peers"]:
                     continue
                 peer_data = data[iface.name]["peers"][peer.public_key]
+                if not isinstance(peer_data, dict):
+                    raise TrafficCollectionError("Live WireGuard telemetry returned an invalid peer payload.")
                 peer_rx = 0
                 peer_tx = 0
-                if "transferRx" in peer_data:
-                    peer_tx = int(peer_data["transferRx"])
-                if "transferTx" in peer_data:
-                    peer_rx = int(peer_data["transferTx"])
-                last_handshake = None
-                if "latestHandshake" in peer_data:
-                    last_handshake = datetime.fromtimestamp(int(peer_data["latestHandshake"]))
+                try:
+                    if "transferRx" in peer_data:
+                        peer_tx = int(peer_data["transferRx"])
+                    if "transferTx" in peer_data:
+                        peer_rx = int(peer_data["transferTx"])
+                    last_handshake = None
+                    if "latestHandshake" in peer_data:
+                        last_handshake = datetime.fromtimestamp(int(peer_data["latestHandshake"]))
+                except (TypeError, ValueError, OverflowError, OSError) as exc:
+                    raise TrafficCollectionError(
+                        "Live WireGuard telemetry returned invalid peer counters."
+                    ) from exc
                 iface_tx += peer_rx
                 iface_rx += peer_tx
                 dct[peer.uuid] = TrafficData(peer_rx, peer_tx, last_handshake)
