@@ -142,6 +142,14 @@ sudo systemctl enable --now arpvpn.service
 Every other variable, including API rate limits and feature flags, is listed in the
 [installation guide](docs/source/installation.rst).
 
+## Updating
+
+From 3.1.0, administrators update Docker installs from **Settings > Updates**. The tab
+shows the newest GitHub release and its changelog and installs it with one click. A
+separate `arpvpn-updater` container does the rebuild, so the web container never gets
+Docker access, and a failed update rolls back on its own. See
+[Getting started](docs/source/usage.rst#updating-arpvpn).
+
 ## First Login
 
 1. Open the UI. A new install sends you to `/signup` to create the admin account. There is no default password.

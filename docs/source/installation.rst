@@ -231,12 +231,32 @@ The working directory is ``/var/www/arpvpn/data`` and the log is
 Upgrading
 ---------
 
-* **Stack Manager**: use the project's **Update** action. It rebuilds from GitHub and
-  recreates the container. Your ``DATA_FOLDER`` is kept.
-* **Docker Compose**: ``git pull`` in the checkout, then ``./up.sh`` again.
-* **systemd**: run the newer installer, then ``sudo systemctl restart arpvpn``.
+From 3.1.0, Docker installs (Stack Manager and Docker Compose) update from
+**Settings > Updates** inside ARPVPN. See :ref:`updating-arpvpn`. That needs the
+``arpvpn-updater`` service, which is part of the compose file from 3.1.0.
+
+To get to 3.1.0 the first time, or if you prefer to update by hand:
+
+* **Docker Compose**: ``git pull`` in the checkout, then ``./up.sh``. This also starts the
+  updater.
+* **Stack Manager**: replace the project's compose file with the current ARPVPN template
+  (it includes ``arpvpn-updater``) and redeploy with a rebuild. Stack Manager's plain
+  **Update** action pulls registry images and does not rebuild ARPVPN's locally built
+  image.
+* **systemd**: run the newer installer, then ``sudo systemctl restart arpvpn``. systemd
+  installs do not have the Updates tab installer and are always updated this way.
 
 Back up ``DATA_FOLDER`` before every upgrade.
+
+The updater container
+~~~~~~~~~~~~~~~~~~~~~
+
+``arpvpn-updater`` runs from the same image as ARPVPN and does the work behind the
+Updates tab. It mounts the Docker socket and ``DATA_FOLDER``, publishes no ports, runs
+with a read-only filesystem and only the ``DAC_OVERRIDE`` capability, and only acts on
+``vX.Y.Z`` release tags from the ARPVPN GitHub repository. The web container never gets
+Docker access. If you do not want in-app updates, remove the ``arpvpn-updater`` service
+from your compose file; the Updates tab will still show when a new release is out.
 
 Running more than one ARPVPN on a host
 --------------------------------------

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: ARPVPN API
-  version: 3.0.8
+  version: 3.1.0
   description: Generated OpenAPI document for the live ARPVPN API surface.
 servers:
 - url: /
@@ -1671,6 +1671,81 @@ paths:
                 format: arpvpn-backup-v1
                 files: {}
               dry_run: true
+  /api/v1/system/update:
+    post:
+      tags:
+      - System
+      operationId: api_system_update_start
+      summary: System update start
+      responses:
+        '202':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiSuccessEnvelope'
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorEnvelope'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorEnvelope'
+        '403':
+          description: Forbidden.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorEnvelope'
+      security:
+      - bearerAuth: []
+      - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/api_system_update_startRequest'
+            example:
+              tag: v3.1.0
+    get:
+      tags:
+      - System
+      operationId: api_system_update_status
+      summary: System update status
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiSuccessEnvelope'
+        '400':
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorEnvelope'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorEnvelope'
+        '403':
+          description: Forbidden.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorEnvelope'
+      security:
+      - bearerAuth: []
+      - cookieAuth: []
   /api/v1/system/version:
     get:
       tags:
@@ -4770,6 +4845,17 @@ components:
       example:
         backup: *id004
         dry_run: true
+    api_system_update_startRequest:
+      type: object
+      properties:
+        tag:
+          type: string
+          example: v3.1.0
+      additionalProperties: false
+      required:
+      - tag
+      example:
+        tag: v3.1.0
     api_tls_generate_self_signedRequest:
       type: object
       properties:

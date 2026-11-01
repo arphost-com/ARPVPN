@@ -208,6 +208,14 @@ class ArpvpnApiClient:
         path = "/api/v1/system/restore"
         return self._request("POST", path, params=params, payload=payload, headers=headers)
 
+    def system_update_status(self, payload: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None, headers: Optional[Dict[str, str]] = None) -> Any:
+        path = "/api/v1/system/update"
+        return self._request("GET", path, params=params, payload=payload, headers=headers)
+
+    def system_update_start(self, payload: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None, headers: Optional[Dict[str, str]] = None) -> Any:
+        path = "/api/v1/system/update"
+        return self._request("POST", path, params=params, payload=payload, headers=headers)
+
     def system_version(self, payload: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None, headers: Optional[Dict[str, str]] = None) -> Any:
         path = "/api/v1/system/version"
         return self._request("GET", path, params=params, payload=payload, headers=headers)

@@ -96,10 +96,34 @@ ARPVPN has four roles.
 Add users under **Users**, or send invitations. Turn on MFA for admin accounts in
 **Profile**.
 
+.. _updating-arpvpn:
+
+Updating ARPVPN
+---------------
+
+Open **Settings** and choose the **Updates** tab. It shows the installed version, the
+newest release on GitHub and what changed, and marks the tab **New** when an update is
+waiting. ARPVPN checks GitHub at most once an hour; **Check now** checks right away.
+
+Click **Install** to update. The updater container downloads that release from GitHub,
+builds a new image, and replaces the ARPVPN container. The build takes several minutes,
+and the page loses its connection for about a minute while ARPVPN restarts, then reloads
+on the new version. If the new version does not start cleanly, the previous container is
+put back automatically and the tab shows what went wrong.
+
+Your configuration, users, keys and traffic history live in ``DATA_FOLDER`` and are kept.
+Back that folder up before updating anyway. WireGuard tunnels drop briefly during the
+restart.
+
+Only administrators can see the Updates tab. On installs deployed by a pipeline, or
+without the updater container, the tab still shows whether a new release exists and
+explains how that install is updated instead.
+
 Day to day
 ----------
 
 * **Statistics** shows traffic history, graphs, and alerts. Data can be exported as CSV
   or JSON.
-* **Settings** holds TLS, login limits, traffic collection, and the **Restart app** button.
+* **Settings** holds TLS, login limits, traffic collection, the **Restart app** button, and
+  the **Updates** tab.
 * The REST API lives under ``/api/v1``. See :doc:`api`.

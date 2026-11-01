@@ -174,6 +174,25 @@ VPN clients connect but nothing works
 **Pages load slowly or time out on big uploads through the tunnel.** Usually MTU. Try
 ``MTU = 1380`` in the client config.
 
+Updates tab problems
+--------------------
+
+**"The ARPVPN updater container is not running".** The stack has no ``arpvpn-updater``
+service, or it stopped. Check with ``docker ps --filter name=updater``. Installs made
+before 3.1.0 need the updated compose file once; see the upgrading steps in
+:doc:`installation`.
+
+**"Unable to check GitHub for updates".** The server cannot reach ``github.com`` over
+HTTPS. ARPVPN still works; only the check fails.
+
+**"This install runs a registry image".** The install was deployed from a container
+registry by a pipeline. Update it through that pipeline.
+
+**The update failed.** The progress log on the tab shows the step that failed. The full
+log is ``<DATA_FOLDER>/.updater/update.log`` and ``docker logs arpvpn-updater`` shows the
+same. A failed build changes nothing. A new version that does not become healthy is
+rolled back automatically, and the tab says so.
+
 Getting help
 ------------
 
