@@ -15,7 +15,8 @@ Key features
 * Encrypted user credentials (AES).
 * Optional account MFA with TOTP and recovery codes, configured in Profile for web login.
 * Role-based account controls and TLS management.
-* Easy management through the ``arpvpn`` systemd service.
+* Web access over HTTP or HTTPS, with self-signed, Let's Encrypt, or reverse proxy TLS.
+* Runs under Docker (including ARPHost Stack Manager) or as the ``arpvpn`` systemd service.
 
 Contents
 --------
@@ -24,6 +25,8 @@ Contents
     :maxdepth: 2
 
     installation
+    usage
+    troubleshooting
     gitlab-deployment
     in-depth
     api
