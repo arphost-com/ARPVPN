@@ -1,8 +1,8 @@
 ARPVPN
 ======
 
-.. image:: https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue?logo=python&logoColor=yellow
-    :alt: Supported python versions: 3.10, 3.11, 3.12
+.. image:: https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue?logo=python&logoColor=yellow
+    :alt: Supported python versions: 3.11, 3.12, 3.13, 3.14
 
 ARPVPN is a self-hosted WireGuard management panel with web and API controls.
 

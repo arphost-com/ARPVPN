@@ -6,6 +6,17 @@ All notable changes to this project will be documented here.
 .. note::
     ARPVPN is adhered to `Semantic Versioning <https://semver.org/>`__.
 
+3.0.8
+-----
+
+* Updated Pillow to 13.0.0, certifi to 2026.10.23, urllib3 to 2.8.0 and
+  Werkzeug to 3.1.9 to clear critical and high advisories reported by the
+  repository vulnerability gate. Pillow 13 requires Python 3.11, so the supported Python floor moves from
+  3.10 to 3.11. The container image already runs Python 3.14.
+* Rewrote the installation guide with Stack Manager, Docker Compose and systemd
+  paths, a ports table and host firewall steps, and added Getting started and
+  Troubleshooting guides. The README install section now links to them.
+
 3.0.7
 -----
 
