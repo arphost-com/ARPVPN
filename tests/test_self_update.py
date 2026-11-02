@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import os
@@ -195,8 +196,9 @@ class FakeOpener:
 
 
 class FakeDocker:
-    def __init__(self, healthy=True, image="arpvpn:local"):
+    def __init__(self, healthy=True, image="arpvpn:local", build_error=False):
         self.healthy = healthy
+        self.build_error = build_error
         self.calls = []
         self.containers = {
             "arpvpn": {
@@ -224,8 +226,12 @@ class FakeDocker:
         self.calls.append(("build", tag, dockerfile, dict(buildargs)))
         with tarfile.open(context) as archive:
             self.context_names = archive.getnames()
-        yield {"stream": "Step 1/1 : FROM scratch"}
-        yield {"stream": "Successfully built abc"}
+        trace = base64.b64encode(b"\x12\x26[1/2] FROM docker.io/library/python:3.14\x00\x10[2/2] RUN install.sh").decode()
+        yield {"id": "moby.buildkit.trace", "aux": trace}
+        if self.build_error:
+            yield {"error": "process did not complete successfully", "errorDetail": {"message": "process did not complete successfully"}}
+            return
+        yield {"id": "moby.image.id", "aux": {"ID": "sha256:new"}}
 
     def stop_container(self, name, timeout_seconds=30):
         self.calls.append(("stop", name))
@@ -374,3 +380,15 @@ def test_docker_client_uses_daemon_api_version(tmp_path):
     thread.join(5)
     server.close()
     assert seen == ["/version", "/v1.56/containers/arpvpn/json"]
+
+
+def test_build_failure_leaves_running_container_untouched(tmp_path):
+    docker = FakeDocker(build_error=True)
+    updater = make_updater(tmp_path, docker)
+    queue(tmp_path)
+    assert updater.run_request(updater.take_request()) is False
+    assert not any(call[0] in ("stop", "rename", "create") for call in docker.calls)
+    log = (tmp_path / ".updater" / "update.log").read_text()
+    assert "[1/2] FROM docker.io/library/python:3.14" in log
+    assert "[2/2] RUN install.sh" in log
+    assert "Image build failed" in log

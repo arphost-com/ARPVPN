@@ -6,6 +6,7 @@ file naming a release tag; everything else (repository, image name, container
 to replace) comes from this container's own environment.
 """
 
+import base64
 import io
 import json
 import os
@@ -20,6 +21,7 @@ from typing import Any, Callable, Dict, List, Optional
 from arpvpn.updater.docker_api import DockerClient, DockerError
 
 RELEASE_TAG_PATTERN = re.compile(r"^v\d+\.\d+\.\d+$")
+BUILDKIT_STEP_PATTERN = re.compile(rb"\[\s*\d+/\d+\][ -~]{3,200}")
 DEFAULT_REPOSITORY = "arphost-com/ARPVPN"
 TARBALL_URL = "https://codeload.github.com/{repo}/tar.gz/refs/tags/{tag}"
 DOCKERFILE = "docker/Dockerfile"
@@ -209,20 +211,37 @@ class Updater:
             if DOCKERFILE not in check.getnames():
                 raise UpdateFailed(f"Release archive does not contain {DOCKERFILE}.")
 
+    @staticmethod
+    def buildkit_steps(message: Dict[str, Any]) -> List[str]:
+        """Pull human-readable step names ("[3/21] RUN ...") out of a BuildKit trace message."""
+        if message.get("id") != "moby.buildkit.trace" or not isinstance(message.get("aux"), str):
+            return []
+        try:
+            raw = base64.b64decode(message["aux"])
+        except (ValueError, TypeError):
+            return []
+        return [match.decode("ascii", errors="replace").strip() for match in BUILDKIT_STEP_PATTERN.findall(raw)]
+
     def build(self, context_path: str, image: str):
         self.log(f"Building image {image}. This takes several minutes.")
-        last_lines: List[str] = []
+        seen_steps: List[str] = []
+        built = False
         for message in self.docker.build_image(context_path, image, DOCKERFILE, self.buildargs):
             if message.get("error"):
-                detail = message.get("errorDetail", {}).get("message") or message["error"]
-                for line in last_lines[-10:]:
-                    self.log(f"  {line}")
-                raise UpdateFailed(f"Image build failed: {detail.strip()}")
+                detail = (message.get("errorDetail") or {}).get("message") or message["error"]
+                raise UpdateFailed(f"Image build failed: {str(detail).strip()}")
+            for step in self.buildkit_steps(message):
+                if step not in seen_steps:
+                    seen_steps.append(step)
+                    self.log(f"  {step[:160]}")
+            if message.get("id") == "moby.image.id":
+                built = True
             text = str(message.get("stream", "")).strip()
-            if text:
-                last_lines.append(text)
-                if text.startswith("Step ") or text.startswith("Successfully"):
-                    self.log(f"  {text}")
+            if text.startswith("Step ") or text.startswith("Successfully"):
+                self.log(f"  {text}")
+                built = built or text.startswith("Successfully")
+        if not built:
+            raise UpdateFailed("Image build ended without producing an image.")
         self.log("Image build finished.")
 
     @staticmethod

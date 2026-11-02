@@ -138,13 +138,16 @@ class DockerClient:
     def build_image(self, context_tar_path: str, tag: str, dockerfile: str,
                     buildargs: Dict[str, str], timeout: float = 3600.0) -> Iterator[Dict[str, Any]]:
         """Build an image from a tar context, yielding the daemon's JSON progress messages."""
+        # version=2 selects BuildKit, which the ARPVPN Dockerfile needs (COPY
+        # --chmod) and which works with an uploaded tar context without a client
+        # session. The classic builder is deprecated in current Docker releases.
         query = {
             "t": tag,
             "dockerfile": dockerfile,
             "buildargs": json.dumps(buildargs),
             "rm": "1",
-            "forcerm": "1",
             "pull": "1",
+            "version": "2",
         }
         with open(context_tar_path, "rb") as handle:
             data = handle.read()
