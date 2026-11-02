@@ -1,8 +1,8 @@
 ARPVPN
 ======
 
-.. image:: https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue?logo=python&logoColor=yellow
-    :alt: Supported python versions: 3.10, 3.11, 3.12
+.. image:: https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue?logo=python&logoColor=yellow
+    :alt: Supported python versions: 3.11, 3.12, 3.13, 3.14
 
 ARPVPN is a self-hosted WireGuard management panel with web and API controls.
 
@@ -15,7 +15,8 @@ Key features
 * Encrypted user credentials (AES).
 * Optional account MFA with TOTP and recovery codes, configured in Profile for web login.
 * Role-based account controls and TLS management.
-* Easy management through the ``arpvpn`` systemd service.
+* Web access over HTTP or HTTPS, with self-signed, Let's Encrypt, or reverse proxy TLS.
+* Runs under Docker (including ARPHost Stack Manager) or as the ``arpvpn`` systemd service.
 
 Contents
 --------
@@ -24,6 +25,8 @@ Contents
     :maxdepth: 2
 
     installation
+    usage
+    troubleshooting
     gitlab-deployment
     in-depth
     api

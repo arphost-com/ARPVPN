@@ -77,83 +77,94 @@ Reference baseline from Linguard upstream:
 - Generated Python SDK artifact: `sdk/python`.
 - API feature-flag toggles via environment variables (auth/system/stats/tls/config/tenants/wireguard groups).
 
-## Quick Start (Docker, Recommended)
+## Install
 
-Prerequisites:
-- Linux host with WireGuard support and Docker + Docker Compose.
-- Ability to run containers with `NET_ADMIN`/`NET_RAW` capabilities.
+Full guides live in `docs/source/`:
+[Installation](docs/source/installation.rst),
+[Getting started](docs/source/usage.rst), and
+[Troubleshooting](docs/source/troubleshooting.rst).
 
-1. Enter the docker folder and copy env template.
+### Before you start: open the firewall
+
+ARPVPN uses **host networking**, so Docker does not open any firewall ports for it.
+Open these on the host firewall (UFW, CSF, firewalld, or your control panel's firewall) and any provider firewall.
+
+| Port | Protocol | Used for |
+| --- | --- | --- |
+| 8085 | TCP | Web UI over HTTP |
+| 8086 | TCP | Web UI over HTTPS, once enabled in setup and the app is restarted |
+| Interface listen port (random 50000+) | UDP | WireGuard clients, one per interface |
 
 ```bash
-cd docker
-cp .env.example .env
+sudo ufw allow 8085/tcp
+sudo ufw allow 8086/tcp
+sudo ufw allow <wireguard-port>/udp
 ```
 
-2. Build and run.
+In Stack Manager with CSF, add them under **Settings > Firewall**. The project's **Open Ports (CSF)** button cannot see them
+because ARPVPN publishes no Docker ports.
+
+### Option 1. Stack Manager
+
+1. Catalog > **Security, Identity & VPN** > **ARPVPN** > Deploy. Defaults are fine.
+2. Wait for the first build to finish. It compiles WireGuard tools and takes a few minutes.
+3. Open the firewall ports above.
+4. Browse to `http://<server-ip>:8085`.
+
+### Option 2. Docker Compose
 
 ```bash
-./up.sh up -d --build --force-recreate arpvpn
+git clone https://github.com/arphost-com/ARPVPN.git
+cd ARPVPN/docker
+cp .env.example .env      # adjust ports or DATA_FOLDER if needed
+./up.sh                   # builds and starts; first build takes a few minutes
+docker ps --filter name=arpvpn   # wait for "healthy"
 ```
 
-3. Open the UI.
+Then open the firewall ports and browse to `http://<server-ip>:8085`. `up.sh` creates `DATA_FOLDER` with the right owner. If you run
+`docker compose` yourself, run `sudo chown -R 1000:1000 <DATA_FOLDER>` first.
 
-- `http://<server-ip>:8085`
-- `https://<server-ip>:8086`
-
-4. If your mounted data path is not writable by your user, fix ownership once.
+### Option 3. systemd
 
 ```bash
-sudo chown -R "$(id -u):$(id -g)" ./data
-```
-
-Important Docker `.env` values:
-- `ARPVPN_IMAGE`: image/tag to run; default local build is `arpvpn:local`.
-- `ARPVPN_UID` / `ARPVPN_GID`: UID/GID created for the image's `arpvpn` user; defaults are `1000:1000`, but set these to match the owner of `DATA_FOLDER` on your host when needed.
-- `ARPVPN_RUNTIME_USER`: container runtime user; keep `arpvpn` unless you built a matching custom user/sudo policy.
-- `WIREGUARD_TOOLS_VERSION` / `WIREGUARD_TOOLS_SHA256`: Docker build inputs for the upstream WireGuard Tools release compiled into the image; defaults track the current verified upstream release used by this repo.
-- `ARPVPN_CONTAINER_NAME`: container name and default cookie namespace source.
-- `ARPVPN_COOKIE_SUFFIX`: optional explicit cookie namespace suffix; if unset, ARPVPN uses `ARPVPN_CONTAINER_NAME`, then Docker Compose's `COMPOSE_PROJECT_NAME`, then `arpvpn`.
-- `ARPVPN_SESSION_COOKIE_NAME` / `ARPVPN_REMEMBER_COOKIE_NAME`: optional explicit cookie names for side-by-side installs.
-- `ARPVPN_HTTP_PORT` / `ARPVPN_HTTPS_PORT`: host-network listener ports, default `8085` and `8086`.
-- `ARPVPN_SECURE_COOKIES`: `0` for mixed HTTP/HTTPS access, `1` for strict HTTPS-only cookie behavior.
-- `DATA_FOLDER`: host path mounted to `/data`.
-
-The `docker/up.sh` wrapper reads `docker/.env` by default. Set `ENV_FILE=/path/to/envfile` when you want the wrapper and Compose to use a different env file.
-
-Optional runtime tuning env variables:
-- `ARPVPN_HIGH_TRAFFIC_THRESHOLD_MB`: peer traffic alert threshold, default `1024`.
-- `ARPVPN_RRD_GRAPH_CACHE_TTL_SECONDS`: RRD graph cache TTL, default `10800`.
-- `ARPVPN_LOG_DIAGNOSTICS_CACHE_TTL_SECONDS` / `ARPVPN_LOG_DIAGNOSTICS_READ_BLOCK_BYTES`: log diagnostic cache/read sizing.
-- `ARPVPN_API_ACCESS_TTL_SECONDS` / `ARPVPN_API_REFRESH_TTL_SECONDS`: API token lifetimes.
-- `ARPVPN_API_AUTH_WINDOW_SECONDS` / `ARPVPN_API_AUTH_MAX_ATTEMPTS` / `ARPVPN_API_AUTH_LOCKOUT_SECONDS`: API auth rate/lockout controls.
-- `ARPVPN_API_RATE_LIMIT_WINDOW_SECONDS` / `ARPVPN_API_RATE_LIMIT_MAX_REQUESTS`: general API rate limit controls.
-- `ARPVPN_FEATURE_API_AUTH`, `ARPVPN_FEATURE_API_STATS`, `ARPVPN_FEATURE_API_SYSTEM`, `ARPVPN_FEATURE_API_TLS`, `ARPVPN_FEATURE_API_CONFIG`, `ARPVPN_FEATURE_API_TENANTS`, `ARPVPN_FEATURE_API_WIREGUARD`: set to `0`/`false` to disable an API group.
-- `ARPVPN_AUDIT_SIGNING_KEY`: optional audit event signing key override.
-- `ARPVPN_TENANT_RUNTIME_PORT_STRIDE`, `ARPVPN_TENANT_RUNTIME_HTTP_BASE`, `ARPVPN_TENANT_RUNTIME_HTTPS_BASE`, `ARPVPN_TENANT_RUNTIME_VPN_BASE`: tenant runtime port allocation controls.
-- `ARPVPN_REPOSITORY_URL` / `ARPVPN_LICENSE_URL`: optional links shown in app metadata/templates.
-
-## Systemd Install
-
-If you deploy from source checkout:
-
-```bash
-chmod +x scripts/install.sh
 sudo ./scripts/install.sh
-sudo systemctl start arpvpn.service
-sudo systemctl enable arpvpn.service
+sudo systemctl enable --now arpvpn.service
 ```
 
-If you deploy from a release tarball built by `build.sh`, the installer is copied as `install.sh` at the release root.
+### Main `.env` settings
 
-## First-Time Admin Workflow
+- `ARPVPN_HTTP_PORT` / `ARPVPN_HTTPS_PORT`: web ports, default `8085` and `8086`.
+- `DATA_FOLDER`: host folder for config, users, keys and logs. Back it up.
+- `ARPVPN_CONTAINER_NAME`: make it unique when running more than one ARPVPN per host.
+- `ARPVPN_SECURE_COOKIES`: `0` allows HTTP and HTTPS logins, `1` is HTTPS only.
+- `ARPVPN_IMAGE`, `ARPVPN_UID`, `ARPVPN_GID`, `ARPVPN_RUNTIME_USER`: leave at defaults unless you know you need them.
 
-1. Open `/signup` and create the first admin account.
-2. Complete `/setup` and verify endpoint/TLS choices.
-3. Create a WireGuard interface.
-4. Add client peers or site-to-site peers.
-5. Download peer configs and import on client devices.
-6. Validate handshake/traffic health in `/dashboard`, `/wireguard`, and `/statistics`.
+Every other variable, including API rate limits and feature flags, is listed in the
+[installation guide](docs/source/installation.rst).
+
+## First Login
+
+1. Open the UI. A new install sends you to `/signup` to create the admin account. There is no default password.
+2. On `/setup`, check the **Endpoint** (the public IP or hostname VPN clients connect to) and pick a TLS mode. HTTPS on 8086 starts after **Settings > Restart app** or a container restart.
+3. On **WireGuard**, create an interface. Set **Gateway** to the host's internet-facing NIC and open its UDP listen port in the firewall.
+4. Add peers, then download the config or scan the QR code in the WireGuard app.
+5. A recent handshake on the dashboard means the client is connected.
+
+See [Getting started](docs/source/usage.rst) for the details.
+
+## Can't Reach the Web UI?
+
+Run these on the server.
+
+```bash
+docker ps --filter name=arpvpn           # running and healthy?
+docker logs --tail 50 arpvpn             # startup errors
+curl -sI http://127.0.0.1:8085 | head -1 # answers locally?
+```
+
+If it answers locally but not from outside, a firewall is blocking the port. A connection
+that times out (rather than being refused) points the same way. Open 8085/8086 as shown
+above. More symptoms and fixes are in [Troubleshooting](docs/source/troubleshooting.rst).
 
 ## API Usage Notes
 
