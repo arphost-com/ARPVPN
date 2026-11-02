@@ -81,22 +81,42 @@ class Updater:
             pass
 
     # State files -------------------------------------------------------------
+    def _prepare_new_file(self, path: str):
+        """Make a file the updater just created readable by the web app and owned by the data folder's owner.
+
+        Only ever applied to files this process created: once a file belongs to
+        the data folder's owner, root without CAP_FOWNER may write it but not
+        chmod it, and that must never crash the updater.
+        """
+        try:
+            os.chmod(path, 0o644)
+        except OSError:
+            pass
+        self._own(path)
+
     def _write_json(self, filename: str, data: Dict[str, Any]):
         path = os.path.join(self.state_dir, filename)
         temp_path = f"{path}.tmp"
+        try:
+            os.remove(temp_path)
+        except OSError:
+            pass
         with open(temp_path, "w", encoding="utf-8") as handle:
             json.dump(data, handle)
-        os.chmod(temp_path, 0o644)
-        self._own(temp_path)
+        self._prepare_new_file(temp_path)
         os.replace(temp_path, path)
 
     def log(self, message: str):
         line = f"[{utc_now()}] {message}\n"
         path = os.path.join(self.state_dir, "update.log")
-        with open(path, "a", encoding="utf-8") as handle:
-            handle.write(line)
-        os.chmod(path, 0o644)
-        self._own(path)
+        created = not os.path.exists(path)
+        try:
+            with open(path, "a", encoding="utf-8") as handle:
+                handle.write(line)
+            if created:
+                self._prepare_new_file(path)
+        except OSError as exc:
+            print(f"unable to write update log: {exc}", flush=True)
         print(line, end="", flush=True)
 
     def set_status(self, **fields):
@@ -159,7 +179,10 @@ class Updater:
         }
         self._write_json("status.json", self.status)
         log_path = os.path.join(self.state_dir, "update.log")
-        with open(log_path, "w", encoding="utf-8"):
+        try:
+            with open(log_path, "w", encoding="utf-8"):
+                pass
+        except OSError:
             pass
         try:
             if not RELEASE_TAG_PATTERN.match(tag):

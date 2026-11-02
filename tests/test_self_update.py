@@ -416,3 +416,20 @@ def test_buildkit_step_names_are_normalised():
     trace = base64.b64encode(b"\x10[2/9] RUN apt-get update\x00\x11[2/9] RUN apt-get update*").decode()
     assert Updater.buildkit_steps({"id": "moby.buildkit.trace", "aux": trace}) == [
         "[2/9] RUN apt-get update", "[2/9] RUN apt-get update"]
+
+
+def test_updater_survives_files_it_can_no_longer_chmod(tmp_path, monkeypatch):
+    """Regression for docker02: chmod on a log already owned by the data folder's owner raised EPERM."""
+    updater = make_updater(tmp_path, FakeDocker())
+    updater.log("first line")
+    real_chmod = os.chmod
+
+    def chmod_denied_on_existing(path, mode):
+        if os.path.exists(path) and not str(path).endswith(".tmp"):
+            raise PermissionError(1, "Operation not permitted")
+        return real_chmod(path, mode)
+
+    monkeypatch.setattr(os, "chmod", chmod_denied_on_existing)
+    queue(tmp_path)
+    assert updater.run_request(updater.take_request()) is True
+    assert "Update finished." in (tmp_path / ".updater" / "update.log").read_text()
