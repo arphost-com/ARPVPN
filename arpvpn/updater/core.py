@@ -62,7 +62,22 @@ class Updater:
         self.tarball_url = tarball_url or TARBALL_URL
         self.opener = opener
         self.sleep = sleep
+        try:
+            stat = os.stat(data_dir)
+            self.owner = (stat.st_uid, stat.st_gid)
+        except OSError:
+            self.owner = None
         os.makedirs(self.state_dir, mode=0o755, exist_ok=True)
+        self._own(self.state_dir)
+
+    def _own(self, path: str):
+        """Give updater files to the data folder's owner so the host user can manage them."""
+        if self.owner is None:
+            return
+        try:
+            os.chown(path, *self.owner)
+        except OSError:
+            pass
 
     # State files -------------------------------------------------------------
     def _write_json(self, filename: str, data: Dict[str, Any]):
@@ -71,6 +86,7 @@ class Updater:
         with open(temp_path, "w", encoding="utf-8") as handle:
             json.dump(data, handle)
         os.chmod(temp_path, 0o644)
+        self._own(temp_path)
         os.replace(temp_path, path)
 
     def log(self, message: str):
@@ -79,6 +95,7 @@ class Updater:
         with open(path, "a", encoding="utf-8") as handle:
             handle.write(line)
         os.chmod(path, 0o644)
+        self._own(path)
         print(line, end="", flush=True)
 
     def set_status(self, **fields):
@@ -220,7 +237,14 @@ class Updater:
             raw = base64.b64decode(message["aux"])
         except (ValueError, TypeError):
             return []
-        return [match.decode("ascii", errors="replace").strip() for match in BUILDKIT_STEP_PATTERN.findall(raw)]
+        steps = []
+        for match in BUILDKIT_STEP_PATTERN.findall(raw):
+            # BuildKit repeats a vertex when it completes, sometimes with a
+            # trailing marker byte; normalise so each step is logged once.
+            step = match.decode("ascii", errors="replace").strip().rstrip("*").strip()
+            if step:
+                steps.append(step)
+        return steps
 
     def build(self, context_path: str, image: str):
         self.log(f"Building image {image}. This takes several minutes.")

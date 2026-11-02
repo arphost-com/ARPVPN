@@ -253,7 +253,8 @@ The updater container
 
 ``arpvpn-updater`` runs from the same image as ARPVPN and does the work behind the
 Updates tab. It mounts the Docker socket and ``DATA_FOLDER``, publishes no ports, runs
-with a read-only filesystem and only the ``DAC_OVERRIDE`` capability, and only acts on
+with a read-only filesystem and only the ``DAC_OVERRIDE`` and ``CHOWN``
+capabilities (to manage its files in ``DATA_FOLDER``), and only acts on
 ``vX.Y.Z`` release tags from the ARPVPN GitHub repository. The web container never gets
 Docker access. If you do not want in-app updates, remove the ``arpvpn-updater`` service
 from your compose file; the Updates tab will still show when a new release is out.

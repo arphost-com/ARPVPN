@@ -392,3 +392,9 @@ def test_build_failure_leaves_running_container_untouched(tmp_path):
     assert "[1/2] FROM docker.io/library/python:3.14" in log
     assert "[2/2] RUN install.sh" in log
     assert "Image build failed" in log
+
+
+def test_buildkit_step_names_are_normalised():
+    trace = base64.b64encode(b"\x10[2/9] RUN apt-get update\x00\x11[2/9] RUN apt-get update*").decode()
+    assert Updater.buildkit_steps({"id": "moby.buildkit.trace", "aux": trace}) == [
+        "[2/9] RUN apt-get update", "[2/9] RUN apt-get update"]

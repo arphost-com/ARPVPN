@@ -126,6 +126,7 @@ services:
       - ALL
     cap_add:
       - DAC_OVERRIDE
+      - CHOWN
     security_opt:
       - no-new-privileges:true
     healthcheck:
