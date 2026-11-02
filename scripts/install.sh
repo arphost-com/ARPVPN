@@ -55,7 +55,11 @@ install_wireguard_tools_from_source() {
     source_url="https://git.zx2c4.com/wireguard-tools/snapshot/wireguard-tools-$version.tar.xz"
 
     debug "Downloading WireGuard Tools $version from $source_url..."
-    curl -fsSL "$source_url" -o "$tarball"
+    if ! curl -fsSL --retry 3 --retry-delay 5 "$source_url" -o "$tarball"; then
+        rm -rf "$tmp_dir"
+        fatal "Unable to download WireGuard Tools $version from $source_url. The download host may be temporarily down; try again later."
+        exit 1
+    fi
     actual_sha256="$(sha256sum "$tarball" | awk '{print $1}')"
     if [[ "$actual_sha256" != "$expected_sha256" ]]; then
         rm -rf "$tmp_dir"

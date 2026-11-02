@@ -6,6 +6,24 @@ All notable changes to this project will be documented here.
 .. note::
     ARPVPN is adhered to `Semantic Versioning <https://semver.org/>`__.
 
+3.1.0
+-----
+
+* Added an Updates tab to Settings. It shows the installed version, the newest
+  ARPVPN release on GitHub and that release's changelog, and lets an
+  administrator install it with one click.
+* Added the ``arpvpn-updater`` container to the Docker Compose stack. It holds
+  the Docker socket so the web container never does, publishes no ports, drops
+  all capabilities except file access to the data folder, and only acts on
+  release tags from the ARPVPN GitHub repository. It rebuilds the image from the
+  tagged source, replaces the ARPVPN container, and restores the previous
+  container automatically if the new one does not become healthy.
+* Installs that run a registry image from a deployment pipeline report that
+  they are pipeline managed and cannot be updated from the tab.
+* The GitHub publication job now also pushes a ``vX.Y.Z`` release tag, which
+  is what the Updates tab offers.
+* Added ``GET`` and ``POST /api/v1/system/update`` for administrators.
+
 3.0.8
 -----
 

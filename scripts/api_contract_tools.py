@@ -159,6 +159,7 @@ _RESPONSE_STATUS_OVERRIDES = {
     "api_create_wireguard_peer": HTTPStatus.CREATED,
     "api_accept_invitation": HTTPStatus.CREATED,
     "api_system_restart": HTTPStatus.ACCEPTED,
+    "api_system_update_start": HTTPStatus.ACCEPTED,
 }
 
 

@@ -544,6 +544,9 @@ API_REQUEST_SCHEMAS: Dict[str, ApiRequestSchema] = {
         "mode": string_field(example="auto"),
         "delay_seconds": integer_field(example=1),
     }),
+    "api_system_update_start": ApiRequestSchema(fields={
+        "tag": string_field(required=True, example="v3.1.0"),
+    }),
     "api_setup_bootstrap": ApiRequestSchema(fields={
         "log_overwrite": boolean_field(example=False),
         "traffic_enabled": boolean_field(example=True),

@@ -46,6 +46,7 @@ from arpvpn.core.drivers.traffic_storage_driver import TrafficCollectionError, T
 from arpvpn.core.exceptions import WireguardError
 from arpvpn.core.managers.config import config_manager
 from arpvpn.core.managers.tls import tls_manager
+from arpvpn.core.managers.updates import update_manager, UpdateError
 # Ensure scheduled traffic collection jobs are registered on router import,
 # even when the settings/forms modules are never loaded during this process.
 from arpvpn.core.managers import traffic_storage as _traffic_storage  # noqa: F401
@@ -6265,6 +6266,33 @@ def api_system_restart():
     response_payload = request_process_restart(reason, requested_mode=requested_mode, delay_seconds=delay_seconds)
     log_audit_event("system.restart.request", details=response_payload)
     return api_success(response_payload, status_code=ACCEPTED)
+
+
+@router.route("/api/v1/system/update", methods=["GET"])
+@login_required
+@role_required(User.ROLE_ADMIN)
+@setup_required
+def api_system_update_status():
+    refresh = str(request.args.get("refresh", "")).strip().lower() in ("1", "true", "yes")
+    return api_success(update_manager.status(force_check=refresh))
+
+
+@router.route("/api/v1/system/update", methods=["POST"])
+@login_required
+@role_required(User.ROLE_ADMIN)
+@setup_required
+def api_system_update_start():
+    payload = parse_json_payload()
+    tag = parse_optional_string(payload.get("tag")) or ""
+    actor = current_actor()
+    requested_by = getattr(actor, "name", "") or getattr(actor, "id", "") or "unknown"
+    try:
+        update_request = update_manager.request_update(tag, requested_by=str(requested_by))
+    except UpdateError as exc:
+        log_audit_event("system.update.request", status="denied", details={"tag": tag[:32], "reason": str(exc)})
+        return api_error(CONFLICT, "update_refused", str(exc))
+    log_audit_event("system.update.request", details={"tag": update_request["tag"], "request_id": update_request["id"]})
+    return api_success(update_request, status_code=ACCEPTED)
 
 
 @router.route("/api/v1/audit/events", methods=["GET"])

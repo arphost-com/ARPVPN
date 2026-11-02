@@ -44,6 +44,23 @@
                 </div>
             {% endif %}
             </div>
+            <ul class="nav nav-tabs mb-4" id="settingsTabs" role="tablist">
+                <li class="nav-item">
+                    <a class="nav-link active" id="general-tab" data-toggle="tab" href="#settings-general"
+                       role="tab" aria-controls="settings-general" aria-selected="true">
+                        <i class="fas fa-cog mr-1"></i>General
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" id="updates-tab" data-toggle="tab" href="#settings-updates"
+                       role="tab" aria-controls="settings-updates" aria-selected="false">
+                        <i class="fas fa-cloud-download-alt mr-1"></i>Updates
+                        <span class="badge badge-warning ml-1" id="updateBadge" hidden>New</span>
+                    </a>
+                </li>
+            </ul>
+            <div class="tab-content">
+            <div class="tab-pane fade show active" id="settings-general" role="tabpanel" aria-labelledby="general-tab">
             <form action="{{ request.url }}" method="post" novalidate>
                 {{ form.hidden_tag() }}
 
@@ -400,6 +417,45 @@
                 </div>
                 <br>
             </form>
+            </div>
+            <div class="tab-pane fade" id="settings-updates" role="tabpanel" aria-labelledby="updates-tab">
+                {% if current_user_role == "admin" %}
+                <div class="card mb-4" id="updatePanel" data-endpoint="/api/v1/system/update">
+                    <div class="card-header d-flex flex-wrap align-items-center justify-content-between">
+                        <span><i class="fas fa-cloud-download-alt mr-1"></i>ARPVPN updates</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="updateCheckButton">
+                            <i class="fas fa-sync-alt mr-1"></i>Check now
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <dl class="row mb-3">
+                            <dt class="col-sm-4 col-lg-3">Installed version</dt>
+                            <dd class="col-sm-8 col-lg-9" id="updateCurrent">&hellip;</dd>
+                            <dt class="col-sm-4 col-lg-3">Newest release</dt>
+                            <dd class="col-sm-8 col-lg-9" id="updateLatest">&hellip;</dd>
+                            <dt class="col-sm-4 col-lg-3">Last checked</dt>
+                            <dd class="col-sm-8 col-lg-9" id="updateChecked">&hellip;</dd>
+                        </dl>
+                        <div id="updateMessage" class="alert mb-3" role="status" hidden></div>
+                        <div id="updateChangesWrap" hidden>
+                            <h6>What's new</h6>
+                            <div id="updateChanges" class="mb-3"></div>
+                        </div>
+                        <button type="button" class="btn btn-warning" id="updateInstallButton" hidden>
+                            <i class="fas fa-download mr-1"></i><span id="updateInstallLabel">Install update</span>
+                        </button>
+                        <div id="updateProgressWrap" class="mt-3" hidden>
+                            <h6>Progress <small class="text-muted" id="updateStep"></small></h6>
+                            <pre id="updateLog" class="border rounded p-2 small mb-0"
+                                 style="max-height: 320px; overflow-y: auto; white-space: pre-wrap;"></pre>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="alert alert-info">Only administrators can view and install ARPVPN updates.</div>
+                {% endif %}
+            </div>
+            </div>
         </div>
     </main>
 {% endblock %}

@@ -46,6 +46,7 @@ These are valid APIs, but they are RPC/action endpoints rather than strict REST 
 - `/api/v1/tls/letsencrypt`
 - `/api/v1/system/restore`
 - `/api/v1/system/restart`
+- `/api/v1/system/update`
 
 ### Read/report APIs
 
@@ -143,6 +144,8 @@ Implemented:
 - `GET /api/v1/setup/status`
 - `POST /api/v1/setup/bootstrap`
 - `POST /api/v1/system/restart`
+- `GET /api/v1/system/update`
+- `POST /api/v1/system/update`
 - `POST /api/v1/system/restore`
 
 Status:
