@@ -113,6 +113,9 @@ class DockerClient:
         created = self._call("POST", "/containers/create", query={"name": name}, body=spec)
         return created["Id"]
 
+    def tag_image(self, ref: str, repository: str, tag: str):
+        self._call("POST", f"/images/{quote(ref, safe='')}/tag", query={"repo": repository, "tag": tag}, ok=(200, 201))
+
     def remove_image(self, ref: str):
         self._call("DELETE", f"/images/{quote(ref, safe='')}", query={"noprune": "0"}, ok=(200,))
 

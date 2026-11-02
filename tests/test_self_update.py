@@ -258,6 +258,9 @@ class FakeDocker:
             raise DockerError(404, "no such container")
         self.containers.pop(name)
 
+    def tag_image(self, ref, repository, tag):
+        self.calls.append(("tag", ref, repository, tag))
+
     def remove_image(self, ref):
         self.calls.append(("rmi", ref))
 
@@ -272,6 +275,14 @@ def make_updater(tmp_path, docker, opener=None):
 
 def queue(tmp_path, tag="v3.1.0"):
     (tmp_path / ".update-request.json").write_text(json.dumps({"id": "abc", "tag": tag, "requested_by": "admin"}))
+
+
+def test_successful_update_does_not_retag(tmp_path):
+    docker = FakeDocker()
+    updater = make_updater(tmp_path, docker)
+    queue(tmp_path)
+    assert updater.run_request(updater.take_request()) is True
+    assert not any(call[0] == "tag" for call in docker.calls)
 
 
 def test_successful_update_rebuilds_and_swaps_container(tmp_path):
@@ -301,6 +312,9 @@ def test_unhealthy_update_restores_previous_container(tmp_path):
     assert updater.run_request(updater.take_request()) is False
     assert docker.containers["arpvpn"]["Image"] == "sha256:old"
     assert ("rename", "arpvpn-pre-update", "arpvpn") in docker.calls
+    assert ("tag", "sha256:old", "arpvpn", "local") in docker.calls
+    assert ("rmi", "sha256:new") in docker.calls
+    assert docker.calls.index(("start", "arpvpn")) < docker.calls.index(("tag", "sha256:old", "arpvpn", "local"))
     status = json.loads((tmp_path / ".updater" / "status.json").read_text())
     assert status["state"] == "failed" and "restored" in status["message"]
 

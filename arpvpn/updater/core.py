@@ -360,7 +360,25 @@ class Updater:
             pass
         self.docker.rename_container(old_name, name)
         self.docker.start_container(name)
+        self.restore_image_tag(image, old_image_id, new_image.get("Id", ""))
         raise UpdateFailed("The new version did not start correctly, so the previous version was restored.")
+
+    def restore_image_tag(self, image: str, old_image_id: str, failed_image_id: str):
+        """Point the image name back at the previous build so a later compose up cannot start the failed one."""
+        repository, _, tag = image.rpartition(":")
+        if not repository or "/" in tag:
+            repository, tag = image, "latest"
+        try:
+            self.docker.tag_image(old_image_id, repository, tag)
+            self.log(f"Image {image} points at the previous build again.")
+        except DockerError as exc:
+            self.log(f"WARNING: could not re-tag {image} to the previous build: {exc}")
+            return
+        if failed_image_id and failed_image_id != old_image_id:
+            try:
+                self.docker.remove_image(failed_image_id)
+            except DockerError:
+                pass
 
     # Main loop --------------------------------------------------------------------
     def run_forever(self, poll_seconds: float = 5.0, heartbeat_seconds: float = 15.0):
