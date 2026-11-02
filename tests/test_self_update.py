@@ -333,3 +333,44 @@ def test_state_files_are_world_readable_for_the_web_app(tmp_path):
     updater.heartbeat()
     mode = os.stat(tmp_path / ".updater" / "heartbeat.json").st_mode & 0o777
     assert mode == 0o644
+
+
+def test_tarball_url_override_is_limited_to_https_and_file(monkeypatch):
+    from arpvpn.updater.__main__ import tarball_url_from_env
+    from arpvpn.updater.core import TARBALL_URL
+
+    monkeypatch.setenv("ARPVPN_UPDATER_TARBALL_URL", "file:///releases/{tag}.tar.gz")
+    assert tarball_url_from_env() == "file:///releases/{tag}.tar.gz"
+    monkeypatch.setenv("ARPVPN_UPDATER_TARBALL_URL", "http://example.test/{tag}.tar.gz")
+    assert tarball_url_from_env() == TARBALL_URL
+    monkeypatch.setenv("ARPVPN_UPDATER_TARBALL_URL", "https://mirror.example/fixed.tar.gz")
+    assert tarball_url_from_env() == TARBALL_URL
+
+
+def test_docker_client_uses_daemon_api_version(tmp_path):
+    import socket
+    import threading
+    from arpvpn.updater.docker_api import DockerClient
+
+    path = str(tmp_path / "docker.sock")
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(path)
+    server.listen(4)
+    seen = []
+
+    def serve():
+        for _ in range(2):
+            conn, _ = server.accept()
+            request = conn.recv(65536).decode()
+            seen.append(request.split(" ")[1])
+            body = b'{"ApiVersion": "1.56"}' if " /version " in request else b'{"Id": "c1"}'
+            conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "
+                         + str(len(body)).encode() + b"\r\nConnection: close\r\n\r\n" + body)
+            conn.close()
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    DockerClient(path, timeout=5).inspect_container("arpvpn")
+    thread.join(5)
+    server.close()
+    assert seen == ["/version", "/v1.56/containers/arpvpn/json"]

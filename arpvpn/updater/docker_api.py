@@ -6,7 +6,7 @@ import socket
 from typing import Any, Dict, Iterator, Optional, Tuple
 from urllib.parse import quote, urlencode
 
-API_VERSION = "v1.41"  # Docker 20.10+; newer daemons accept older API versions.
+FALLBACK_API_VERSION = "1.44"
 
 
 class DockerError(Exception):
@@ -32,11 +32,31 @@ class DockerClient:
     def __init__(self, socket_path: str = "/var/run/docker.sock", timeout: float = 60.0):
         self.socket_path = socket_path
         self.timeout = timeout
+        self._api_version: Optional[str] = None
+
+    def api_version(self) -> str:
+        """Use the daemon's own API version so engine upgrades never strand the client."""
+        if self._api_version is None:
+            version = FALLBACK_API_VERSION
+            conn = _UnixHTTPConnection(self.socket_path, self.timeout)
+            try:
+                conn.request("GET", "/version")
+                response = conn.getresponse()
+                data = json.loads(response.read() or b"{}")
+                candidate = str(data.get("ApiVersion", "")).strip()
+                if candidate.replace(".", "").isdigit():
+                    version = candidate
+            except (OSError, ValueError):
+                pass
+            finally:
+                conn.close()
+            self._api_version = version
+        return self._api_version
 
     def _request(self, method: str, path: str, query: Optional[Dict[str, Any]] = None,
                  body: Any = None, headers: Optional[Dict[str, str]] = None,
                  timeout: Optional[float] = None) -> Tuple[http.client.HTTPConnection, http.client.HTTPResponse]:
-        url = f"/{API_VERSION}{path}"
+        url = f"/v{self.api_version()}{path}"
         if query:
             url = f"{url}?{urlencode({k: v for k, v in query.items() if v is not None})}"
         conn = _UnixHTTPConnection(self.socket_path, timeout or self.timeout)

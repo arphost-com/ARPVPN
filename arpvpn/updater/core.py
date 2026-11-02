@@ -48,6 +48,7 @@ class Updater:
 
     def __init__(self, data_dir: str, target: str, docker: DockerClient,
                  repository: str = DEFAULT_REPOSITORY, buildargs: Optional[Dict[str, str]] = None,
+                 tarball_url: str = TARBALL_URL,
                  opener: Callable[..., Any] = urllib.request.urlopen, sleep: Callable[[float], None] = time.sleep):
         self.data_dir = data_dir
         self.state_dir = os.path.join(data_dir, ".updater")
@@ -56,6 +57,7 @@ class Updater:
         self.docker = docker
         self.repository = repository
         self.buildargs = dict(buildargs or {})
+        self.tarball_url = tarball_url or TARBALL_URL
         self.opener = opener
         self.sleep = sleep
         os.makedirs(self.state_dir, mode=0o755, exist_ok=True)
@@ -172,8 +174,9 @@ class Updater:
         self.replace_container(image)
 
     def download_context(self, tag: str, context_path: str):
-        url = TARBALL_URL.format(repo=self.repository, tag=tag)
-        self.log(f"Downloading {self.repository} {tag} from GitHub.")
+        url = self.tarball_url.format(repo=self.repository, tag=tag)
+        source = "GitHub" if self.tarball_url == TARBALL_URL else url
+        self.log(f"Downloading {self.repository} {tag} from {source}.")
         try:
             with self.opener(url, timeout=120) as response:
                 data = response.read(MAX_TARBALL_BYTES + 1)
