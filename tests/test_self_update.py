@@ -220,7 +220,8 @@ class FakeDocker:
 
     def inspect_image(self, ref):
         if ref == "sha256:old":
-            return {"Id": "sha256:old", "Config": {"Env": ["PATH=/x"], "Cmd": ["/bin/bash", "/entrypoint.sh"], "User": "arpvpn"}}
+            return {"Id": "sha256:old", "Config": {"Env": ["PATH=/x"], "Cmd": ["/bin/bash", "/entrypoint.sh"], "User": "arpvpn",
+                                                   "Labels": {"com.docker.compose.service": "arpvpn"}}}
         return {"Id": "sha256:new", "Config": {}}
 
     def build_image(self, context, tag, dockerfile, buildargs):

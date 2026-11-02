@@ -281,8 +281,11 @@ class Updater:
                 config.pop(key)
         image_env = set(image_config.get("Env") or [])
         config["Env"] = [item for item in (config.get("Env") or []) if item not in image_env]
-        image_labels = image_config.get("Labels") or {}
-        config["Labels"] = {k: v for k, v in (config.get("Labels") or {}).items() if image_labels.get(k) != v}
+        # Keep every container label. Compose stamps its project/service labels
+        # onto images it builds too, so dropping labels that match the old image
+        # would strip them from the new container and Compose would no longer
+        # recognise it (seen on docker02: "container name already in use").
+        config["Labels"] = dict(config.get("Labels") or {})
         # Compose records the image ID it created the container from; keep it
         # truthful so a later "compose up" compares against the real image.
         if new_image_id and COMPOSE_IMAGE_LABEL in config["Labels"]:
