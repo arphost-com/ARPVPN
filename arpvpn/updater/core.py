@@ -29,6 +29,7 @@ MAX_TARBALL_BYTES = 50 * 1024 * 1024
 HEALTH_TIMEOUT_SECONDS = 240
 NO_HEALTHCHECK_SETTLE_SECONDS = 20
 OLD_SUFFIX = "-pre-update"
+COMPOSE_IMAGE_LABEL = "com.docker.compose.image"
 
 # Container settings that compose copies from the image unless the compose file
 # overrides them. When they still equal the old image's values we drop them so
@@ -269,7 +270,8 @@ class Updater:
         self.log("Image build finished.")
 
     @staticmethod
-    def _creation_spec(container: Dict[str, Any], old_image: Dict[str, Any], image: str) -> Dict[str, Any]:
+    def _creation_spec(container: Dict[str, Any], old_image: Dict[str, Any], image: str,
+                       new_image_id: str = "") -> Dict[str, Any]:
         config = dict(container.get("Config", {}))
         image_config = old_image.get("Config", {}) or {}
         for key in DROP_CONFIG_KEYS:
@@ -281,6 +283,10 @@ class Updater:
         config["Env"] = [item for item in (config.get("Env") or []) if item not in image_env]
         image_labels = image_config.get("Labels") or {}
         config["Labels"] = {k: v for k, v in (config.get("Labels") or {}).items() if image_labels.get(k) != v}
+        # Compose records the image ID it created the container from; keep it
+        # truthful so a later "compose up" compares against the real image.
+        if new_image_id and COMPOSE_IMAGE_LABEL in config["Labels"]:
+            config["Labels"][COMPOSE_IMAGE_LABEL] = new_image_id
         config["Image"] = image
         host_config = dict(container.get("HostConfig", {}))
         spec = dict(config)
@@ -322,7 +328,7 @@ class Updater:
         if new_image.get("Id") == old_image_id:
             self.log("The built image is identical to the running one; nothing to replace.")
             return
-        spec = self._creation_spec(container, old_image, image)
+        spec = self._creation_spec(container, old_image, image, new_image.get("Id", ""))
         try:
             self.docker.remove_container(old_name, force=True)
         except DockerError:

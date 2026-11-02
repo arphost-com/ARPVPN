@@ -133,6 +133,8 @@ The image is built from source on the first deploy. Common causes:
 * The host cannot reach ``github.com``, ``git.zx2c4.com``, ``pypi.org`` or the Debian
   mirrors. Test with ``curl -sI https://git.zx2c4.com``.
 * Not enough disk space or memory for the build. Leave at least 2 GB free.
+* ``Unable to download WireGuard Tools`` means ``git.zx2c4.com`` did not answer or returned
+  an error. It is occasionally down for a few minutes; run the build again later.
 * A ``WireGuard Tools checksum mismatch`` error means ``WIREGUARD_TOOLS_VERSION`` was
   changed without the matching ``WIREGUARD_TOOLS_SHA256``.
 

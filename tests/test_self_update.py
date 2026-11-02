@@ -204,7 +204,8 @@ class FakeDocker:
             "arpvpn": {
                 "Image": "sha256:old",
                 "Config": {"Image": image, "Env": ["PATH=/x", "ARPVPN_HTTP_PORT=8085"], "Cmd": ["/bin/bash", "-lc", "x"],
-                           "User": "arpvpn", "Labels": {"com.docker.compose.service": "arpvpn"}},
+                           "User": "arpvpn", "Labels": {"com.docker.compose.service": "arpvpn",
+                                                                       "com.docker.compose.image": "sha256:old"}},
                 "HostConfig": {"NetworkMode": "host", "Binds": ["/srv/data:/data"]},
                 "NetworkSettings": {"Networks": {"host": {}}},
                 "State": {"Running": True, "Health": {"Status": "healthy"}},
@@ -299,6 +300,8 @@ def test_successful_update_rebuilds_and_swaps_container(tmp_path):
     assert "User" not in docker.created_spec  # equal to old image default, so inherited
     assert docker.created_spec["Env"] == ["ARPVPN_HTTP_PORT=8085"]
     assert docker.created_spec["HostConfig"]["Binds"] == ["/srv/data:/data"]
+    assert docker.created_spec["Labels"]["com.docker.compose.image"] == "sha256:new"
+    assert docker.created_spec["Labels"]["com.docker.compose.service"] == "arpvpn"
     assert ("remove", "arpvpn-pre-update") in docker.calls
     assert "arpvpn-pre-update" not in docker.containers
     status = json.loads((tmp_path / ".updater" / "status.json").read_text())
