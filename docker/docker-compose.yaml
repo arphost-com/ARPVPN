@@ -81,8 +81,10 @@ services:
         fi
         if [ -f /data/uwsgi.yaml ]; then
           sed -i -E 's|^([[:space:]]*pyargv:)[[:space:]]*data[[:space:]]*$|\1 /data|' /data/uwsgi.yaml || true
-          sed -i -E "s|^([[:space:]]*http-socket:)[[:space:]]*0\\.0\\.0\\.0:[0-9]+[[:space:]]*$|\\1 0.0.0.0:$${ARPVPN_HTTP_PORT}|" /data/uwsgi.yaml || true
-          sed -i -E "s|^([[:space:]]*https-socket:)[[:space:]]*0\\.0\\.0\\.0:[0-9]+(,.*)$|\\1 0.0.0.0:$${ARPVPN_HTTPS_PORT}\\2|" /data/uwsgi.yaml || true
+          # Listener keys are http/https (router mode, 3.2.0+) or the older
+          # http-socket/https-socket. Keep either in line with the env ports.
+          sed -i -E "s|^([[:space:]]*http(-socket)?:)[[:space:]]*0\\.0\\.0\\.0:[0-9]+[[:space:]]*$|\\1 0.0.0.0:$${ARPVPN_HTTP_PORT}|" /data/uwsgi.yaml || true
+          sed -i -E "s|^([[:space:]]*https(-socket)?:)[[:space:]]*0\\.0\\.0\\.0:[0-9]+(,.*)$|\\1 0.0.0.0:$${ARPVPN_HTTPS_PORT}\\3|" /data/uwsgi.yaml || true
         fi
         exec /usr/bin/uwsgi --yaml /data/uwsgi.yaml
     cap_add:

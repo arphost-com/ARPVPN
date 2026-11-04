@@ -4,8 +4,8 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.5.1/dist/chart.min.js" crossorigin="anonymous"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.0"></script>
-    <script src="../../static/js/libs/color-scheme.min.js"></script>
-    <script src="../../static/js/libs/chartUtils.js"></script>
+    <script src="{{ asset_url('js/libs/color-scheme.min.js') }}"></script>
+    <script src="{{ asset_url('js/libs/chartUtils.js') }}"></script>
 {% endblock %}
 
 {% block additional_styles %}
@@ -626,7 +626,7 @@
 {% block additional_scripts %}
     <script src="https://cdn.datatables.net/1.10.20/js/jquery.dataTables.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.datatables.net/1.10.20/js/dataTables.bootstrap4.min.js" crossorigin="anonymous"></script>
-    <script src="../../static/js/libs/chartUtils.js"></script>
-    <script src="../../static/js/libs/datatablesUtils.js"></script>
-    <script type="module" src="../../static/js/modules/wireguard-iface.mjs"></script>
+    <script src="{{ asset_url('js/libs/chartUtils.js') }}"></script>
+    <script src="{{ asset_url('js/libs/datatablesUtils.js') }}"></script>
+    <script type="module" src="{{ asset_url('js/modules/wireguard-iface.mjs') }}"></script>
 {% endblock %}

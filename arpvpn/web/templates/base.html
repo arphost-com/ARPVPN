@@ -8,8 +8,10 @@
         <meta name="description" content="ARPVPN: WireGuard management with client and site-to-site support." />
         <meta name="author" content="José Antonio Mazón San Bartolomé" />
         <meta name="theme-color" content="#0e1727" />
+        <meta name="arpvpn-theme-choice" content="{{ server_theme_choice if server_theme_choice is defined else '' }}" />
         <meta name="arpvpn-csrf-token" content="{{ csrf_token() if csrf_token is defined else '' }}" />
-        <link rel="icon" type="image/svg+xml" href="/static/assets/img/favicon.svg" />
+        <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin />
+        <link rel="icon" type="image/svg+xml" href="{{ asset_url('assets/img/favicon.svg') }}" />
 
         {% block additional_metas %}
         {% endblock %}
@@ -32,13 +34,13 @@
             })();
         </script>
 
-        <link href="/static/css/styles.css?v=20260418a" rel="stylesheet" />
+        <link href="{{ asset_url('css/styles.css') }}" rel="stylesheet" />
 
         {% block additional_styles %}
         {% endblock %}
-        <link href="/static/css/theme-overrides.css?v=20260418a" rel="stylesheet" />
+        <link href="{{ asset_url('css/theme-overrides.css') }}" rel="stylesheet" />
 
-        <script defer src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/js/all.min.js" crossorigin="anonymous"></script>
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css" rel="stylesheet" crossorigin="anonymous" />
         {% block additional_prioritary_scripts %}
         {% endblock %}
     </head>

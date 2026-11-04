@@ -347,7 +347,7 @@
 {% block additional_scripts %}
     <script src="https://cdn.datatables.net/1.10.20/js/jquery.dataTables.min.js" crossorigin="anonymous"></script>
     <script src="https://cdn.datatables.net/1.10.20/js/dataTables.bootstrap4.min.js" crossorigin="anonymous"></script>
-    <script src="../../static/js/libs/chartUtils.js"></script>
-    <script src="../../static/js/libs/datatablesUtils.js"></script>
-    <script type="module" src="../../static/js/modules/wireguard.mjs"></script>
+    <script src="{{ asset_url('js/libs/chartUtils.js') }}"></script>
+    <script src="{{ asset_url('js/libs/datatablesUtils.js') }}"></script>
+    <script type="module" src="{{ asset_url('js/modules/wireguard.mjs') }}"></script>
 {% endblock %}

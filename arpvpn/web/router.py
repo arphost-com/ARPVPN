@@ -30,6 +30,7 @@ from wtforms.validators import ValidationError as WTValidationError
 import yaml
 from werkzeug.exceptions import HTTPException
 
+from arpvpn.__version__ import release as _asset_release, commit as _asset_commit
 from arpvpn.common.models.user import users, User
 from arpvpn.common.models.tenant import Tenant, Invitation, tenants, invitations, slugify_name
 from arpvpn.common.properties import global_properties
@@ -148,6 +149,7 @@ TRAFFIC_ROLLUP_WINDOWS_SECONDS = {
 }
 RRD_STEP_SECONDS = 60
 THEME_CHOICES = ("auto", "light", "dark")
+STATIC_ASSET_VERSION = re.sub(r"[^A-Za-z0-9._-]", "", f"{_asset_release}-{_asset_commit}") or "dev"
 THEME_COOKIE_NAME = "arpvpn_theme"
 THEME_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365
 MAX_HISTORY_POINTS = 5000
@@ -320,6 +322,12 @@ class Router(Blueprint):
 
 
 router = Router("router", __name__)
+
+
+@router.app_template_global("asset_url")
+def asset_url(path: str) -> str:
+    """URL for a file under web/static that is safe to cache for a year."""
+    return f"/static/v/{STATIC_ASSET_VERSION}/{str(path).lstrip('/')}"
 
 
 def is_api_request() -> bool:
