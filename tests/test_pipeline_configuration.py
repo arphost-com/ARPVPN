@@ -74,7 +74,7 @@ def test_release_metadata_validator_passes_for_repository_state():
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert "3.2.1" in completed.stdout
+    assert "3.2.2" in completed.stdout
 
 
 def _config_load_calls(path: Path):

@@ -6,6 +6,17 @@ All notable changes to this project will be documented here.
 .. note::
     ARPVPN is adhered to `Semantic Versioning <https://semver.org/>`__.
 
+3.2.2
+-----
+
+* Fixed the Updates tab install failing on Docker 29 within seconds of starting the
+  build, with "Syntax error - can't find = in". GitHub release archives carry a
+  commit id in a global pax header, and the updater copied it onto every file when
+  it repacked the source. Docker's BuildKit then read the wrong file as the
+  Dockerfile. The updater now drops those headers.
+* Installs running 3.1.0 to 3.2.1 have the old updater, so they need one update by
+  hand to reach 3.2.2. After that the Updates tab works.
+
 3.2.1
 -----
 
