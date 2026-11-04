@@ -17,14 +17,12 @@ def test_pipeline_has_required_gates_and_manual_final_jobs():
     pipeline = load_pipeline()
 
     assert pipeline["default"]["tags"] == ["docker02-shell"]
-    assert pipeline["deploy:production"]["tags"] == ["docker03"]
-    assert pipeline["deploy:production"]["extends"] == ".manual_protected_main_job"
+    # Production updates itself from GitHub releases through the Updates tab.
+    assert "deploy:production" not in pipeline
+    assert pipeline["rollback:production"]["tags"] == ["docker03"]
+    assert pipeline["rollback:production"]["extends"] == ".manual_protected_main_job"
     assert pipeline["publish:github"]["extends"] == ".manual_protected_main_job"
-    assert pipeline["publish:github"]["needs"] == ["deploy:production"]
-
-    production_needs = pipeline["deploy:production"]["needs"]
-    assert "smoke:docker02" in production_needs
-    assert "publish:validated-image" in production_needs
+    assert pipeline["publish:github"]["needs"] == ["smoke:docker02", "publish:validated-image"]
 
     security_jobs = {
         "security:semgrep",
@@ -76,7 +74,7 @@ def test_release_metadata_validator_passes_for_repository_state():
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert "3.2.0" in completed.stdout
+    assert "3.2.1" in completed.stdout
 
 
 def _config_load_calls(path: Path):
@@ -142,14 +140,15 @@ def test_update_env_preserves_comments_and_replaces_duplicate_keys(tmp_path):
     )
 
 
-def test_production_restoration_verifies_cached_image_identity():
-    pipeline_source = (ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8")
+def test_local_rollback_image_requires_verified_identity():
     deploy_source = (ROOT / "scripts" / "ci" / "deploy_local.sh").read_text(encoding="utf-8")
 
-    assert "previous_image_id=" in pipeline_source
-    assert "ARPVPN_USE_LOCAL_ROLLBACK_IMAGE=1" in pipeline_source
-    assert 'ARPVPN_EXPECTED_LOCAL_IMAGE_ID="$previous_image_id"' in pipeline_source
     assert 'observed_image_id" != "$expected_image_id' in deploy_source
+
+
+def test_production_rollback_requires_an_explicit_registry_image():
+    script = "\n".join(load_pipeline()["rollback:production"]["script"])
+    assert 'test -n "$PROD_ROLLBACK_IMAGE"' in script
 
 
 def test_github_publication_uses_forced_askpass_without_embedding_a_secret():

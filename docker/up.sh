@@ -41,7 +41,7 @@ if [ ! -w "$data_folder" ]; then
 fi
 
 if [ "$#" -eq 0 ]; then
-  set -- up -d --build --force-recreate arpvpn
+  set -- up -d --build --force-recreate arpvpn arpvpn-updater
 fi
 
 exec docker compose -f "$SCRIPT_DIR/docker-compose.yaml" --env-file "$ENV_FILE" "$@"

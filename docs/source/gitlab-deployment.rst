@@ -2,21 +2,23 @@ GitLab Deployment Pipeline
 ==========================
 
 ARPVPN uses its private GitLab project as the authoritative CI/CD and deployment
-source. The public GitHub repository is updated only by the final manual
-``publish:github`` job after the same GitLab commit has completed production
-deployment. The pipeline contains no credentials, private hostnames, or private
-deployment paths.
+source. The public GitHub repository is updated only by the manual
+``publish:github`` job after the same GitLab commit has passed the docker02
+deployment and smoke test. Production on docker03 is not deployed by the
+pipeline. It updates itself from the published GitHub release through
+**Settings > Updates**, the same way customer installs do. The pipeline contains
+no credentials, private hostnames, or private deployment paths.
 
 The workflow runs only when ``CI_PROJECT_VISIBILITY`` is ``private``. Host
-deployment jobs require the protected default branch. Docker03 production,
-rollback, and GitHub publication remain explicit manual actions.
+deployment jobs require the protected default branch. The emergency docker03
+rollback and GitHub publication remain explicit manual actions.
 
 Runner routing
 --------------
 
 * ``docker02-shell`` runs validation, tests, repository security, image build and
   scan, development deployment, smoke validation, and image promotion.
-* ``docker03`` runs the final manual production and rollback jobs.
+* ``docker03`` runs only the manual emergency rollback job.
 * Both are shell runners on their target Docker hosts. Deployment uses the local
   ``debian`` service account through passwordless non-interactive ``sudo``;
   ``gitlab-runner`` remains an orchestration account and must not own deployment
@@ -45,19 +47,21 @@ Pipeline flow
    running digest and release version, checks a loopback HTTP/HTTPS endpoint, and
    rejects app-critical files owned by ``gitlab-runner``.
 8. ``publish:validated-image`` runs only after development smoke succeeds. It
-   publishes the immutable digest as ``3.2.0`` and ``stable`` and refuses to
+   publishes the immutable digest as ``3.2.1`` and ``stable`` and refuses to
    overwrite an existing version tag with another digest.
-9. ``deploy:production`` is a final manual job on docker03. It consumes the same
-   immutable digest and restores the previously running registry image if the
-   new production smoke test fails. Restoration verifies the exact prior image
-   ID before reusing a locally cached image, so recovery does not depend on the
-   current project credentials having pull access to an older repository.
-10. ``rollback:production`` is a separate manual job requiring an explicit
-    registry image through ``PROD_ROLLBACK_IMAGE``.
-11. ``publish:github`` becomes available only after successful production. It
-    uses an allowlisted HTTPS repository, refuses divergent/non-fast-forward
-    publication, never force-pushes, and obtains its token only through
-    ``GIT_ASKPASS``.
+9. ``publish:github`` becomes available after the docker02 smoke test and image
+   promotion succeed. It pushes ``main`` and the ``vX.Y.Z`` release tag, uses an
+   allowlisted HTTPS repository, refuses divergent/non-fast-forward
+   publication, never force-pushes, and obtains its token only through
+   ``GIT_ASKPASS``.
+10. Production on docker03 is then updated from **Settings > Updates** in its own
+    web UI. The updater container builds the tagged release from GitHub, swaps
+    the container, and restores the previous one by itself if the new one does
+    not become healthy.
+11. ``rollback:production`` is a manual emergency job that puts docker03 back on
+    an explicit registry image given in ``PROD_ROLLBACK_IMAGE``. Afterwards the
+    install reports itself as pipeline managed until it is switched back to a
+    locally built image.
 
 Required protected variables
 ----------------------------
@@ -111,7 +115,8 @@ approved host path classes, runtime data must remain under the deployment path,
 and only the fixed ``debian`` service user performs deployment-path work.
 
 Production is never automatic. To release, allow all development and security
-jobs to finish, independently verify the docker02 application behavior, then run
-``deploy:production`` manually. If production fails, inspect the failed job and
-the restored container before considering another promotion. Run
-``publish:github`` separately only after the GitLab deployment is complete.
+jobs to finish, verify the docker02 application behavior, then run
+``publish:github`` manually. Once the release tag is on GitHub, open
+**Settings > Updates** on docker03, press **Check now**, and install the new
+version. If the update fails, the updater restores the previous container and the
+Updates tab shows the log.
