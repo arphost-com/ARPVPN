@@ -229,7 +229,8 @@ if (updatePanel) {
         } else if (job.state === "success" && job.message) {
             showMessage("success", job.message);
         } else {
-            showMessage("success", "ARPVPN is up to date.");
+            const latest = data.latest_version ? ` The newest release on GitHub is ${data.latest_version}.` : "";
+            showMessage("success", `ARPVPN ${data.current_version || ""} is up to date.${latest}`.replace("  ", " "));
         }
 
         if (running) {
@@ -263,7 +264,41 @@ if (updatePanel) {
         }
     }
 
-    checkButton.addEventListener("click", () => load(true, false));
+    const checkIcon = checkButton.querySelector("i");
+    const checkLabel = checkButton.lastChild;
+
+    function setChecking(active) {
+        checkButton.disabled = active;
+        checkButton.setAttribute("aria-busy", active ? "true" : "false");
+        if (checkIcon) {
+            checkIcon.classList.toggle("fa-spin", active);
+        }
+        if (checkLabel && checkLabel.nodeType === Node.TEXT_NODE) {
+            checkLabel.textContent = active ? "Checking..." : "Check now";
+        }
+    }
+
+    checkButton.addEventListener("click", async () => {
+        if (checkButton.disabled) {
+            return;
+        }
+        setChecking(true);
+        showMessage("info", "Checking GitHub for new releases...");
+        const started = Date.now();
+        try {
+            await load(true, false);
+        } finally {
+            // Keep the spinner up long enough to be seen when GitHub answers fast,
+            // so the click never looks like it did nothing.
+            const remaining = 600 - (Date.now() - started);
+            if (remaining > 0) {
+                await new Promise((resolve) => window.setTimeout(resolve, remaining));
+            }
+            setChecking(false);
+            el("updateChecked").classList.add("text-success");
+            window.setTimeout(() => el("updateChecked").classList.remove("text-success"), 2000);
+        }
+    });
 
     installButton.addEventListener("click", async () => {
         if (!latestTag) {

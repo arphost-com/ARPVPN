@@ -776,3 +776,31 @@ def test_create_and_delete_user_redirect_with_completion_notice(app, monkeypatch
 
     notice_response = client.get("/users")
     assert "User deleted successfully." in notice_response.get_data(as_text=True)
+
+
+def test_traffic_history_cache_is_not_changed_by_callers(monkeypatch):
+    traffic_path = Path(global_properties.workdir) / TrafficStorageDriverJson.FILENAME
+    traffic_path.write_text(
+        json.dumps({"01/01/2026 00:00:00": {"peer-1": {"rx": 100, "tx": 200, "last_handshake": None}}}),
+        encoding="utf-8",
+    )
+    driver = TrafficStorageDriverJson()
+    merged = driver.get_session_and_stored_data({"peer-1": TrafficData(5, 7)})
+    assert len(merged) == 2
+    session_sample = merged[max(merged)]["peer-1"]
+    assert (session_sample.rx, session_sample.tx) == (105, 207)
+
+    # The live session entry must not leak into the cached history, and the
+    # cached samples must keep their values for the next request.
+    again = driver.load_data()
+    assert len(again) == 1
+    stored = next(iter(again.values()))["peer-1"]
+    assert (stored.rx, stored.tx) == (100, 200)
+
+
+def test_asset_url_is_available_to_templates(app):
+    from flask import render_template_string
+
+    with app.test_request_context("/"):
+        url = render_template_string("{{ asset_url('/css/styles.css') }}")
+    assert url == f"/static/v/{router_module.STATIC_ASSET_VERSION}/css/styles.css"

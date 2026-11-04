@@ -1,4 +1,3 @@
-import copy
 import json
 import os
 from datetime import datetime
@@ -57,7 +56,11 @@ class TrafficStorageDriverJson(TrafficStorageDriver):
         stat_result = os.stat(self.filepath)
         signature = (stat_result.st_mtime_ns, stat_result.st_size)
         if signature == self._load_cache_signature and self._load_cache_data is not None:
-            return copy.deepcopy(self._load_cache_data)
+            # Callers treat the samples as read-only and only add a top-level
+            # entry for the live session, so a shallow copy of the outer dict is
+            # enough. A deepcopy here cost about a second per page with a few
+            # months of hourly history.
+            return dict(self._load_cache_data)
         with open(self.filepath, "r") as f:
             json_data = json.load(f)
         for k, v in json_data.items():
@@ -66,7 +69,11 @@ class TrafficStorageDriverJson(TrafficStorageDriver):
                 device_data[device] = TrafficData(traffic_data["rx"], traffic_data["tx"])
             data[datetime.strptime(k, self.timestamp_format)] = device_data
         # Calculate interfaces traffic data
-        data_with_interfaces = copy.deepcopy(data)
+        data_with_interfaces = {
+            timestamp: {device: TrafficData(sample.rx, sample.tx, sample.last_handshake)
+                        for device, sample in samples.items()}
+            for timestamp, samples in data.items()
+        }
         peers = get_all_peers()
         for timestamp, peer in data.items():
             for uuid, peer_data in peer.items():
@@ -82,7 +89,7 @@ class TrafficStorageDriverJson(TrafficStorageDriver):
                 data_with_interfaces[timestamp][iface.uuid].rx += peer_data.tx
         self._load_cache_signature = signature
         self._load_cache_data = data_with_interfaces
-        return copy.deepcopy(data_with_interfaces)
+        return dict(data_with_interfaces)
 
     def __to_yaml_dict__(self):  # type: (...) -> Dict[str, Any]
         dct = super(TrafficStorageDriverJson, self).__to_yaml_dict__()

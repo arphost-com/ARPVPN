@@ -30,27 +30,13 @@ function getCsrfToken() {
     return meta ? (meta.getAttribute("content") || "").trim() : "";
 }
 
-async function fetchThemeChoiceFromApi() {
-    if (!isThemeApiAvailable()) return null;
-    try {
-        const response = await fetch(THEME_API_ENDPOINT, {
-            method: "GET",
-            credentials: "same-origin",
-            headers: {
-                "Accept": "application/json"
-            }
-        });
-        const contentType = response.headers.get("content-type") || "";
-        if (!response.ok || !contentType.includes("application/json")) {
-            return null;
-        }
-        const payload = await response.json();
-        const choice = payload && payload.choice;
-        if (choice === "auto" || choice === "light" || choice === "dark") {
-            return choice;
-        }
-    } catch (e) {
-        // Ignore API errors and keep local preference.
+function readServerThemeChoice() {
+    // The server renders the saved choice (from the theme cookie) into the
+    // page, so there is no need for an extra API request on every page load.
+    const meta = document.querySelector("meta[name='arpvpn-theme-choice']");
+    const choice = meta ? (meta.getAttribute("content") || "").trim() : "";
+    if (choice === "auto" || choice === "light" || choice === "dark") {
+        return choice;
     }
     return null;
 }
@@ -163,10 +149,10 @@ function initSystemThemeListener() {
     });
 }
 
-async function init() {
-    const apiChoice = await fetchThemeChoiceFromApi();
-    if (apiChoice) {
-        safeSetStorageItem(THEME_STORAGE_KEY, apiChoice);
+function init() {
+    const serverChoice = isThemeApiAvailable() ? readServerThemeChoice() : null;
+    if (serverChoice) {
+        safeSetStorageItem(THEME_STORAGE_KEY, serverChoice);
     }
     applyTheme(getThemeChoice());
     initThemeControls();
@@ -183,8 +169,8 @@ window.arpvpnTheme = {
 
 if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => {
-        void init();
+        init();
     });
 } else {
-    void init();
+    init();
 }

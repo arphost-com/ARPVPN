@@ -4,10 +4,11 @@ import ipaddress
 import os
 import re
 import socket
+from threading import RLock
 from datetime import datetime, timedelta, timezone
 from logging import warning, fatal, info, debug
 
-from flask import Flask, session, current_app, request, redirect
+from flask import Flask, session, current_app, request, redirect, send_from_directory, g
 from flask_login import LoginManager, current_user
 from flask_login import login_manager as flask_login_manager
 from flask_qrcode import QRcode
@@ -104,9 +105,26 @@ from arpvpn.core.managers.config import config_manager
 # an import side effect.
 config_manager.load()
 
-from arpvpn.web.router import router
+from arpvpn.web.router import router, STATIC_ASSET_VERSION
 
 app = Flask(__name__, template_folder="web/templates", static_folder="web/static")
+
+# Static files are served under a path that changes with every build (see
+# asset_url in the router), so the browser can keep them for a year and never
+# revalidate. The unversioned /static/ path still works for direct links.
+STATIC_ASSET_MAX_AGE_SECONDS = 60 * 60 * 24 * 365
+
+
+@app.route("/static/v/<version>/<path:filename>")
+def versioned_static(version, filename):
+    if version != STATIC_ASSET_VERSION:
+        # An old page asking for an old build's file gets the current file,
+        # but without the long cache so it does not stick.
+        return send_from_directory(app.static_folder, filename, max_age=0)
+    response = send_from_directory(app.static_folder, filename, max_age=STATIC_ASSET_MAX_AGE_SECONDS)
+    response.headers["Cache-Control"] = f"public, max-age={STATIC_ASSET_MAX_AGE_SECONDS}, immutable"
+    return response
+
 info(f"Logging to '{log_config.logfile}'...")
 if log_config.overwrite:
     log_config.reset_logfile()
@@ -182,6 +200,42 @@ login_manager.init_app(app)
 login_manager.login_view = "router.login"
 wireguard_manager.start()
 cron_manager.start()
+
+# Older installs wrote uwsgi.yaml for the single connection http-socket mode.
+# Move it to the router with keep-alive and reload once so it takes effect now.
+from arpvpn.core.managers.tls import tls_manager  # noqa: E402
+
+if tls_manager._uwsgi_module() is not None:
+    tls_manager.enable_listener_nodelay()
+_uwsgi_reload_reason = tls_manager.migrate_uwsgi_config()
+if _uwsgi_reload_reason:
+    # The second step of the switch runs right after the first, so it may not
+    # wait for the loop guard. It cannot repeat because the pending file is gone.
+    tls_manager.schedule_reload(
+        _uwsgi_reload_reason,
+        ignore_loop_guard=_uwsgi_reload_reason == "binding the HTTP router",
+    )
+
+
+# The worker runs several threads so slow pages do not hold up the rest of the
+# UI. Requests that change state still run one at a time, as they did when the
+# worker had a single thread, because the config and credential writers were
+# never built for concurrent saves.
+_state_change_lock = RLock()
+_SAFE_METHODS = frozenset(("GET", "HEAD", "OPTIONS"))
+
+
+@app.before_request
+def _serialize_state_changes():
+    if request.method not in _SAFE_METHODS:
+        _state_change_lock.acquire()
+        g._holds_state_change_lock = True
+
+
+@app.teardown_request
+def _release_state_change_lock(_exc=None):
+    if g.pop("_holds_state_change_lock", False):
+        _state_change_lock.release()
 
 
 def _https_redirect_mode_enabled() -> bool:
@@ -370,7 +424,9 @@ def inject_user_access_context():
             else:
                 session.pop("impersonator_user_id", None)
     from arpvpn.web.forms import ImpersonationStopForm
+    from arpvpn.web.router import THEME_COOKIE_NAME, normalize_theme_choice
     return {
+        "server_theme_choice": normalize_theme_choice(request.cookies.get(THEME_COOKIE_NAME, "auto")),
         "current_user_role": role,
         "current_user_is_staff": is_staff,
         "current_user_can_manage_users": can_manage_users,
@@ -394,7 +450,7 @@ def add_security_headers(response):
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' https://code.jquery.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://cdn.datatables.net; "
-        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.datatables.net; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://cdn.datatables.net; "
         "img-src 'self' data:; "
         "font-src 'self' https: data:; "
         "connect-src 'self'; "

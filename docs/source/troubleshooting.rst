@@ -100,11 +100,41 @@ edit ``web.tls_server_name`` and ``web.redirect_http_to_https`` in
 The UI moved to a different port after saving settings
 -------------------------------------------------------
 
-This happens when ``ARPVPN_HTTP_PORT`` or ``ARPVPN_HTTPS_PORT`` is not the default. Saving
-TLS settings writes the listener ports from ``web.http_port`` and ``web.https_port`` in
-``arpvpn.yaml``, and **Restart app** then uses those. A full container restart puts the
-environment ports back. Set ``web.http_port`` and ``web.https_port`` in
-``<DATA_FOLDER>/arpvpn.yaml`` to the same values as the environment variables.
+Fixed in 3.2.0. ``ARPVPN_HTTP_PORT`` and ``ARPVPN_HTTPS_PORT`` now always win over the
+ports saved in ``arpvpn.yaml``. On older versions, set ``web.http_port`` and
+``web.https_port`` in ``<DATA_FOLDER>/arpvpn.yaml`` to the same values as the
+environment variables.
+
+The web UI is slow
+------------------
+
+Check the version on the **About** page first. 3.2.0 changed how the web server runs and
+most installs got several times faster, so update from the **Updates** tab if you are on
+an older release.
+
+Then check that ``<DATA_FOLDER>/uwsgi.yaml`` uses the router settings. It should contain
+``http:`` (and ``https:`` once HTTPS is on), ``http-keepalive: 1`` and ``threads: 4``.
+
+.. code-block:: bash
+
+    grep -E '^ *(http|https|http-socket|https-socket|threads|http-keepalive):' <DATA_FOLDER>/uwsgi.yaml
+
+If it still shows ``http-socket`` or ``https-socket``, the automatic switch did not run.
+Look for ``Unable to update`` in ``arpvpn.log``, fix the file ownership if needed
+(``sudo chown 1000:1000 <DATA_FOLDER>/uwsgi.yaml``) and restart the container. The
+switch reloads the web server twice, so the UI is gone for a few seconds on that first
+start. A file named ``uwsgi.router-pending.yaml`` in the data folder means the second
+reload has not happened yet, and the next restart finishes it.
+
+Other things that make the UI slow:
+
+* **Statistics** reads the whole traffic history, so it gets slower as the history grows.
+  The history lives in ``<DATA_FOLDER>/traffic.json``.
+* The first load of a page after an update downloads the new scripts and styles once.
+  After that the browser keeps them.
+* Pages load scripts and icons from ``code.jquery.com``, ``cdn.jsdelivr.net`` and
+  ``cdnjs.cloudflare.com``. If the browser cannot reach them, pages wait for those
+  requests to time out.
 
 The container keeps restarting
 ------------------------------

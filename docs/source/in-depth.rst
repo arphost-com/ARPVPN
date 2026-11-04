@@ -22,7 +22,7 @@ Configuration
 Two sample configuration files are provided, ``uwsgi.sample.yaml`` and ``arpvpn.sample.yaml``, although the most interesting one is the second, since the first only contains options for a third party software,
 `UWSGI <https://uwsgi-docs.readthedocs.io>`__.
 
-Nonetheless, it is worth noting that the path to the ARPVPN's working directory (which will be used by ARPVPN to store stuff) needs to be provided through uwsgi's configuration, using the field ``pyargv``. Moreover, to edit the port and/or the interface in which the web server is running you will need to edit the field ``http-socket`` of uwsgi's configuration file.
+Nonetheless, it is worth noting that the path to the ARPVPN's working directory (which will be used by ARPVPN to store stuff) needs to be provided through uwsgi's configuration, using the field ``pyargv``. The web server listens through uWSGI's HTTP router, set by the ``http`` and ``https`` fields. ARPVPN writes these itself from the TLS settings and from ``ARPVPN_HTTP_PORT`` / ``ARPVPN_HTTPS_PORT``, so there is normally no need to edit them. Older files that use ``http-socket`` and ``https-socket`` are converted on the next start.
 
 
 For now on, we will only discuss ARPVPN's configuration values. Although the file ``arpvpn.sample.yaml``

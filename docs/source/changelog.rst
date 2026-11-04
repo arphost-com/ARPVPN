@@ -6,6 +6,33 @@ All notable changes to this project will be documented here.
 .. note::
     ARPVPN is adhered to `Semantic Versioning <https://semver.org/>`__.
 
+3.2.0
+-----
+
+* The web UI is much faster, especially over HTTPS and from far away. uWSGI now
+  runs its HTTP/HTTPS router with keep-alive, so the browser reuses one
+  connection instead of doing a new TLS handshake for every page, script and
+  stylesheet. The worker runs four threads, so one slow page no longer holds
+  up every other request. Requests that change settings still run one at a time.
+* Existing installs move to the new listener settings by themselves on the
+  first start after the update. ARPVPN rewrites ``uwsgi.yaml`` and reloads
+  twice, which takes the UI away for a few seconds. Ports and certificates are
+  kept.
+* Dashboard, Statistics and the peer and interface pages no longer copy the
+  whole traffic history on every request. On installs with months of history
+  this was most of the time spent building those pages.
+* Static files are served under a versioned path and cached by the browser for
+  a year. A new release changes the path, so nothing stale is kept.
+* The theme choice is rendered into the page instead of fetched from
+  ``/api/v1/themes`` on every page load.
+* Font Awesome is loaded as a stylesheet instead of the JavaScript build that
+  rewrote every icon into SVG after the page loaded.
+* ``ARPVPN_HTTP_PORT`` and ``ARPVPN_HTTPS_PORT`` now always win over the ports
+  saved in ``arpvpn.yaml``, so saving TLS settings and pressing **Restart app**
+  no longer moves the UI to the default ports.
+* **Check now** on the Updates tab shows that it is checking and then reports
+  the result, instead of looking like nothing happened.
+
 3.1.1
 -----
 

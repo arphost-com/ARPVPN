@@ -1,3 +1,4 @@
+import os
 from typing import Any, Dict, Type
 
 from yamlable import yaml_info, Y
@@ -28,6 +29,19 @@ def parse_port(value: Any, default: int, minimum: int, maximum: int) -> int:
     if port < minimum or port > maximum:
         return default
     return port
+
+
+def env_port(name: str, minimum: int = 1, maximum: int = 65535):
+    """Return a valid port from the environment, or None when unset/invalid.
+
+    Docker deployments set ARPVPN_HTTP_PORT / ARPVPN_HTTPS_PORT; those are the
+    ports the host firewall and health check expect, so they win over arpvpn.yaml.
+    """
+    raw = (os.environ.get(name, "") or "").strip()
+    if not raw:
+        return None
+    port = parse_port(raw, -1, minimum, maximum)
+    return None if port < 0 else port
 
 
 @yaml_info(yaml_tag='web')
@@ -110,6 +124,15 @@ class WebConfig(BaseConfig):
         self.tls_key_file = ""
         self.http_port = self.DEFAULT_HTTP_PORT
         self.https_port = self.DEFAULT_HTTPS_PORT
+        self.apply_env_ports()
+
+    def apply_env_ports(self):
+        http_port = env_port("ARPVPN_HTTP_PORT", self.MIN_PORT, self.MAX_PORT)
+        https_port = env_port("ARPVPN_HTTPS_PORT", self.MIN_PORT, self.MAX_PORT)
+        if http_port is not None:
+            self.http_port = http_port
+        if https_port is not None:
+            self.https_port = https_port
 
     def load(self, config: "WebConfig"):
         self.login_attempts = config.login_attempts or self.login_attempts
@@ -136,6 +159,7 @@ class WebConfig(BaseConfig):
             self.MIN_PORT,
             self.MAX_PORT,
         )
+        self.apply_env_ports()
 
     def __to_yaml_dict__(self):  # type: (...) -> Dict[str, Any]
         return {
