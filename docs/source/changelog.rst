@@ -6,6 +6,15 @@ All notable changes to this project will be documented here.
 .. note::
     ARPVPN is adhered to `Semantic Versioning <https://semver.org/>`__.
 
+3.2.1
+-----
+
+* Production is no longer deployed by the GitLab pipeline. ``deploy:production``
+  is gone and ``publish:github`` now runs after the docker02 smoke test, so the
+  release tag reaches GitHub first and production updates itself from
+  **Settings > Updates** like any customer install. ``rollback:production`` stays
+  as a manual emergency job. No application changes beyond 3.2.0.
+
 3.2.0
 -----
 
