@@ -135,7 +135,8 @@ Option 2. Install with Docker Compose
 
        ./up.sh
 
-   This is the same as ``./up.sh up -d --build --force-recreate arpvpn``. The first build
+   This is the same as ``./up.sh up -d --build --force-recreate arpvpn arpvpn-updater``.
+   It starts ARPVPN and the updater container that the Updates tab uses. The first build
    takes several minutes.
 
 4. Confirm it is running and healthy.

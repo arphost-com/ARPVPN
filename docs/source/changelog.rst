@@ -13,7 +13,10 @@ All notable changes to this project will be documented here.
   is gone and ``publish:github`` now runs after the docker02 smoke test, so the
   release tag reaches GitHub first and production updates itself from
   **Settings > Updates** like any customer install. ``rollback:production`` stays
-  as a manual emergency job. No application changes beyond 3.2.0.
+  as a manual emergency job.
+* ``docker/up.sh`` with no arguments now starts the ``arpvpn-updater`` container
+  too. It only started ARPVPN before, so Docker Compose installs made with it had
+  no working Install button on the Updates tab.
 
 3.2.0
 -----
