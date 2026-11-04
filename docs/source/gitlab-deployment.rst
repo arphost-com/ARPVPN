@@ -45,7 +45,7 @@ Pipeline flow
    running digest and release version, checks a loopback HTTP/HTTPS endpoint, and
    rejects app-critical files owned by ``gitlab-runner``.
 8. ``publish:validated-image`` runs only after development smoke succeeds. It
-   publishes the immutable digest as ``3.1.0`` and ``stable`` and refuses to
+   publishes the immutable digest as ``3.1.1`` and ``stable`` and refuses to
    overwrite an existing version tag with another digest.
 9. ``deploy:production`` is a final manual job on docker03. It consumes the same
    immutable digest and restores the previously running registry image if the
@@ -92,8 +92,9 @@ Docker03 production:
 
 Publication and rollback:
 
-* ``GITHUB_PUSH_TOKEN``: protected and masked token used only by
-  ``publish:github``.
+* ``GITHUB_PAT``: the global (instance level) GitLab CI variable holding the
+  GitHub token. ``publish:github`` is the only job that uses it. Rotate the token
+  there; the project no longer keeps its own copy.
 * ``PROD_ROLLBACK_IMAGE``: supplied when an operator explicitly runs the manual
   rollback job; use a trusted immutable registry digest.
 

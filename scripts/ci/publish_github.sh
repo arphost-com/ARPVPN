@@ -5,7 +5,7 @@ set -euo pipefail
 : "${CI_COMMIT_BRANCH:?}"
 : "${CI_DEFAULT_BRANCH:?}"
 : "${CI_PROJECT_DIR:?}"
-: "${GITHUB_PUSH_TOKEN:?}"
+: "${GITHUB_PAT:?GITHUB_PAT (global GitLab CI variable) is required for GitHub publication}"
 
 if [[ "$CI_COMMIT_BRANCH" != "$CI_DEFAULT_BRANCH" ]]; then
   echo "GitHub publication is restricted to the GitLab default branch." >&2

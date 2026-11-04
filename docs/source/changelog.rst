@@ -6,6 +6,13 @@ All notable changes to this project will be documented here.
 .. note::
     ARPVPN is adhered to `Semantic Versioning <https://semver.org/>`__.
 
+3.1.1
+-----
+
+* The ``publish:github`` job now authenticates with the global ``GITHUB_PAT``
+  GitLab CI variable instead of a project level ``GITHUB_PUSH_TOKEN`` copy, so
+  the GitHub token is rotated in one place. No application changes.
+
 3.1.0
 -----
 

@@ -76,7 +76,7 @@ def test_release_metadata_validator_passes_for_repository_state():
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert "3.1.0" in completed.stdout
+    assert "3.1.1" in completed.stdout
 
 
 def _config_load_calls(path: Path):
@@ -164,6 +164,7 @@ def test_github_publication_uses_forced_askpass_without_embedding_a_secret():
     assert publish_source.count("credential.interactive=always") == 4
     assert 'refs/tags/$release_tag' in publish_source
     assert "refusing to move it" in publish_source
-    assert "GITHUB_PUSH_TOKEN" not in publish_source.split("github_url=", 1)[1].splitlines()[0]
-    assert "${GITHUB_PUSH_TOKEN:?}" in askpass_source
+    assert "GITHUB_PAT" not in publish_source.split("github_url=", 1)[1].splitlines()[0]
+    assert "${GITHUB_PAT:?}" in askpass_source
+    assert "GITHUB_PUSH_TOKEN" not in publish_source + askpass_source
     assert "tr '[:upper:]' '[:lower:]'" in askpass_source
