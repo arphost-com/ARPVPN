@@ -236,7 +236,11 @@ From 3.1.0, Docker installs (Stack Manager and Docker Compose) update from
 **Settings > Updates** inside ARPVPN. See :ref:`updating-arpvpn`. That needs the
 ``arpvpn-updater`` service, which is part of the compose file from 3.1.0.
 
-To get to 3.1.0 the first time, or if you prefer to update by hand:
+Installs on 3.1.0 to 3.2.1 must be updated by hand once, to 3.2.2 or newer. The updater
+in those versions cannot build GitHub releases on current Docker. Use the steps below,
+and after that the Updates tab works.
+
+To get to 3.1.0 or newer the first time, or if you prefer to update by hand:
 
 * **Docker Compose**: ``git pull`` in the checkout, then ``./up.sh``. This also starts the
   updater.

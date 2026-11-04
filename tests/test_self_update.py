@@ -167,7 +167,9 @@ def test_check_failure_is_reported_not_raised(tmp_path, monkeypatch):
 
 def release_tarball(extra_members=None):
     buffer = io.BytesIO()
-    with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
+    # Like a GitHub archive: a global pax header carrying the commit id.
+    with tarfile.open(fileobj=buffer, mode="w:gz", format=tarfile.PAX_FORMAT,
+                      pax_headers={"comment": "0123456789abcdef0123456789abcdef01234567"}) as archive:
         for name, content in [("ARPVPN-3.1.0/docker/Dockerfile", b"FROM scratch\n"),
                               ("ARPVPN-3.1.0/arpvpn/__init__.py", b"")] + list(extra_members or []):
             info = tarfile.TarInfo(name)
@@ -433,3 +435,29 @@ def test_updater_survives_files_it_can_no_longer_chmod(tmp_path, monkeypatch):
     queue(tmp_path)
     assert updater.run_request(updater.take_request()) is True
     assert "Update finished." in (tmp_path / ".updater" / "update.log").read_text()
+
+
+def test_build_context_drops_github_pax_headers(tmp_path):
+    long_name = "ARPVPN-3.1.0/" + "/".join(["deep"] * 30) + "/file.py"
+    contexts = []
+
+    class RecordingDocker(FakeDocker):
+        def build_image(self, context, tag, dockerfile, buildargs):
+            contexts.append(Path(context).read_bytes())
+            yield from super().build_image(context, tag, dockerfile, buildargs)
+
+    docker = RecordingDocker()
+    opener = FakeOpener(release_tarball([(long_name, b"print(1)\n")]))
+    updater = make_updater(tmp_path, docker, opener)
+    queue(tmp_path)
+    assert updater.run_request(updater.take_request()) is True
+
+    raw = contexts[0]
+    assert b"comment=" not in raw
+    with tarfile.open(fileobj=io.BytesIO(raw)) as archive:
+        names = archive.getnames()
+        assert "docker/Dockerfile" in names
+        assert long_name.split("/", 1)[1] in names
+        assert archive.extractfile("docker/Dockerfile").read() == b"FROM scratch\n"
+        for member in archive.getmembers():
+            assert "comment" not in member.pax_headers

@@ -244,6 +244,13 @@ class Updater:
                         if link.startswith("/") or ".." in link.split("/"):
                             raise UpdateFailed(f"Unsafe link in release archive: {member.name}")
                     member.name = name
+                    # GitHub archives carry a global pax header with the commit
+                    # id, and tarfile copies it onto every member. Docker 29's
+                    # BuildKit misreads a context with those per-file headers and
+                    # parses the wrong file as the Dockerfile. Drop them, and any
+                    # stale "path" record from the old prefixed name; tarfile
+                    # writes the headers a member really needs by itself.
+                    member.pax_headers = {}
                     fileobj = source.extractfile(member) if member.isfile() else None
                     context.addfile(member, fileobj)
         except tarfile.TarError as exc:

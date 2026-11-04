@@ -220,6 +220,12 @@ HTTPS. ARPVPN still works; only the check fails.
 **"This install runs a registry image".** The install was deployed from a container
 registry by a pipeline. Update it through that pipeline.
 
+**Build fails within seconds with "Syntax error - can't find = in".** The updater in
+ARPVPN 3.1.0 to 3.2.1 repacks the GitHub release in a way Docker 29 cannot read, so
+Docker parses the wrong file as the Dockerfile. Nothing is changed when this happens.
+Update once by hand to 3.2.2 or newer (see the upgrading steps in :doc:`installation`);
+from then on the tab works.
+
 **The update failed.** The progress log on the tab shows the step that failed. The full
 log is ``<DATA_FOLDER>/.updater/update.log`` and ``docker logs arpvpn-updater`` shows the
 same. A failed build changes nothing. A new version that does not become healthy is
