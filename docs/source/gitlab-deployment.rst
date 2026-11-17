@@ -49,7 +49,7 @@ Pipeline flow
    passes it purges unused images and build cache on docker02 and logs disk usage
    before and after. Volumes and stopped containers are never pruned.
 8. ``publish:validated-image`` runs only after development smoke succeeds. It
-   publishes the immutable digest as ``3.2.3`` and ``stable`` and refuses to
+   publishes the immutable digest as ``3.2.4`` and ``stable`` and refuses to
    overwrite an existing version tag with another digest.
 9. ``publish:github`` becomes available after the docker02 smoke test and image
    promotion succeed. It pushes ``main`` and the ``vX.Y.Z`` release tag, uses an
@@ -63,7 +63,9 @@ Pipeline flow
 11. ``rollback:production`` is a manual emergency job that puts docker03 back on
     an explicit registry image given in ``PROD_ROLLBACK_IMAGE``. Afterwards the
     install reports itself as pipeline managed until it is switched back to a
-    locally built image.
+    locally built image. It starts ``arpvpn-updater`` next to ARPVPN, so the
+    Updates tab keeps working, and if the health check fails the job log shows
+    the container's last log lines.
 
 Required protected variables
 ----------------------------

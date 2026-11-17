@@ -329,6 +329,7 @@ rollback:production:
     ARPVPN_HTTPS_PORT: "$PROD_HTTPS_PORT"
     ARPVPN_COOKIE_SUFFIX: "production"
     ARPVPN_HEALTH_URL: "$PROD_HEALTH_URL"
+    ARPVPN_START_UPDATER: "1"
   environment:
     name: production
     url: "$PROD_URL"

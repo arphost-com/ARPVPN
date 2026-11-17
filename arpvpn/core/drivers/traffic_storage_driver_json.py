@@ -1,7 +1,8 @@
 import json
 import os
+import tempfile
 from datetime import datetime
-from logging import info
+from logging import info, warning
 from typing import Dict, Any, Type
 
 from yamlable import yaml_info, Y
@@ -32,20 +33,55 @@ class TrafficStorageDriverJson(TrafficStorageDriver):
     def save_data(self):
         info("Updating traffic data...")
         merged_data = self.get_session_and_stored_data()
-        with open(self.filepath, "w") as f:
-            json_data = {}
-            for timestamp, data in merged_data.items():
-                device_data = {}
-                for device, traffic_data in data.items():
-                    if device in interfaces.keys():
-                        # Do not store interface data, since it will be calculated from peers data
-                        continue
-                    device_data[device] = {"rx": traffic_data.rx, "tx": traffic_data.tx}
-                json_data[timestamp.strftime(self.timestamp_format)] = device_data
-            json.dump(json_data, f)
+        json_data = {}
+        for timestamp, data in merged_data.items():
+            device_data = {}
+            for device, traffic_data in data.items():
+                if device in interfaces.keys():
+                    # Do not store interface data, since it will be calculated from peers data
+                    continue
+                device_data[device] = {"rx": traffic_data.rx, "tx": traffic_data.tx}
+            json_data[timestamp.strftime(self.timestamp_format)] = device_data
+        self._write_atomically(json_data)
         self._load_cache_signature = None
         self._load_cache_data = None
         info("Traffic data updated.")
+
+    def _write_atomically(self, json_data: Dict[str, Any]):
+        """Write to a temp file in the same folder and rename it over traffic.json.
+
+        Opening traffic.json itself for writing empties it first, so a kill or
+        crash during the dump used to leave an empty file that stopped every
+        later start. The rename is atomic, so readers see the old or the new file.
+        """
+        directory = os.path.dirname(self.filepath) or "."
+        handle, temp_path = tempfile.mkstemp(prefix=".traffic-", suffix=".json.tmp", dir=directory)
+        try:
+            with os.fdopen(handle, "w") as f:
+                json.dump(json_data, f)
+                f.flush()
+                os.fsync(f.fileno())
+            if os.path.exists(self.filepath):
+                os.chmod(temp_path, os.stat(self.filepath).st_mode & 0o777)
+            os.replace(temp_path, self.filepath)
+        except BaseException:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+            raise
+
+    def _set_aside_unreadable_file(self, exc: Exception):
+        """Keep an unreadable traffic.json for inspection and start with empty history."""
+        stamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        target = f"{self.filepath}.unreadable-{stamp}"
+        try:
+            os.replace(self.filepath, target)
+            warning(f"Traffic data in {self.filepath} could not be read ({exc}); moved it to {target} "
+                    "and started with empty traffic history.")
+        except OSError as move_error:
+            warning(f"Traffic data in {self.filepath} could not be read ({exc}) or moved aside "
+                    f"({move_error}); using empty traffic history.")
 
     def load_data(self) -> Dict[datetime, Dict[str, TrafficData]]:
         data = {}
@@ -61,13 +97,20 @@ class TrafficStorageDriverJson(TrafficStorageDriver):
             # enough. A deepcopy here cost about a second per page with a few
             # months of hourly history.
             return dict(self._load_cache_data)
-        with open(self.filepath, "r") as f:
-            json_data = json.load(f)
-        for k, v in json_data.items():
-            device_data = {}
-            for device, traffic_data in v.items():
-                device_data[device] = TrafficData(traffic_data["rx"], traffic_data["tx"])
-            data[datetime.strptime(k, self.timestamp_format)] = device_data
+        try:
+            with open(self.filepath, "r") as f:
+                json_data = json.load(f)
+            for k, v in json_data.items():
+                device_data = {}
+                for device, traffic_data in v.items():
+                    device_data[device] = TrafficData(traffic_data["rx"], traffic_data["tx"])
+                data[datetime.strptime(k, self.timestamp_format)] = device_data
+        except (ValueError, TypeError, KeyError, AttributeError) as exc:
+            # json.JSONDecodeError and strptime failures are ValueErrors.
+            self._set_aside_unreadable_file(exc)
+            self._load_cache_signature = None
+            self._load_cache_data = None
+            return {}
         # Calculate interfaces traffic data
         data_with_interfaces = {
             timestamp: {device: TrafficData(sample.rx, sample.tx, sample.last_handshake)

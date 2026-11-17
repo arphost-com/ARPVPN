@@ -74,7 +74,7 @@ def test_release_metadata_validator_passes_for_repository_state():
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert "3.2.3" in completed.stdout
+    assert "3.2.4" in completed.stdout
 
 
 def _config_load_calls(path: Path):
@@ -186,3 +186,14 @@ def test_pipeline_lints_python_and_prunes_old_images():
     assert "volume" not in prune_source.replace("Volumes and stopped", "")
     assert "docker system prune" not in prune_source
     assert prune_source.rstrip().splitlines()[-1] == "exit 0"
+
+
+def test_production_job_starts_the_updater_and_smoke_prints_logs():
+    pipeline = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8"))
+    assert pipeline["rollback:production"]["variables"]["ARPVPN_START_UPDATER"] == "1"
+    assert "ARPVPN_START_UPDATER" not in pipeline["deploy:docker02"]["variables"]
+    deploy_source = (ROOT / "scripts/ci/deploy_local.sh").read_text(encoding="utf-8")
+    assert '"${services[@]}"' in deploy_source
+    smoke_source = (ROOT / "scripts/ci/smoke_local.sh").read_text(encoding="utf-8")
+    assert smoke_source.count("show_failure\n      exit 1") == 1
+    assert smoke_source.count("show_failure\n    exit 1") == 1

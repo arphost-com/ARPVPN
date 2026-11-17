@@ -102,7 +102,7 @@ services:
   # Applies updates requested from Settings > Updates. It holds the Docker socket
   # so the internet-facing web container never has to. It publishes no ports,
   # drops capabilities and only acts on release tags from the ARPVPN GitHub repo.
-  # Pipeline deployments start only the arpvpn service, so it does not run there.
+  # Pipeline deployments start it only when ARPVPN_START_UPDATER=1 (production).
   arpvpn-updater:
     image: "${ARPVPN_IMAGE:-arpvpn:local}"
     container_name: "${ARPVPN_CONTAINER_NAME:-arpvpn}-updater"
