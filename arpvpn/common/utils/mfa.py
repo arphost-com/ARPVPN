@@ -4,7 +4,7 @@ import hmac
 import re
 import secrets
 from time import time
-from typing import Iterable, List, Tuple
+from typing import Iterable, List
 from urllib.parse import quote, urlencode
 
 MFA_CODE_DIGITS = 6

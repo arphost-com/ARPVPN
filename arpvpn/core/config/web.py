@@ -161,7 +161,7 @@ class WebConfig(BaseConfig):
         )
         self.apply_env_ports()
 
-    def __to_yaml_dict__(self):  # type: (...) -> Dict[str, Any]
+    def __to_yaml_dict__(self) -> Dict[str, Any]:
         return {
             "login_attempts": self.login_attempts,
             "login_ban_time": self.login_ban_time,
@@ -178,10 +178,7 @@ class WebConfig(BaseConfig):
         }
 
     @classmethod
-    def __from_yaml_dict__(cls,  # type: Type[Y]
-                           dct,  # type: Dict[str, Any]
-                           yaml_tag=""
-                           ):  # type: (...) -> Y
+    def __from_yaml_dict__(cls: Type[Y], dct: Dict[str, Any], yaml_tag: str = "") -> Y:
         config = WebConfig()
         config.login_attempts = dct.get("login_attempts", None) or config.login_attempts
         config.login_ban_time = dct.get("login_ban_time", None) or config.login_ban_time

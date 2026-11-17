@@ -14,11 +14,11 @@ class CronManager:
         if self.started:
             warning("Already started!")
             return
-        info(f"Starting cron manager...")
+        info("Starting cron manager...")
         self.started = True
         self.exit.clear()
         Thread(target=self.__run_jobs__, daemon=True).start()
-        info(f"Cron manager started.")
+        info("Cron manager started.")
 
     def __run_jobs__(self):
         while not self.exit.is_set():
@@ -33,12 +33,12 @@ class CronManager:
         if not self.started:
             warning("Not running!")
             return
-        info(f"Stopping cron manager...")
+        info("Stopping cron manager...")
         self.started = False
         self.exit.set()
         for job in schedule.jobs:
             schedule.cancel_job(job)
-        info(f"Cron manager stopped.")
+        info("Cron manager stopped.")
 
 
 cron_manager = CronManager()

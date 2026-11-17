@@ -94,7 +94,7 @@ class InterfaceIpValidator:
         if Interface.is_network_in_use(ip, form.iface):
             return stop_validation(field, f"network {ip.network} already has a wireguard interface!")
         if ip.ip == ip.network.broadcast_address or ip.ip == ip.network.network_address:
-            return stop_validation(field, f"unable to use a reserved address")
+            return stop_validation(field, "unable to use a reserved address")
 
 
 class InterfacePortValidator:
@@ -134,7 +134,7 @@ class PeerIpValidator:
         if peer_ip not in iface_network:
             return stop_validation(field, f"address must belong to network {iface_network}")
         if peer_ip.ip == iface_network.broadcast_address or peer_ip.ip == iface_network.network_address:
-            return stop_validation(field, f"unable to use a reserved address")
+            return stop_validation(field, "unable to use a reserved address")
 
 
 class PeerPrimaryDnsValidator:

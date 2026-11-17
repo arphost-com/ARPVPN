@@ -45,9 +45,11 @@ Pipeline flow
    the host.
 7. ``smoke:docker02`` requires Docker health ``healthy``, verifies the exact
    running digest and release version, checks a loopback HTTP/HTTPS endpoint, and
-   rejects app-critical files owned by ``gitlab-runner``.
+   rejects app-critical files owned by ``gitlab-runner``. Once the smoke test
+   passes it purges unused images and build cache on docker02 and logs disk usage
+   before and after. Volumes and stopped containers are never pruned.
 8. ``publish:validated-image`` runs only after development smoke succeeds. It
-   publishes the immutable digest as ``3.2.2`` and ``stable`` and refuses to
+   publishes the immutable digest as ``3.2.3`` and ``stable`` and refuses to
    overwrite an existing version tag with another digest.
 9. ``publish:github`` becomes available after the docker02 smoke test and image
    promotion succeed. It pushes ``main`` and the ``vX.Y.Z`` release tag, uses an

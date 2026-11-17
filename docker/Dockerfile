@@ -21,7 +21,10 @@ ENV PYTHONFAULTHANDLER=1 \
     ARPVPN_WIREGUARD_TOOLS_VERSION="${WIREGUARD_TOOLS_VERSION}" \
     ARPVPN_WIREGUARD_TOOLS_SHA256="${WIREGUARD_TOOLS_SHA256}"
 
+# upgrade pulls Debian security fixes that the upstream python image has not
+# been rebuilt with yet, so the image scan does not wait on Docker Hub.
 RUN apt-get update && \
+    apt-get upgrade -y --no-install-recommends && \
     apt-get install -y --no-install-recommends \
       bash \
       ca-certificates \

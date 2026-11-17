@@ -63,7 +63,7 @@ class Interface(YamlAble):
         else:
             self.public_key = public_key or generate_pubkey(self.private_key)
 
-    def __to_yaml_dict__(self):  # type: (...) -> Dict[str, Any]
+    def __to_yaml_dict__(self) -> Dict[str, Any]:
         """ Called when you call yaml.dump()"""
         return {
             "uuid": self.uuid,
@@ -82,10 +82,7 @@ class Interface(YamlAble):
         }
 
     @classmethod
-    def __from_yaml_dict__(cls,  # type: Type[Y]
-                           dct,  # type: Dict[str, Any]
-                           yaml_tag  # type: str
-                           ):  # type: (...) -> Y
+    def __from_yaml_dict__(cls: Type[Y], dct: Dict[str, Any], yaml_tag: str) -> Y:
         """ This optional method is called when you call yaml.load()"""
         uuid = dct["uuid"]
         name = dct["name"]
@@ -172,7 +169,7 @@ class Interface(YamlAble):
         debug(f"Saving configuration of interface {self.name} to {self.conf_file}...")
         try_makedir(os.path.dirname(self.conf_file))
         write_lines(self.generate_conf(), self.conf_file)
-        debug(f"Configuration saved!")
+        debug("Configuration saved!")
 
     @property
     def is_up(self):
@@ -416,7 +413,7 @@ class Peer(YamlAble):
                 subnets.append(normalized)
         return subnets
 
-    def __to_yaml_dict__(self):  # type: (...) -> Dict[str, Any]
+    def __to_yaml_dict__(self) -> Dict[str, Any]:
         """ Called when you call yaml.dump()"""
         return {
             "uuid": self.uuid,
@@ -437,10 +434,7 @@ class Peer(YamlAble):
         }
 
     @classmethod
-    def __from_yaml_dict__(cls,  # type: Type[Y]
-                           dct,  # type: Dict[str, Any]
-                           yaml_tag  # type: str
-                           ):  # type: (...) -> Y
+    def __from_yaml_dict__(cls: Type[Y], dct: Dict[str, Any], yaml_tag: str) -> Y:
         """ This optional method is called when you call yaml.load()"""
         uuid = dct["uuid"]
         name = dct["name"]
@@ -535,16 +529,13 @@ class Peer(YamlAble):
 @yaml_info(yaml_tag='interfaces')
 class InterfaceDict(EnhancedDict, YamlAble, Mapping[K, V]):
     @classmethod
-    def __from_yaml_dict__(cls,  # type: Type[Y]
-                           dct,  # type: Dict[str, Any]
-                           yaml_tag  # type: str
-                           ):  # type: (...) -> Y
+    def __from_yaml_dict__(cls: Type[Y], dct: Dict[str, Any], yaml_tag: str) -> Y:
         i = InterfaceDict()
         i.update(dct)
         i.sort()
         return i
 
-    def __to_yaml_dict__(self):  # type: (...) -> Dict[str, Any]
+    def __to_yaml_dict__(self) -> Dict[str, Any]:
         return self
 
     def sort(self, order_by=lambda pair: pair[1].name):
@@ -554,16 +545,13 @@ class InterfaceDict(EnhancedDict, YamlAble, Mapping[K, V]):
 @yaml_info(yaml_tag='peers')
 class PeerDict(EnhancedDict, YamlAble, Mapping[K, V]):
     @classmethod
-    def __from_yaml_dict__(cls,  # type: Type[Y]
-                           dct,  # type: Dict[str, Any]
-                           yaml_tag  # type: str
-                           ):  # type: (...) -> Y
+    def __from_yaml_dict__(cls: Type[Y], dct: Dict[str, Any], yaml_tag: str) -> Y:
         p = PeerDict()
         p.update(dct)
         p.sort()
         return p
 
-    def __to_yaml_dict__(self):  # type: (...) -> Dict[str, Any]
+    def __to_yaml_dict__(self) -> Dict[str, Any]:
         return self
 
     def sort(self, order_by=lambda pair: pair[1].name):

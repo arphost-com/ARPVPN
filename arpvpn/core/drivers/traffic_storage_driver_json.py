@@ -91,14 +91,11 @@ class TrafficStorageDriverJson(TrafficStorageDriver):
         self._load_cache_data = data_with_interfaces
         return dict(data_with_interfaces)
 
-    def __to_yaml_dict__(self):  # type: (...) -> Dict[str, Any]
+    def __to_yaml_dict__(self) -> Dict[str, Any]:
         dct = super(TrafficStorageDriverJson, self).__to_yaml_dict__()
         return dct
 
     @classmethod
-    def __from_yaml_dict__(cls,      # type: Type[Y]
-                           dct,      # type: Dict[str, Any]
-                           yaml_tag=""
-                           ):  # type: (...) -> Y
+    def __from_yaml_dict__(cls: Type[Y], dct: Dict[str, Any], yaml_tag: str = "") -> Y:
         timestamp_format = dct.get("timestamp_format", None)
         return TrafficStorageDriverJson(timestamp_format)

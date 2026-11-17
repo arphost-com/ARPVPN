@@ -2,6 +2,7 @@ import base64
 import io
 import json
 import os
+import shutil
 import sys
 import tarfile
 import time
@@ -373,12 +374,16 @@ def test_tarball_url_override_is_limited_to_https_and_file(monkeypatch):
     assert tarball_url_from_env() == TARBALL_URL
 
 
-def test_docker_client_uses_daemon_api_version(tmp_path):
+def test_docker_client_uses_daemon_api_version():
     import socket
+    import tempfile
     import threading
     from arpvpn.updater.docker_api import DockerClient
 
-    path = str(tmp_path / "docker.sock")
+    # AF_UNIX paths are limited to about 108 bytes, and pytest's tmp_path can
+    # be longer than that on CI runners, so the socket lives in a short dir.
+    sock_dir = tempfile.mkdtemp(prefix="arpvpn-", dir="/tmp")
+    path = os.path.join(sock_dir, "docker.sock")
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server.bind(path)
     server.listen(4)
@@ -399,6 +404,7 @@ def test_docker_client_uses_daemon_api_version(tmp_path):
     DockerClient(path, timeout=5).inspect_container("arpvpn")
     thread.join(5)
     server.close()
+    shutil.rmtree(sock_dir, ignore_errors=True)
     assert seen == ["/version", "/v1.56/containers/arpvpn/json"]
 
 

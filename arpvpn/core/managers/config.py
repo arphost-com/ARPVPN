@@ -3,8 +3,8 @@ from logging import info, warning, error
 
 import yaml
 
-from arpvpn.common.models.user import UserDict, users
-from arpvpn.common.models.tenant import TenantDict, InvitationDict, tenants, invitations
+from arpvpn.common.models.user import users
+from arpvpn.common.models.tenant import tenants, invitations
 from arpvpn.common.properties import global_properties
 from arpvpn.common.utils.logs import log_exception
 from arpvpn.common.utils.system import try_makedir
@@ -83,7 +83,7 @@ class ConfigManager:
         if "traffic" in config:
             traffic_config.load(config["traffic"])
             traffic_config.apply()
-        info(f"Configuration restored!")
+        info("Configuration restored!")
 
     def save(self, apply: bool = True):
         info("Saving configuration...")
