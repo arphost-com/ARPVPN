@@ -6,6 +6,23 @@ All notable changes to this project will be documented here.
 .. note::
     ARPVPN is adhered to `Semantic Versioning <https://semver.org/>`__.
 
+3.2.4
+-----
+
+* Fixed ARPVPN failing to start when ``traffic.json`` was empty or cut short. The
+  JSON traffic store opened the file for writing, which empties it, before
+  writing the new data, so a kill or crash at the wrong moment left an empty
+  file, and every later start stopped on it. Saves now go to a temp file that is
+  renamed into place, so the old data stays intact until the new data is
+  complete. A file that still cannot be read is moved aside as
+  ``traffic.json.unreadable-<time>`` and ARPVPN starts with empty traffic
+  history instead of stopping.
+* ``rollback:production`` now also starts the ``arpvpn-updater`` container, so a
+  production install deployed by the pipeline has a working Updates tab.
+  docker02 still runs ARPVPN on its own.
+* When the pipeline's health check fails, the job log now shows the container's
+  last 120 log lines. Before, it only said the container was unhealthy.
+
 3.2.3
 -----
 

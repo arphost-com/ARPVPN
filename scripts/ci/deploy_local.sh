@@ -147,9 +147,15 @@ else
     docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin >/dev/null
   sudo -n -u "$deploy_user" env DOCKER_CONFIG="$auth_dir" docker pull "$ARPVPN_DEPLOY_IMAGE"
 fi
+services=("$service_name")
+# Production updates itself from Settings > Updates, which needs the updater
+# container next to ARPVPN. docker02 validation leaves it off.
+if [[ "${ARPVPN_START_UPDATER:-0}" == "1" ]]; then
+  services+=("${ARPVPN_UPDATER_SERVICE_NAME:-arpvpn-updater}")
+fi
 sudo -n -u "$deploy_user" env DOCKER_CONFIG="$auth_dir" \
   docker compose -p "$ARPVPN_COMPOSE_PROJECT" -f "$deploy_path/docker-compose.yaml" \
-  --env-file "$env_path" up -d --no-build --force-recreate "$service_name"
+  --env-file "$env_path" up -d --no-build --force-recreate "${services[@]}"
 
 if [[ -n "${ARPVPN_DEPLOY_RESULT_FILE:-}" ]]; then
   case "$(realpath -m -- "$ARPVPN_DEPLOY_RESULT_FILE")" in

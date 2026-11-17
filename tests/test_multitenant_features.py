@@ -823,3 +823,43 @@ def test_tenant_tls_letsencrypt_email_is_validated(app):
                 "letsencrypt_email": "not-an-email",
             })
         assert "settings.tls.letsencrypt_email" in str(excinfo.value.description)
+
+
+@pytest.mark.parametrize("content", ["", '{"01/01/2026 00:00:00": {"peer": {"rx": 1'])
+def test_traffic_json_driver_survives_empty_or_truncated_file(content):
+    workdir = Path(global_properties.workdir)
+    traffic_path = workdir / TrafficStorageDriverJson.FILENAME
+    for stale in workdir.glob(TrafficStorageDriverJson.FILENAME + ".unreadable-*"):
+        stale.unlink()
+    traffic_path.write_text(content, encoding="utf-8")
+
+    assert TrafficStorageDriverJson().load_data() == {}
+    assert not traffic_path.exists()
+    set_aside = list(workdir.glob(TrafficStorageDriverJson.FILENAME + ".unreadable-*"))
+    assert len(set_aside) == 1
+    assert set_aside[0].read_text(encoding="utf-8") == content
+    set_aside[0].unlink()
+
+
+def test_traffic_json_save_keeps_old_file_when_write_fails(monkeypatch):
+    workdir = Path(global_properties.workdir)
+    traffic_path = workdir / TrafficStorageDriverJson.FILENAME
+    original = '{"01/01/2026 00:00:00": {}}'
+    traffic_path.write_text(original, encoding="utf-8")
+    driver = TrafficStorageDriverJson()
+    monkeypatch.setattr(driver, "get_session_and_stored_data", lambda: {datetime(2026, 1, 2): {}})
+
+    def failing_dump(data, handle):
+        handle.write('{"partial')
+        raise OSError("disk full")
+
+    monkeypatch.setattr("arpvpn.core.drivers.traffic_storage_driver_json.json.dump", failing_dump)
+    with pytest.raises(OSError):
+        driver.save_data()
+    assert traffic_path.read_text(encoding="utf-8") == original
+    assert not list(workdir.glob(".traffic-*.json.tmp"))
+
+    monkeypatch.undo()
+    monkeypatch.setattr(driver, "get_session_and_stored_data", lambda: {datetime(2026, 1, 2): {}})
+    driver.save_data()
+    assert json.loads(traffic_path.read_text(encoding="utf-8")) == {"02/01/2026 00:00:00": {}}

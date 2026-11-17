@@ -40,11 +40,13 @@ for attempt in $(seq 1 36); do
     fi
     if [[ "$status" == "unhealthy" ]]; then
       echo "Container became unhealthy." >&2
+      show_failure
       exit 1
     fi
   fi
   if [[ "$attempt" == "36" ]]; then
     echo "Container did not become healthy before the timeout." >&2
+    show_failure
     exit 1
   fi
   sleep 5
