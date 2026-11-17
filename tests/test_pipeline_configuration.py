@@ -116,6 +116,11 @@ def test_runtime_image_removes_build_only_pip_tooling():
     assert "/ensurepip/_bundled/pip-*.whl" in dockerfile
 
 
+def test_runtime_image_applies_debian_security_updates():
+    dockerfile = (ROOT / "docker/Dockerfile").read_text(encoding="utf-8")
+    assert "apt-get upgrade -y --no-install-recommends" in dockerfile
+
+
 def test_update_env_preserves_comments_and_replaces_duplicate_keys(tmp_path):
     env_path = tmp_path / ".env"
     env_path.write_text("# retained\nARPVPN_IMAGE=old\nARPVPN_IMAGE=duplicate\nOTHER=kept\n")

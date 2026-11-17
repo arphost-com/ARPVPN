@@ -20,6 +20,9 @@ All notable changes to this project will be documented here.
   tenant TLS bug. Unused imports and empty f-strings were cleaned up, and the
   old type comments on the YAML loaders became real annotations.
 * The Docker socket test no longer fails on runners with long temp paths.
+* The image now applies Debian package updates at build time. The image scan
+  found a fixed zlib advisory (CVE-2026-85091) that the upstream Python base
+  image had not picked up yet.
 
 3.2.2
 -----
