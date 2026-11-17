@@ -120,7 +120,6 @@ class TrafficStorageDriver(YamlAble):
 
         :return:
         """
-        pass
 
     def load_data(self) -> Dict[datetime, Dict[str, TrafficData]]:
         """
@@ -128,16 +127,12 @@ class TrafficStorageDriver(YamlAble):
 
         :return: A dictionary containing traffic data of interfaces and peers, indexed by timestamp.
         """
-        pass
 
-    def __to_yaml_dict__(self):  # type: (...) -> Dict[str, Any]
+    def __to_yaml_dict__(self) -> Dict[str, Any]:
         return {
             "timestamp_format": self.timestamp_format
         }
 
     @classmethod
-    def __from_yaml_dict__(cls,      # type: Type[Y]
-                           dct,      # type: Dict[str, Any]
-                           yaml_tag=""
-                           ):  # type: (...) -> Y
+    def __from_yaml_dict__(cls: Type[Y], dct: Dict[str, Any], yaml_tag: str = "") -> Y:
         return TrafficStorageDriver(dct.get("timestamp_format", None))

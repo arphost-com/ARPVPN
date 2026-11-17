@@ -1771,7 +1771,6 @@ def get_visible_interfaces_for_current_user() -> Dict[str, Interface]:
     if not current_user.has_role(User.ROLE_CLIENT):
         return {}
     visible: Dict[str, Interface] = {}
-    client_name = current_user.name.lower()
     for iface in interfaces.values():
         visible_peers = [
             peer for peer in iface.peers.values()
@@ -3104,12 +3103,12 @@ def parse_optional_string(value: Any) -> str:
     return str(value or "").strip()
 
 
-def parse_email_address(value: Any) -> str:
+def parse_email_address(value: Any, field_name: str = "email") -> str:
     candidate = str(value or "").strip().lower()
     if not candidate:
-        abort(BAD_REQUEST, "email is required.")
+        abort(BAD_REQUEST, f"{field_name} is required.")
     if not EMAIL_ADDRESS_PATTERN.fullmatch(candidate):
-        abort(BAD_REQUEST, "email must be a valid email address.")
+        abort(BAD_REQUEST, f"{field_name} must be a valid email address.")
     return candidate
 
 
@@ -3183,7 +3182,7 @@ def parse_tenant_tls_settings(value: Any) -> Dict[str, Any]:
             field_name="settings.tls.server_name",
         )
         if letsencrypt_email:
-            letsencrypt_email = parse_email_value(letsencrypt_email, "settings.tls.letsencrypt_email")
+            letsencrypt_email = parse_email_address(letsencrypt_email, "settings.tls.letsencrypt_email")
     if mode == web_config.TLS_MODE_REVERSE_PROXY and proxy_incoming_hostname:
         proxy_incoming_hostname = parse_tls_server_name(
             proxy_incoming_hostname,
@@ -4051,7 +4050,7 @@ def login_post():
                     context["banned_for"] = (client.banned_until - datetime.now()).seconds
             return ViewController("web/login.html", **context).load()
     if not login_user(u, form.remember_me.data):
-        error(f"Unable to log user in.")
+        error("Unable to log user in.")
         abort(INTERNAL_SERVER_ERROR)
     if u and u.has_mfa():
         mark_session_mfa_verified(u)
@@ -7905,7 +7904,7 @@ def unauthorized(err):
     if is_api_request():
         return api_error(error_code, "unauthorized", error_msg.strip())
     if request.method == "GET":
-        debug(f"Redirecting to login...")
+        debug("Redirecting to login...")
         try:
             next_url = url_for(request.endpoint)
         except Exception:

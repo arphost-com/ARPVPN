@@ -76,8 +76,9 @@ test:python:
       venv="$CI_PROJECT_DIR/.ci-venv-$CI_JOB_ID"
       trap 'rm -rf -- "$venv"' EXIT
       python3 -m venv "$venv"
-      "$venv/bin/python" -m pip install --disable-pip-version-check -r requirements.txt pytest
+      "$venv/bin/python" -m pip install --disable-pip-version-check -r requirements.txt pytest flake8
       "$venv/bin/python" -m compileall -q arpvpn tests scripts
+      "$venv/bin/python" -m flake8 --select=F arpvpn tests scripts
       "$venv/bin/python" -m pytest -q
       "$venv/bin/python" scripts/validate_openapi.py
       PYTHON_BIN="$venv/bin/python" ./scripts/check_api_artifacts.sh
@@ -296,6 +297,7 @@ smoke:docker02:
     url: "$STAGING_URL"
   script:
     - ./scripts/ci/smoke_local.sh
+    - ./scripts/ci/prune_images.sh
 
 publish:validated-image:
   extends: .protected_main_job

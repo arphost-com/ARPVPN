@@ -68,10 +68,7 @@ class User(UserMixin, YamlAble):
         }
 
     @classmethod
-    def __from_yaml_dict__(cls,      # type: Type[Y]
-                           dct,      # type: Dict[str, Any]
-                           yaml_tag  # type: str
-                           ):  # type: (...) -> Y
+    def __from_yaml_dict__(cls: Type[Y], dct: Dict[str, Any], yaml_tag: str) -> Y:
         u = User(dct["name"], dct.get("role", cls.ROLE_ADMIN))
         u.id = dct["id"]
         u.tenant_id = dct.get("tenant_id", None)
@@ -153,14 +150,11 @@ class User(UserMixin, YamlAble):
 @yaml_info(yaml_tag='users')
 class UserDict(EnhancedDict, EncryptedYamlAble, Mapping[K, V]):
 
-    def __to_yaml_dict__(self):  # type: (...) -> Dict[str, Any]
+    def __to_yaml_dict__(self) -> Dict[str, Any]:
         return self
 
     @classmethod
-    def __from_yaml_dict__(cls,      # type: Type[Y]
-                           dct,      # type: Dict[str, Any]
-                           yaml_tag  # type: str
-                           ):  # type: (...) -> Y
+    def __from_yaml_dict__(cls: Type[Y], dct: Dict[str, Any], yaml_tag: str) -> Y:
         u = UserDict()
         u.update(dct)
         return u

@@ -1,4 +1,6 @@
-from yamlable import yaml_info
+from typing import Any, Dict, Type
+
+from yamlable import Y, yaml_info
 
 from arpvpn.core.config.base import BaseConfig
 from arpvpn.core.drivers.traffic_storage_driver import TrafficStorageDriver
@@ -22,17 +24,14 @@ class TrafficConfig(BaseConfig):
         self.enabled = config.enabled
         self.driver = config.driver
 
-    def __to_yaml_dict__(self):  # type: (...) -> Dict[str, Any]
+    def __to_yaml_dict__(self) -> Dict[str, Any]:
         return {
             "enabled": self.enabled,
             "driver": self.driver,
         }
 
     @classmethod
-    def __from_yaml_dict__(cls,      # type: Type[Y]
-                           dct,      # type: Dict[str, Any]
-                           yaml_tag=""
-                           ):  # type: (...) -> Y
+    def __from_yaml_dict__(cls: Type[Y], dct: Dict[str, Any], yaml_tag: str = "") -> Y:
         config = TrafficConfig()
         enabled = config.enabled
         config.enabled = dct.get("enabled", None)

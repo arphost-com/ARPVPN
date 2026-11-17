@@ -804,3 +804,22 @@ def test_asset_url_is_available_to_templates(app):
     with app.test_request_context("/"):
         url = render_template_string("{{ asset_url('/css/styles.css') }}")
     assert url == f"/static/v/{router_module.STATIC_ASSET_VERSION}/css/styles.css"
+
+
+def test_tenant_tls_letsencrypt_email_is_validated(app):
+    from werkzeug.exceptions import BadRequest
+
+    with app.test_request_context():
+        settings = router_module.parse_tenant_tls_settings({
+            "mode": "letsencrypt",
+            "server_name": "vpn.example.com",
+            "letsencrypt_email": "Admin@Example.com",
+        })
+        assert settings["letsencrypt_email"] == "admin@example.com"
+        with pytest.raises(BadRequest) as excinfo:
+            router_module.parse_tenant_tls_settings({
+                "mode": "letsencrypt",
+                "server_name": "vpn.example.com",
+                "letsencrypt_email": "not-an-email",
+            })
+        assert "settings.tls.letsencrypt_email" in str(excinfo.value.description)

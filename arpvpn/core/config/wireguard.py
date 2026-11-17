@@ -59,7 +59,7 @@ class _LegacyMeshDict(EnhancedDict, YamlAble, Mapping[K, V]):
         legacy_dict.update(dct or {})
         return legacy_dict
 
-    def __to_yaml_dict__(self):  # type: (...) -> Dict[str, Any]
+    def __to_yaml_dict__(self) -> Dict[str, Any]:
         return self
 
 
@@ -106,7 +106,7 @@ class MeshControlPlane(BaseConfig):
         self.topologies = MeshTopologies()
         self.vpn_links = MeshVpnLinks()
 
-    def __to_yaml_dict__(self):  # type: (...) -> Dict[str, Any]
+    def __to_yaml_dict__(self) -> Dict[str, Any]:
         return {
             "access_policies": self.access_policies,
             "route_advertisements": self.route_advertisements,
@@ -187,10 +187,7 @@ class WireguardConfig(BaseConfig):
             warning(f"Server endpoint set to {self.endpoint}: this might not be a public IP address!")
 
     @classmethod
-    def __from_yaml_dict__(cls,  # type: Type[Y]
-                           dct,  # type: Dict[str, Any]
-                           yaml_tag=""
-                           ):  # type: (...) -> Y
+    def __from_yaml_dict__(cls: Type[Y], dct: Dict[str, Any], yaml_tag: str = "") -> Y:
         config = WireguardConfig()
         config.endpoint = dct.get("endpoint", None) or config.endpoint
         config.wg_bin = dct.get("wg_bin", None) or config.wg_bin
@@ -203,7 +200,7 @@ class WireguardConfig(BaseConfig):
             iface.save()
         return config
 
-    def __to_yaml_dict__(self):  # type: (...) -> Dict[str, Any]
+    def __to_yaml_dict__(self) -> Dict[str, Any]:
         return {
             "endpoint": self.endpoint,
             "wg_bin": self.wg_bin,

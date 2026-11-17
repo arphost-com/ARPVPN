@@ -3,10 +3,10 @@ from __future__ import annotations
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Type, Dict, Any, Mapping, List
+from typing import Dict, Any, Mapping, List
 from uuid import uuid4 as gen_uuid
 
-from yamlable import YamlAble, yaml_info, Y
+from yamlable import YamlAble, yaml_info
 
 from arpvpn.common.models.encrypted_yamlable import EncryptedYamlAble
 from arpvpn.common.models.enhanced_dict import EnhancedDict, K, V
@@ -128,7 +128,7 @@ class Tenant(YamlAble):
 
 @yaml_info(yaml_tag="tenants")
 class TenantDict(EnhancedDict, EncryptedYamlAble, Mapping[K, V]):
-    def __to_yaml_dict__(self):  # type: (...) -> Dict[str, Any]
+    def __to_yaml_dict__(self) -> Dict[str, Any]:
         return self
 
     @classmethod
@@ -287,7 +287,7 @@ class Invitation(YamlAble):
 
 @yaml_info(yaml_tag="invitations")
 class InvitationDict(EnhancedDict, EncryptedYamlAble, Mapping[K, V]):
-    def __to_yaml_dict__(self):  # type: (...) -> Dict[str, Any]
+    def __to_yaml_dict__(self) -> Dict[str, Any]:
         return self
 
     @classmethod

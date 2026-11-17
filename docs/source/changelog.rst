@@ -6,6 +6,21 @@ All notable changes to this project will be documented here.
 .. note::
     ARPVPN is adhered to `Semantic Versioning <https://semver.org/>`__.
 
+3.2.3
+-----
+
+* Fixed saving a tenant TLS setting in Let's Encrypt mode with a contact email.
+  The request failed with a server error because the email check called a
+  function that did not exist. The email is now validated and stored in lower
+  case, and a bad address gets a clear error naming the field.
+* The pipeline now purges unused images and build cache on docker02 after the
+  smoke test passes, and logs disk usage before and after. Volumes and stopped
+  containers are left alone, and rollback images still come from the registry.
+* The test job now runs flake8's pyflakes checks, which would have caught the
+  tenant TLS bug. Unused imports and empty f-strings were cleaned up, and the
+  old type comments on the YAML loaders became real annotations.
+* The Docker socket test no longer fails on runners with long temp paths.
+
 3.2.2
 -----
 

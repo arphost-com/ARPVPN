@@ -74,7 +74,7 @@ def test_release_metadata_validator_passes_for_repository_state():
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert "3.2.2" in completed.stdout
+    assert "3.2.3" in completed.stdout
 
 
 def _config_load_calls(path: Path):
@@ -167,3 +167,17 @@ def test_github_publication_uses_forced_askpass_without_embedding_a_secret():
     assert "${GITHUB_PAT:?}" in askpass_source
     assert "GITHUB_PUSH_TOKEN" not in publish_source + askpass_source
     assert "tr '[:upper:]' '[:lower:]'" in askpass_source
+
+
+def test_pipeline_lints_python_and_prunes_old_images():
+    pipeline = yaml.safe_load((ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8"))
+    test_script = "\n".join(pipeline["test:python"]["script"])
+    assert "flake8 --select=F arpvpn tests scripts" in test_script
+    assert pipeline["smoke:docker02"]["script"][-1] == "./scripts/ci/prune_images.sh"
+    assert "prune_images" not in "\n".join(pipeline["rollback:production"]["script"])
+    prune_source = (ROOT / "scripts/ci/prune_images.sh").read_text(encoding="utf-8")
+    assert "docker image prune -a -f" in prune_source
+    assert "docker builder prune -a -f" in prune_source
+    assert "volume" not in prune_source.replace("Volumes and stopped", "")
+    assert "docker system prune" not in prune_source
+    assert prune_source.rstrip().splitlines()[-1] == "exit 0"

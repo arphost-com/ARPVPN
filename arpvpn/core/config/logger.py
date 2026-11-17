@@ -43,17 +43,14 @@ class LoggerConfig(BaseConfig):
             raise WireguardError(f"'{self.level}' is not a valid log level!")
         self.overwrite = config.overwrite
 
-    def __to_yaml_dict__(self):  # type: (...) -> Dict[str, Any]
+    def __to_yaml_dict__(self) -> Dict[str, Any]:
         return {
             "overwrite": self.overwrite,
             "level": self.level,
         }
 
     @classmethod
-    def __from_yaml_dict__(cls,      # type: Type[Y]
-                           dct,      # type: Dict[str, Any]
-                           yaml_tag=""
-                           ):  # type: (...) -> Y
+    def __from_yaml_dict__(cls: Type[Y], dct: Dict[str, Any], yaml_tag: str = "") -> Y:
         config = LoggerConfig()
         config.level = dct.get("level", None) or config.level
         if config.level not in config.LEVELS:
